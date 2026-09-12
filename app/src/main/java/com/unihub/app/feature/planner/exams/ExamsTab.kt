@@ -291,8 +291,9 @@ private fun ExamSheet(
                 dateError = null
             }
         )
-        if (dateError != null) {
-            Text(dateError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+        // عرض خطأ التاريخ بلا أي !! — النمط الآمن يمتص أي تغيير حالة أثناء إعادة التركيب
+        dateError?.let { error ->
+            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
         }
         TimeField(
             label = "الوقت (اختياري — يُفترض 9:00)",
