@@ -31,7 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.unihub.app.core.common.DateFormats
 import java.time.Instant
@@ -40,7 +40,7 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 
 /** غلاف موحّد للألواح السفلية (بديل عملي وأوسع من نوافذ الحوار الضيقة في المرجع) */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppSheet(
     title: String,

@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
@@ -130,7 +129,7 @@ fun FilesScreen(
     var menuTarget by remember { mutableStateOf<MenuTarget?>(null) }
 
     val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentMultiple()
+        ActivityResultContracts.GetMultipleContents()
     ) { uris -> viewModel.importFiles(uris) }
 
     Scaffold(
@@ -251,7 +250,7 @@ fun FilesScreen(
         FloatingAddMenu(
             padding = padding,
             onNewFolder = { showAddFolderSheet = true },
-            onImportFiles = { importLauncher.launch(arrayOf("*/*")) }
+            onImportFiles = { importLauncher.launch("*/*") }
         )
 
         // قائمة السياق (ملف أو مجلد)

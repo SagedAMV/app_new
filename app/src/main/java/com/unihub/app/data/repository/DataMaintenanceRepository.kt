@@ -1,5 +1,6 @@
 package com.unihub.app.data.repository
 
+import androidx.room.withTransaction
 import com.unihub.app.data.local.UniHubDatabase
 import com.unihub.app.data.storage.FileStorage
 import com.unihub.app.notifications.ReminderScheduler
@@ -21,7 +22,7 @@ class DataMaintenanceRepository @Inject constructor(
 ) {
 
     suspend fun clearAllData() = withContext(Dispatchers.IO) {
-        database.runInTransaction {
+        withTransaction(database) {
             database.folderDao().deleteAll()
             database.fileDao().deleteAll()
             database.taskDao().deleteAll()

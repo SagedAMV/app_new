@@ -15,6 +15,7 @@ import com.unihub.app.data.local.entity.TaskEntity
 import com.unihub.app.data.local.entity.TaskPriority
 import com.unihub.app.data.local.entity.Weekday
 import com.unihub.app.notifications.ReminderScheduler
+import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -98,7 +99,7 @@ class BackupRepository @Inject constructor(
             val exams = parseExams(root.optJSONArray("exams"))
             val lectures = parseLectures(root.optJSONArray("lectures"))
 
-            database.runInTransaction {
+            withTransaction(database) {
                 val folderDao = database.folderDao()
                 val fileDao = database.fileDao()
                 folderDao.deleteAll() // يحذف الملفات تبعاً عبر CASCADE
