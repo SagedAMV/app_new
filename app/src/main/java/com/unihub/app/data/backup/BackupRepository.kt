@@ -99,7 +99,7 @@ class BackupRepository @Inject constructor(
             val exams = parseExams(root.optJSONArray("exams"))
             val lectures = parseLectures(root.optJSONArray("lectures"))
 
-            withTransaction(database) {
+            database.withTransaction {
                 val folderDao = database.folderDao()
                 val fileDao = database.fileDao()
                 folderDao.deleteAll() // يحذف الملفات تبعاً عبر CASCADE

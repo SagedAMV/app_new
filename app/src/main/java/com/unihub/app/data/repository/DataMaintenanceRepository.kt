@@ -22,7 +22,7 @@ class DataMaintenanceRepository @Inject constructor(
 ) {
 
     suspend fun clearAllData() = withContext(Dispatchers.IO) {
-        withTransaction(database) {
+        database.withTransaction {
             database.folderDao().deleteAll()
             database.fileDao().deleteAll()
             database.taskDao().deleteAll()
