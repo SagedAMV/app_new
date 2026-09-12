@@ -17,9 +17,6 @@ class ExamRepository @Inject constructor(
 
     fun observeAll(): Flow<List<ExamEntity>> = examDao.observeAll()
 
-    fun observeUpcoming(): Flow<List<ExamEntity>> =
-        examDao.observeUpcoming(DateFormats.todayIso())
-
     fun observeUpcomingLimited(limit: Int = 3): Flow<List<ExamEntity>> =
         examDao.observeUpcomingLimited(DateFormats.todayIso(), limit)
 

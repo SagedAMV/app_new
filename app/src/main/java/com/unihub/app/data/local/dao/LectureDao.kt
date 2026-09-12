@@ -21,9 +21,6 @@ interface LectureDao {
     @Query("SELECT * FROM lectures ORDER BY day ASC, timeFrom ASC")
     suspend fun getAllOnce(): List<LectureEntity>
 
-    @Query("SELECT COUNT(*) FROM lectures")
-    fun observeCount(): Flow<Int>
-
     @Insert
     suspend fun insert(lecture: LectureEntity): Long
 

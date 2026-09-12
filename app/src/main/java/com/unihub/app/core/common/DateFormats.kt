@@ -61,19 +61,19 @@ object DateFormats {
         val date = parseDateOrNull(dateIso) ?: return "—"
         return date.format(DATE)
     }
-
-    /** اسم اليوم العربي المقابل لتاريخ ISO */
-    fun weekdayOf(dateIso: String?): com.unihub.app.data.local.entity.Weekday? =
-        parseDateOrNull(dateIso)?.let { Weekdays.fromJava(it.dayOfWeek.value) }
 }
 
 /** تحويلات أيام الأسبوع بين java.time وأيام التطبيق */
 object Weekdays {
-    /** java.time: Monday=1 .. Sunday=7 — نحوّلها لترتيب التطبيق (السبت أولاً) */
-    fun fromJava(javaDay: Int): com.unihub.app.data.local.entity.Weekday {
-        val values = com.unihub.app.data.local.entity.Weekday.entries
-        return values.first { it.javaDayValue == javaDay }
-    }
+    /**
+     * java.time: Monday=1 .. Sunday=7 — تحويل آمن لا يرمي استثناء أبداً:
+     * أي قيمة خارج النطاق (مستحيلة عملياً لكن دفاعياً) تعود للأحد بدل
+     * `NoSuchElementException` من `first{}`.
+     */
+    fun fromJava(javaDay: Int): com.unihub.app.data.local.entity.Weekday =
+        com.unihub.app.data.local.entity.Weekday.entries
+            .firstOrNull { it.javaDayValue == javaDay }
+            ?: com.unihub.app.data.local.entity.Weekday.SUNDAY
 
     fun today(): com.unihub.app.data.local.entity.Weekday =
         fromJava(LocalDate.now().dayOfWeek.value)

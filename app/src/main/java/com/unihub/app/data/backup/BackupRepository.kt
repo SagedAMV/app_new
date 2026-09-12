@@ -99,6 +99,12 @@ class BackupRepository @Inject constructor(
             val exams = parseExams(root.optJSONArray("exams"))
             val lectures = parseLectures(root.optJSONArray("lectures"))
 
+            // ترتيب آمن للمفاتيح الأجنبية: الآباء قبل الأبناء، وإسقاط السجلات
+            // اليتيمة التي تشير إلى أب غير موجود في النسخة (كانت تُفشل المعاملة كلها)
+            val orderedFolders = orderFoldersForInsertion(folders)
+            val validFolderIds = orderedFolders.mapTo(mutableSetOf()) { it.id }
+            val validFiles = files.filter { it.folderId == null || it.folderId in validFolderIds }
+
             database.withTransaction {
                 val folderDao = database.folderDao()
                 val fileDao = database.fileDao()
@@ -108,8 +114,8 @@ class BackupRepository @Inject constructor(
                 database.examDao().deleteAll()
                 database.lectureDao().deleteAll()
 
-                folders.forEach { folderDao.insert(it) }
-                files.forEach { fileDao.insert(it) }
+                orderedFolders.forEach { folderDao.insert(it) }
+                validFiles.forEach { fileDao.insert(it) }
                 tasks.forEach { database.taskDao().insert(it) }
                 notes.forEach { database.noteDao().insert(it) }
                 exams.forEach { database.examDao().insert(it) }
@@ -123,10 +129,42 @@ class BackupRepository @Inject constructor(
             tasks.filter { !it.isDone && !it.dueDate.isNullOrBlank() }
                 .forEach(reminderScheduler::scheduleTaskReminder)
 
-            folders.size + files.size + tasks.size + notes.size + exams.size + lectures.size
+            orderedFolders.size + validFiles.size + tasks.size + notes.size + exams.size + lectures.size
         }.onFailure {
             android.util.Log.e(TAG, "فشل الاستيراد", it)
         }
+    }
+
+    /**
+     * يرتب المجلدات بحيث يُدرج كل أب قبل أبنائه (المفتاح الأجنبي الذاتي على
+     * `parentId`). بدون هذا الترتيب قد يصل الابن قبل أبيه فترفض SQLite الإدراج
+     * وتفشل عملية الاستيراد كلها. المجلد الذي يشير إلى أب غير موجود في النسخة
+     * يُهمل بدل أن يُفسد المعاملة.
+     */
+    private fun orderFoldersForInsertion(folders: List<FolderEntity>): List<FolderEntity> {
+        val byId = folders.associateBy { it.id }
+        val ordered = ArrayList<FolderEntity>(folders.size)
+        val kept = HashSet<Long>(folders.size)
+        val visited = HashSet<Long>(folders.size)
+
+        fun visit(folder: FolderEntity) {
+            if (!visited.add(folder.id)) return
+            val parentId = folder.parentId
+            if (parentId == null) {
+                ordered += folder
+                kept += folder.id
+                return
+            }
+            val parent = byId[parentId] ?: return // يتيم: يُهمل بأمان
+            visit(parent)
+            if (parentId in kept) {
+                ordered += folder
+                kept += folder.id
+            }
+        }
+
+        folders.forEach(::visit)
+        return ordered
     }
 
     // ====== التصدير ======

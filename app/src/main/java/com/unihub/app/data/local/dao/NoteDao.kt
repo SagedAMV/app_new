@@ -18,9 +18,6 @@ interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
     suspend fun getAllOnce(): List<NoteEntity>
 
-    @Query("SELECT * FROM notes WHERE id = :id")
-    suspend fun getById(id: Long): NoteEntity?
-
     @Insert
     suspend fun insert(note: NoteEntity): Long
 

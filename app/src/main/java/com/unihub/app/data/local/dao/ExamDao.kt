@@ -14,18 +14,11 @@ interface ExamDao {
     @Query("SELECT * FROM exams ORDER BY date ASC, time ASC")
     fun observeAll(): Flow<List<ExamEntity>>
 
-    /** الامتحانات القادمة (من اليوم فصاعداً) */
-    @Query("SELECT * FROM exams WHERE date >= :todayIso ORDER BY date ASC, time ASC")
-    fun observeUpcoming(todayIso: String): Flow<List<ExamEntity>>
-
     @Query("SELECT * FROM exams WHERE date >= :todayIso ORDER BY date ASC, time ASC LIMIT :limit")
     fun observeUpcomingLimited(todayIso: String, limit: Int): Flow<List<ExamEntity>>
 
     @Query("SELECT * FROM exams ORDER BY date ASC")
     suspend fun getAllOnce(): List<ExamEntity>
-
-    @Query("SELECT * FROM exams WHERE id = :id")
-    suspend fun getById(id: Long): ExamEntity?
 
     @Insert
     suspend fun insert(exam: ExamEntity): Long

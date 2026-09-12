@@ -23,8 +23,6 @@ class LectureRepository @Inject constructor(
     fun observeToday(): Flow<List<LectureEntity>> =
         lectureDao.observeByDay(Weekdays.today())
 
-    fun observeCount(): Flow<Int> = lectureDao.observeCount()
-
     suspend fun create(lecture: LectureEntity): Long = lectureDao.insert(lecture)
 
     suspend fun update(lecture: LectureEntity) = lectureDao.update(lecture)

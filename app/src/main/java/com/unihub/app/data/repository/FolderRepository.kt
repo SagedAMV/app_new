@@ -20,8 +20,6 @@ class FolderRepository @Inject constructor(
     private val fileStorage: FileStorage
 ) {
 
-    fun observeRootFolders(): Flow<List<FolderEntity>> = folderDao.observeRootFolders()
-
     fun observeChildren(parentId: Long?): Flow<List<FolderEntity>> =
         if (parentId == null) folderDao.observeRootFolders()
         else folderDao.observeChildFolders(parentId)

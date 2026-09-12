@@ -26,19 +26,8 @@ interface TaskDao {
     )
     fun observeAll(): Flow<List<TaskEntity>>
 
-    @Query(
-        "SELECT * FROM tasks WHERE isDone = 0 ORDER BY " +
-            "CASE priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END ASC, " +
-            "CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END ASC, " +
-            "dueDate ASC"
-    )
-    fun observePending(): Flow<List<TaskEntity>>
-
     @Query("SELECT * FROM tasks ORDER BY createdAt DESC")
     suspend fun getAllOnce(): List<TaskEntity>
-
-    @Query("SELECT * FROM tasks WHERE id = :id")
-    suspend fun getById(id: Long): TaskEntity?
 
     @Insert
     suspend fun insert(task: TaskEntity): Long

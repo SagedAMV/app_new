@@ -28,9 +28,6 @@ enum class ExamType(val label: String) {
     companion object {
         fun fromStorage(value: String?): ExamType =
             entries.firstOrNull { it.name == value } ?: FINAL
-
-        fun fromLabel(label: String?): ExamType =
-            entries.firstOrNull { it.label == label } ?: FINAL
     }
 }
 

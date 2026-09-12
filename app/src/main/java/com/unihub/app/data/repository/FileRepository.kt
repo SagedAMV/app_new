@@ -19,13 +19,7 @@ class FileRepository @Inject constructor(
     fun observeInFolder(folderId: Long?): Flow<List<FileEntity>> =
         fileDao.observeFilesInFolder(folderId)
 
-    fun observeFavorites(): Flow<List<FileEntity>> = fileDao.observeFavorites()
-
-    fun observeAll(): Flow<List<FileEntity>> = fileDao.observeAll()
-
     fun observeFileCount(): Flow<Int> = fileDao.observeFileCount()
-
-    fun observeTotalSize(): Flow<Long> = fileDao.observeTotalSize()
 
     /** استيراد ملف من المنتقي وتسجيله في مجلد معيّن */
     suspend fun import(uri: android.net.Uri, mimeTypeFallback: String, folderId: Long?): FileEntity {
@@ -55,6 +49,4 @@ class FileRepository @Inject constructor(
 
     suspend fun setFavorite(id: Long, favorite: Boolean) =
         fileDao.setFavorite(id, favorite)
-
-    suspend fun getById(id: Long): FileEntity? = fileDao.getById(id)
 }

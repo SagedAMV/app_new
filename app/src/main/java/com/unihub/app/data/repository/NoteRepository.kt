@@ -16,8 +16,6 @@ class NoteRepository @Inject constructor(
 
     fun observeCount(): Flow<Int> = noteDao.observeCount()
 
-    suspend fun getById(id: Long): NoteEntity? = noteDao.getById(id)
-
     suspend fun create(note: NoteEntity): Long {
         val now = System.currentTimeMillis()
         return noteDao.insert(note.copy(createdAt = now, updatedAt = now))

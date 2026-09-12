@@ -39,7 +39,5 @@ class DashboardRepository @Inject constructor(
 
     fun observeFileCount(): Flow<Int> = fileRepository.observeFileCount()
 
-    fun observeTotalFileSize(): Flow<Long> = fileRepository.observeTotalSize()
-
     suspend fun toggleTask(task: TaskEntity) = taskRepository.toggleDone(task)
 }

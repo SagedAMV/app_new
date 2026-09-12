@@ -15,7 +15,6 @@ class TaskRepository @Inject constructor(
 ) {
 
     fun observeAll(): Flow<List<TaskEntity>> = taskDao.observeAll()
-    fun observePending(): Flow<List<TaskEntity>> = taskDao.observePending()
     fun observePendingCount(): Flow<Int> = taskDao.observePendingCount()
 
     fun observeDueSoon(limit: Int = 3): Flow<List<TaskEntity>> =

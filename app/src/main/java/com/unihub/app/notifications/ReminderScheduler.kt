@@ -32,10 +32,11 @@ class ReminderScheduler @Inject constructor(
         val start = DateFormats.dateTimeOf(exam.date, exam.time.ifBlank { null }) ?: return
         if (!start.isAfter(LocalDateTime.now())) return
 
+        val roomSuffix = if (exam.room.isBlank()) "" else " في قاعة ${exam.room}"
         enqueue(
             workName = examWorkName(exam.id, "day"),
             title = "امتحان غداً 📖",
-            message = "${exam.subject} — ${exam.type.label}${exam.room.ifBlank { "" }.let { if (it.isNotBlank()) " في قاعة $it" else "" }}",
+            message = "${exam.subject} — ${exam.type.label}$roomSuffix",
             at = start.minusDays(1),
             channel = NotificationChannels.EXAMS
         )

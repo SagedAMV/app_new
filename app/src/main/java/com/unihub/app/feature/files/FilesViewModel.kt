@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -39,10 +40,16 @@ class FilesViewModel @Inject constructor(
 
     val messenger = UiMessenger()
 
-    /** بيانات المجلد الحالي (للعنوان) — الجذر يعيد null */
-    val currentFolder: StateFlow<FolderEntity?> =
-        flow { emit(folderId?.let { folderRepository.getById(it) }) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /** عداد يُحدَّث بعد أي تغيير على المجلد الحالي كي يُعاد جلب بياناته */
+    private val folderVersion = MutableStateFlow(0)
+
+    /**
+     * بيانات المجلد الحالي (للعنوان) — الجذر يعيد null. مرتبط بـ [folderVersion]
+     * حتى يظهر إعادة التسمية/الحذف في الترويسة فوراً بدل بقاء الاسم القديم.
+     */
+    val currentFolder: StateFlow<FolderEntity?> = folderVersion
+        .flatMapLatest { flow { emit(folderId?.let { folderRepository.getById(it) }) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val query = MutableStateFlow("")
     val searchQuery: StateFlow<String> = query.asStateFlow()
@@ -104,7 +111,10 @@ class FilesViewModel @Inject constructor(
                 .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
                 .getOrNull() ?: return@launch
             runCatching { folderRepository.update(folder.copy(name = validName)) }
-                .onSuccess { messenger.notify("تم إعادة التسمية") }
+                .onSuccess {
+                    messenger.notify("تم إعادة التسمية")
+                    if (folder.id == folderId) folderVersion.value++
+                }
                 .onFailure { messenger.notifyError("فشلت إعادة التسمية") }
         }
     }
