@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- خلفية شاشة البداية — نفس خلفية التطبيق الفاتحة لانتقال سلس -->
+    <color name="splash_background">#F5F3ED</color>
+    <color name="launcher_background">#3E6B5E</color>
+</resources>
