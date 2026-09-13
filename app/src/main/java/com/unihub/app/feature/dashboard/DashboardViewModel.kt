@@ -2,6 +2,7 @@ package com.unihub.app.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.NextLecture
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.LectureEntity
@@ -28,6 +29,11 @@ class DashboardViewModel @Inject constructor(
     val todayLectures: StateFlow<List<LectureEntity>> =
         dashboardRepository.observeTodayLectures()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** المحاضرة الأقرب من كامل الجدول — حية (تتحدث كل 30 ثانية) */
+    val nextLecture: StateFlow<NextLecture?> =
+        dashboardRepository.observeNextLecture()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val dueSoonTasks: StateFlow<List<TaskEntity>> =
         dashboardRepository.observeDueSoonTasks()

@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.FileNotFoundException
+import java.io.IOException
 import javax.inject.Inject
 
 /**
@@ -28,6 +30,9 @@ import javax.inject.Inject
  * التحسين عن المرجع: حالة الشاشة مشتقة عبر [combine] من تدفقات القاعدة مباشرة
  * (البحث والمفضلة يصفّيان لحظياً بلا إعادة استعلام)، وعمليات الاستيراد والنسخ
  * مفوضة لمستودعات/تخزين معزولة.
+ *
+ * جديد هذه الجولة: وضع التحديد المتعدد (نقر مطول) مع حذف/مشاركة جماعية،
+ * ورسائل خطأ استيراد مفصلة حسب السبب الحقيقي.
  */
 @HiltViewModel
 class FilesViewModel @Inject constructor(
@@ -60,6 +65,10 @@ class FilesViewModel @Inject constructor(
     private val importing = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = importing.asStateFlow()
 
+    /** معرّفات الملفات المحددة (وضع النقر المطول) — فارغة = الوضع العادي */
+    private val _selection = MutableStateFlow<Set<Long>>(emptySet())
+    val selection: StateFlow<Set<Long>> = _selection.asStateFlow()
+
     val folders: StateFlow<List<FolderEntity>> =
         combine(folderRepository.observeChildren(folderId), query) { folders, q ->
             if (q.isBlank()) folders
@@ -86,6 +95,79 @@ class FilesViewModel @Inject constructor(
         favoritesOnly.value = !favoritesOnly.value
     }
 
+    // ─── وضع التحديد المتعدد ────────────────────────────────────────────
+
+    /** نقر مطول: يبدأ التحديد أو يبدّل حالة ملف */
+    fun toggleSelection(fileId: Long) {
+        _selection.value = _selection.value.let { current ->
+            if (fileId in current) current - fileId else current + fileId
+        }
+    }
+
+    fun selectAll(fileIds: List<Long>) {
+        _selection.value = fileIds.toSet()
+    }
+
+    fun clearSelection() {
+        _selection.value = emptySet()
+    }
+
+    /** حذف جماعي مع تقرير نجاح/فشل دقيق — يُخرج الشاشة من وضع التحديد بعده */
+    fun deleteFiles(files: List<FileEntity>) {
+        if (files.isEmpty()) return
+        viewModelScope.launch {
+            var ok = 0
+            var failed = 0
+            files.forEach { file ->
+                runCatching { fileRepository.delete(file) }
+                    .onSuccess { ok++ }
+                    .onFailure { failed++ }
+            }
+            _selection.value = emptySet()
+            when {
+                failed == 0 -> messenger.notify(
+                    if (ok == 1) "حُذف الملف" else "حُذف $ok ملفات"
+                )
+                ok > 0 -> messenger.notifyError("حُذف $ok وبقي $failed تعذّر حذفه")
+                else -> messenger.notifyError("تعذّر حذف الملفات")
+            }
+        }
+    }
+
+    /** تفضيل/إلغاء تفضيل جماعي: إن كان أيٌّ منها غير مفضل فالتفضيل للجميع */
+    fun setFavoriteFor(files: List<FileEntity>) {
+        if (files.isEmpty()) return
+        val target = files.any { !it.isFavorite }
+        viewModelScope.launch {
+            var failed = 0
+            files.forEach { file ->
+                runCatching { fileRepository.setFavorite(file.id, target) }
+                    .onFailure { failed++ }
+            }
+            _selection.value = emptySet()
+            if (failed == 0) {
+                messenger.notify(if (target) "أُضيفت للمفضلة" else "أُزيلت من المفضلة")
+            } else {
+                messenger.notifyError("تعذّر تحديث المفضلة لبعض الملفات")
+            }
+        }
+    }
+
+    /**
+     * شفاء ذاتي: سجل يشير لملف فيزيائي مفقود — نحذف السجل اليتيم
+     * حتى لا تتراكم أشباح في القائمة (يُستدعى عندما يفشل الفتح بسبب الفقدان).
+     */
+    fun healMissingRecord(file: FileEntity) {
+        viewModelScope.launch {
+            runCatching { fileRepository.deleteRecord(file) }
+                .onSuccess { messenger.notify("حُذف سجل الملف المفقود من القائمة") }
+                .onFailure { messenger.notifyError("تعذّر تنظيف سجل الملف المفقود") }
+            _selection.value = _selection.value - file.id
+        }
+    }
+
+    // ─── المجلدات ───────────────────────────────────────────────────────
+
     fun createFolder(name: String, description: String, color: String) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(name)
@@ -101,7 +183,7 @@ class FilesViewModel @Inject constructor(
                     )
                 )
             }.onSuccess { messenger.notify("تم إنشاء المجلد") }
-                .onFailure { messenger.notifyError("فشل إنشاء المجلد") }
+                .onFailure { messenger.notifyError("فشل إنشاء المجلد — ربما الاسم مكرر أو القاعدة مشغولة") }
         }
     }
 
@@ -110,6 +192,10 @@ class FilesViewModel @Inject constructor(
             val validName = InputValidator.validateName(newName)
                 .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
                 .getOrNull() ?: return@launch
+            if (validName == folder.name) {
+                messenger.notify("الاسم لم يتغير")
+                return@launch
+            }
             runCatching { folderRepository.update(folder.copy(name = validName)) }
                 .onSuccess {
                     messenger.notify("تم إعادة التسمية")
@@ -127,7 +213,9 @@ class FilesViewModel @Inject constructor(
         }
     }
 
-    /** استيراد ملفات من منتقي النظام داخل المجلد الحالي */
+    // ─── الملفات ────────────────────────────────────────────────────────
+
+    /** استيراد ملفات من منتقي النظام داخل المجلد الحالي — برسائل فشل مفصلة */
     fun importFiles(uris: List<Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
@@ -138,14 +226,19 @@ class FilesViewModel @Inject constructor(
                 runCatching { fileRepository.import(uri, "*/*", folderId) }
                     .onSuccess { ok++ }
                     .onFailure { e ->
-                        failedMsg = (e as? InputValidationException)?.error?.message
-                            ?: "فشل استيراد أحد الملفات"
+                        failedMsg = when (e) {
+                            is InputValidationException -> e.error.message
+                            is SecurityException -> "انتهى إذن الوصول لأحد الملفات — اختره مجدداً"
+                            is FileNotFoundException -> "أحد الملفات لم يعد متاحاً على الجهاز"
+                            is IOException -> "تعذّرت قراءة أحد الملفات من الجهاز"
+                            else -> "فشل استيراد أحد الملفات"
+                        }
                     }
             }
             importing.value = false
             when {
                 ok > 0 && failedMsg == null -> messenger.notify("تم استيراد $ok ملف بنجاح")
-                ok > 0 -> messenger.notify("تم استيراد $ok ملف — ${failedMsg}")
+                ok > 0 -> messenger.notify("تم استيراد $ok ملف — $failedMsg")
                 else -> messenger.notifyError(failedMsg ?: "فشل الاستيراد")
             }
         }
@@ -156,17 +249,13 @@ class FilesViewModel @Inject constructor(
             val validName = InputValidator.validateName(newName)
                 .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
                 .getOrNull() ?: return@launch
+            if (validName == file.name) {
+                messenger.notify("الاسم لم يتغير")
+                return@launch
+            }
             runCatching { fileRepository.rename(file, validName) }
                 .onSuccess { messenger.notify("تم إعادة التسمية") }
                 .onFailure { messenger.notifyError("فشلت إعادة التسمية") }
-        }
-    }
-
-    fun deleteFile(file: FileEntity) {
-        viewModelScope.launch {
-            runCatching { fileRepository.delete(file) }
-                .onSuccess { messenger.notify("حُذف الملف") }
-                .onFailure { messenger.notifyError("فشل حذف الملف") }
         }
     }
 

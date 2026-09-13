@@ -24,9 +24,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.GridOn
@@ -35,7 +38,9 @@ import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Star
@@ -43,6 +48,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -57,9 +63,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -89,12 +98,6 @@ import com.unihub.app.ui.theme.toComposeColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/** هدف قائمة السياق — ملف أم مجلد */
-private sealed interface MenuTarget {
-    data class FolderMenu(val folder: FolderEntity) : MenuTarget
-    data class FileMenu(val file: FileEntity) : MenuTarget
-}
 
 /** هدف إعادة التسمية */
 private sealed interface RenameTarget {
@@ -120,48 +123,109 @@ fun FilesScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val favoritesOnly by viewModel.favoritesOnlyState.collectAsStateWithLifecycle()
     val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
+    val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val isSelecting = selection.isNotEmpty()
+    val selectedFiles = remember(files, selection) { files.filter { it.id in selection } }
 
     var searchActive by remember { mutableStateOf(false) }
     var showAddFolderSheet by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
     var deleteFolderTarget by remember { mutableStateOf<FolderEntity?>(null) }
-    var deleteFileTarget by remember { mutableStateOf<FileEntity?>(null) }
-    var menuTarget by remember { mutableStateOf<MenuTarget?>(null) }
+    var menuFolder by remember { mutableStateOf<FolderEntity?>(null) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris -> viewModel.importFiles(uris) }
 
+    /** فتح ملف مع معالجة ذكية لكل سبب فشل */
+    val openFile: (FileEntity) -> Unit = { file ->
+        when (val result = FileOpener.open(context, file)) {
+            FileOpResult.Success -> Unit
+            FileOpResult.MissingFile -> {
+                viewModel.messenger.notifyError(result.errorMessage().orEmpty())
+                viewModel.healMissingRecord(file)
+            }
+            else -> viewModel.messenger.notifyError(result.errorMessage().orEmpty())
+        }
+    }
+
+    /** مشاركة/إرسال ملف أو أكثر — مع شفاء السجلات اليتيمة عند الفقدان الكلي */
+    val shareFiles: (List<FileEntity>) -> Unit = { list ->
+        val result = if (list.size == 1) FileOpener.share(context, list.first())
+        else FileOpener.shareMultiple(context, list)
+        when (result) {
+            FileOpResult.Success -> viewModel.clearSelection()
+            FileOpResult.MissingFile -> {
+                viewModel.messenger.notifyError(result.errorMessage().orEmpty())
+                list.forEach { viewModel.healMissingRecord(it) }
+            }
+            else -> viewModel.messenger.notifyError(result.errorMessage().orEmpty())
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text(currentFolder?.name ?: "الملفات") },
-                navigationIcon = {
-                    if (folderId != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+            if (isSelecting) {
+                // شريط وضع التحديد: العدد + إغلاق + تحديد الكل
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = when (selection.size) {
+                                1 -> "ملف واحد محدد"
+                                2 -> "ملفان محددان"
+                                else -> "${selection.size} ملفات محددة"
+                            },
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = viewModel::clearSelection) {
+                            Icon(Icons.Filled.Close, contentDescription = "إلغاء التحديد")
+                        }
+                    },
+                    actions = {
+                        if (selection.size < files.size && files.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.selectAll(files.map { it.id }) }) {
+                                Icon(Icons.Filled.SelectAll, contentDescription = "تحديد الكل")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(currentFolder?.name ?: "الملفات") },
+                    navigationIcon = {
+                        if (folderId != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            searchActive = !searchActive
+                            if (!searchActive) viewModel.setSearchQuery("")
+                        }) {
+                            Icon(Icons.Filled.Search, contentDescription = "بحث")
+                        }
+                        IconButton(onClick = viewModel::toggleFavoritesFilter) {
+                            Icon(
+                                imageVector = if (favoritesOnly) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = "المفضلة فقط",
+                                tint = if (favoritesOnly) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        searchActive = !searchActive
-                        if (!searchActive) viewModel.setSearchQuery("")
-                    }) {
-                        Icon(Icons.Filled.Search, contentDescription = "بحث")
-                    }
-                    IconButton(onClick = viewModel::toggleFavoritesFilter) {
-                        Icon(
-                            imageVector = if (favoritesOnly) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "المفضلة فقط",
-                            tint = if (favoritesOnly) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            )
+                )
+            }
         },
     ) { padding ->
         LazyColumn(
@@ -207,7 +271,7 @@ fun FilesScreen(
                     FolderGrid(
                         folders = folders,
                         onOpen = onOpenFolder,
-                        onLongPress = { menuTarget = MenuTarget.FolderMenu(it) }
+                        onLongPress = { menuFolder = it }
                     )
                 }
             }
@@ -218,13 +282,15 @@ fun FilesScreen(
                 items(files, key = { it.id }) { file ->
                     FileRow(
                         file = file,
-                        onOpen = {
-                            if (!FileOpener.open(context, file)) {
-                                viewModel.messenger.notifyError("لا يوجد تطبيق يفتح هذا النوع من الملفات")
-                            }
+                        selectionMode = isSelecting,
+                        selected = file.id in selection,
+                        onClick = {
+                            if (isSelecting) viewModel.toggleSelection(file.id)
+                            else openFile(file)
                         },
                         onToggleFavorite = { viewModel.toggleFavorite(file) },
-                        onLongPress = { menuTarget = MenuTarget.FileMenu(file) }
+                        // نقرة مطولة = بدء/تبديل التحديد المتعدد
+                        onLongPress = { viewModel.toggleSelection(file.id) }
                     )
                 }
             }
@@ -247,43 +313,48 @@ fun FilesScreen(
         }
 
         // زر عائم حقيقي بقائمة خيارات (يُبنى فوق السقالة لضمان الوصول إليه)
-        FloatingAddMenu(
-            padding = padding,
-            onNewFolder = { showAddFolderSheet = true },
-            onImportFiles = { importLauncher.launch("*/*") }
-        )
+        if (!isSelecting) {
+            FloatingAddMenu(
+                padding = padding,
+                onNewFolder = { showAddFolderSheet = true },
+                onImportFiles = { importLauncher.launch("*/*") }
+            )
+        } else {
+            // شريط إجراءات التحديد: مشاركة/إرسال + مفضلة + حذف
+            Box(Modifier.fillMaxSize()) {
+                SelectionBar(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(padding)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    singleFile = selectedFiles.singleOrNull(),
+                    onOpenSingle = { file ->
+                        viewModel.clearSelection()
+                        openFile(file)
+                    },
+                    onRenameSingle = { file ->
+                        viewModel.clearSelection()
+                        renameTarget = RenameTarget.FileRename(file)
+                    },
+                    onShare = { shareFiles(selectedFiles) },
+                    onFavorite = { viewModel.setFavoriteFor(selectedFiles) },
+                    onDelete = { confirmBulkDelete = true }
+                )
+            }
+        }
 
-        // قائمة السياق (ملف أو مجلد)
-        ContextMenus(
-            target = menuTarget,
+        // قائمة سياق المجلدات (الملفات تديرها شريط التحديد)
+        FolderContextMenu(
+            folder = menuFolder,
             onOpenFolder = onOpenFolder,
-            onDismiss = { menuTarget = null },
-            onRename = { target ->
-                renameTarget = target
-                menuTarget = null
+            onDismiss = { menuFolder = null },
+            onRename = { folder ->
+                renameTarget = RenameTarget.FolderRename(folder)
+                menuFolder = null
             },
-            onDelete = { target ->
-                when (target) {
-                    is MenuTarget.FolderMenu -> deleteFolderTarget = target.folder
-                    is MenuTarget.FileMenu -> deleteFileTarget = target.file
-                }
-                menuTarget = null
-            },
-            onOpenFile = { file ->
-                menuTarget = null
-                if (!FileOpener.open(context, file)) {
-                    viewModel.messenger.notifyError("لا يوجد تطبيق يفتح هذا النوع من الملفات")
-                }
-            },
-            onShareFile = { file ->
-                menuTarget = null
-                if (!FileOpener.share(context, file)) {
-                    viewModel.messenger.notifyError("تعذّرت مشاركة الملف")
-                }
-            },
-            onToggleFavorite = { file ->
-                viewModel.toggleFavorite(file)
-                menuTarget = null
+            onDelete = { folder ->
+                deleteFolderTarget = folder
+                menuFolder = null
             }
         )
 
@@ -329,15 +400,17 @@ fun FilesScreen(
             )
         }
 
-        deleteFileTarget?.let { file ->
+        // تأكيد الحذف الجماعي من وضع التحديد (يشمل حذف ملف واحد محدد)
+        if (confirmBulkDelete) {
             ConfirmDialog(
-                title = "حذف الملف؟",
-                message = "سيُحذف \"${file.name}\" نهائياً من التخزين.",
+                title = if (selectedFiles.size == 1) "حذف الملف؟"
+                else "حذف ${selectedFiles.size} ملفات؟",
+                message = "ستُحذف الملفات المحددة نهائياً من التخزين ولا يمكن التراجع.",
                 onConfirm = {
-                    viewModel.deleteFile(file)
-                    deleteFileTarget = null
+                    viewModel.deleteFiles(selectedFiles)
+                    confirmBulkDelete = false
                 },
-                onDismiss = { deleteFileTarget = null }
+                onDismiss = { confirmBulkDelete = false }
             )
         }
     }
@@ -434,7 +507,9 @@ private fun FolderGrid(
 @Composable
 private fun FileRow(
     file: FileEntity,
-    onOpen: () -> Unit,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -442,19 +517,35 @@ private fun FileRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onOpen, onLongClick = onLongPress),
-        shape = MaterialTheme.shapes.medium
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surface
+        )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = fileIcon(file.kind),
-                contentDescription = null,
-                tint = fileColor(file.kind),
-                modifier = Modifier.size(26.dp)
-            )
+            if (selectionMode) {
+                // مؤشر التحديد بدل أيقونة النوع
+                Icon(
+                    imageVector = if (selected) Icons.Filled.CheckCircle
+                    else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (selected) "محدد" else "غير محدد",
+                    tint = if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = fileIcon(file.kind),
+                    contentDescription = null,
+                    tint = fileColor(file.kind),
+                    modifier = Modifier.size(26.dp)
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -470,96 +561,125 @@ private fun FileRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onToggleFavorite) {
+            if (!selectionMode) {
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (file.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                        contentDescription = if (file.isFavorite) "إزالة من المفضلة" else "إضافة للمفضلة",
+                        tint = if (file.isFavorite) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * شريط إجراءات وضع التحديد — يظهر أسفل الشاشة بدل الزر العائم:
+ * مشاركة/إرسال، تفضيل جماعي، حذف (بتأكيد)، وللملف الواحد: فتح وإعادة تسمية.
+ */
+@Composable
+private fun SelectionBar(
+    modifier: Modifier = Modifier,
+    singleFile: FileEntity?,
+    onOpenSingle: (FileEntity) -> Unit,
+    onRenameSingle: (FileEntity) -> Unit,
+    onShare: () -> Unit,
+    onFavorite: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (singleFile != null) {
+                IconButton(onClick = { onOpenSingle(singleFile) }) {
+                    Icon(
+                        imageVector = Icons.Filled.OpenInNew,
+                        contentDescription = "فتح الملف",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            IconButton(onClick = onShare) {
                 Icon(
-                    imageVector = if (file.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = if (file.isFavorite) "إزالة من المفضلة" else "إضافة للمفضلة",
-                    tint = if (file.isFavorite) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    imageVector = Icons.Filled.Share,
+                    contentDescription = "مشاركة أو إرسال",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onFavorite) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = "إضافة للمفضلة",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (singleFile != null) {
+                IconButton(onClick = { onRenameSingle(singleFile) }) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = "إعادة التسمية",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "حذف المحدد",
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }
     }
 }
 
-/** قائمة السياق — تُعرض كحوار خيارات بسيط يعمل مع أي عنصر */
+/** قائمة سياق المجلد — نقرة مطولة على مجلد (الملفات لها وضع التحديد المتعدد) */
 @Composable
-private fun ContextMenus(
-    target: MenuTarget?,
+private fun FolderContextMenu(
+    folder: FolderEntity?,
     onOpenFolder: (Long) -> Unit,
     onDismiss: () -> Unit,
-    onRename: (RenameTarget) -> Unit,
-    onDelete: (MenuTarget) -> Unit,
-    onOpenFile: (FileEntity) -> Unit,
-    onShareFile: (FileEntity) -> Unit,
-    onToggleFavorite: (FileEntity) -> Unit
+    onRename: (FolderEntity) -> Unit,
+    onDelete: (FolderEntity) -> Unit
 ) {
-    when (target) {
-        null -> Unit
-        is MenuTarget.FolderMenu -> {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(target.folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                text = {
-                    Column {
-                        TextButton(
-                            onClick = {
-                                onDismiss()
-                                onOpenFolder(target.folder.id)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("فتح المجلد") }
-                        TextButton(
-                            onClick = { onRename(RenameTarget.FolderRename(target.folder)) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("إعادة التسمية") }
-                        TextButton(
-                            onClick = { onDelete(target) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("حذف", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                },
-                confirmButton = {}
-            )
-        }
-        is MenuTarget.FileMenu -> {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(target.file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                text = {
-                    Column {
-                        TextButton(
-                            onClick = { onOpenFile(target.file) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("فتح") }
-                        TextButton(
-                            onClick = { onShareFile(target.file) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("مشاركة") }
-                        TextButton(
-                            onClick = { onToggleFavorite(target.file) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(if (target.file.isFavorite) "إزالة من المفضلة" else "إضافة للمفضلة")
-                        }
-                        TextButton(
-                            onClick = { onRename(RenameTarget.FileRename(target.file)) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("إعادة التسمية") }
-                        TextButton(
-                            onClick = { onDelete(target) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("حذف", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                },
-                confirmButton = {}
-            )
-        }
-    }
+    if (folder == null) return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        onOpenFolder(folder.id)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("فتح المجلد") }
+                TextButton(
+                    onClick = { onRename(folder) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("إعادة التسمية") }
+                TextButton(
+                    onClick = { onDelete(folder) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {}
+    )
 }
 
 @Composable

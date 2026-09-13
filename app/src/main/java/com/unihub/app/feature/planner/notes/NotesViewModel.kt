@@ -45,6 +45,12 @@ class NotesViewModel @Inject constructor(
 
     fun save(editing: NoteEntity?, title: String, content: String) {
         viewModelScope.launch {
+            // ملاحظة فارغة تماماً = خطأ مستخدم — نرفضها بلطف بدل حفظ ورقة بيضاء
+            if (editing == null && title.isBlank() && content.isBlank()) {
+                messenger.notifyError("اكتب عنواناً أو محتوى للملاحظة أولاً")
+                return@launch
+            }
+
             val validTitle = InputValidator.validateTitle(title.ifBlank { "ملاحظة بلا عنوان" })
                 .getOrElse { "ملاحظة بلا عنوان" }
 

@@ -43,6 +43,11 @@ class FileRepository @Inject constructor(
         fileStorage.delete(file.filePath)
     }
 
+    /** حذف سجل فقط (عندما تكون النسخة الفيزيائية مفقودة أصلاً) */
+    suspend fun deleteRecord(file: FileEntity) {
+        fileDao.delete(file)
+    }
+
     suspend fun rename(file: FileEntity, newName: String) {
         fileDao.update(file.copy(name = newName))
     }

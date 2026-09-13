@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,13 +30,23 @@ import androidx.compose.foundation.background
 import com.unihub.app.core.common.UiMessenger
 import kotlinx.coroutines.launch
 
-/** يجمع رسائل الـ ViewModel ويعرضها في Snackbar الشاشة المضيفة */
+/**
+ * يجمع رسائل الـ ViewModel ويعرضها في Snackbar الشاشة المضيفة.
+ * رسائل الخطأ تبقى مدة أطول مع زر إغلاق — لا تختفي قبل أن يلاحظها المستخدم.
+ */
 @Composable
 fun UiMessagesHost(messenger: UiMessenger, snackbarHostState: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     LaunchedEffect(messenger) {
         messenger.messages.collect { message ->
-            scope.launch { snackbarHostState.showSnackbar(message) }
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = message.text,
+                    withDismissAction = message.isError,
+                    duration = if (message.isError) SnackbarDuration.Long
+                    else SnackbarDuration.Short
+                )
+            }
         }
     }
 }

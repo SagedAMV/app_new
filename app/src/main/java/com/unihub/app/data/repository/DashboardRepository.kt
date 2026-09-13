@@ -1,11 +1,15 @@
 package com.unihub.app.data.repository
 
+import com.unihub.app.core.common.NextLecture
+import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.data.local.entity.ExamEntity
-import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.LectureEntity
-import com.unihub.app.data.local.entity.NoteEntity
 import com.unihub.app.data.local.entity.TaskEntity
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +28,23 @@ class DashboardRepository @Inject constructor(
 
     fun observeTodayLectures(): Flow<List<LectureEntity>> =
         lectureRepository.observeToday()
+
+    /**
+     * المحاضرة التالية من كامل الجدول الأسبوعي — تتحدث تلقائياً كل 30 ثانية
+     * ليبقى العد التنازلي حياً، وتتحدث فورياً عند أي تعديل على الجدول.
+     */
+    fun observeNextLecture(): Flow<NextLecture?> =
+        combine(lectureRepository.observeAll(), minuteTicker()) { all, now ->
+            NextLectureResolver.resolve(all, now)
+        }
+
+    /** نبض زمني: يعيد اللحظة الحالية كل 30 ثانية */
+    private fun minuteTicker(): Flow<LocalDateTime> = flow {
+        while (true) {
+            emit(LocalDateTime.now())
+            delay(30_000)
+        }
+    }
 
     fun observeDueSoonTasks(limit: Int = 3): Flow<List<TaskEntity>> =
         taskRepository.observeDueSoon(limit)

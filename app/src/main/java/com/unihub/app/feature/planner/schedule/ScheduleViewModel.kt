@@ -2,6 +2,7 @@ package com.unihub.app.feature.planner.schedule
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.data.local.entity.LectureEntity
@@ -47,6 +48,24 @@ class ScheduleViewModel @Inject constructor(
             InputValidator.validateTimeRange(timeFrom, timeTo)
                 .onFailure { messenger.notifyError(it.message ?: "نطاق وقت غير صالح") }
                 .getOrNull() ?: return@launch
+
+            // ذكاء ضد أخطاء المستخدم: رفض محاضرة تتعارض زمنياً مع أخرى في نفس اليوم
+            val clash = runCatching {
+                lectureRepository.allOnce().firstOrNull { other ->
+                    other.day == day &&
+                        other.id != (editing?.id ?: -1L) &&
+                        NextLectureResolver.timeRangesOverlap(
+                            other.timeFrom, other.timeTo,
+                            timeFrom, timeTo.orEmpty()
+                        )
+                }
+            }.getOrNull()
+            if (clash != null) {
+                messenger.notifyError(
+                    "تعارض في الجدول: «${clash.subject}» تبدأ ${clash.timeFrom} في نفس اليوم والوقت"
+                )
+                return@launch
+            }
 
             runCatching {
                 if (editing == null) {

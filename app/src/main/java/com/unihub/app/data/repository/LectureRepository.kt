@@ -23,6 +23,12 @@ class LectureRepository @Inject constructor(
     fun observeToday(): Flow<List<LectureEntity>> =
         lectureDao.observeByDay(Weekdays.today())
 
+    /**
+     * جلب كل المحاضرات لمرة واحدة (لقطة لحظية) — يُستخدم في الفحوصات المتزامنة
+     * مثل كشف تعارض الأوقات قبل الحفظ، حيث لا يناسبنا Flow هنا.
+     */
+    suspend fun allOnce(): List<LectureEntity> = lectureDao.getAllOnce()
+
     suspend fun create(lecture: LectureEntity): Long = lectureDao.insert(lecture)
 
     suspend fun update(lecture: LectureEntity) = lectureDao.update(lecture)

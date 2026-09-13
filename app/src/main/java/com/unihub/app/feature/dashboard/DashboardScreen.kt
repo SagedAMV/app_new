@@ -19,7 +19,9 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TaskAlt
@@ -41,11 +43,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.common.Formatters
+import com.unihub.app.core.common.NextLecture
+import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.LectureEntity
 import com.unihub.app.data.local.entity.TaskEntity
@@ -77,6 +82,7 @@ fun DashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     UiMessagesHost(viewModel.messenger, snackbarHostState)
 
+    val nextLecture by viewModel.nextLecture.collectAsStateWithLifecycle()
     val todayLectures by viewModel.todayLectures.collectAsStateWithLifecycle()
     val dueSoonTasks by viewModel.dueSoonTasks.collectAsStateWithLifecycle()
     val upcomingExams by viewModel.upcomingExams.collectAsStateWithLifecycle()
@@ -125,10 +131,12 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // بطاقة الملخص
-            HeroSummaryCard(
+            // بطاقة المحاضرة التالية — تقرأ الجدول الأسبوعي مباشرة بدل ترحيب ثابت
+            NextLectureCard(
+                next = nextLecture,
                 pendingTasks = pendingTaskCount,
-                upcomingExams = upcomingExamCount
+                upcomingExams = upcomingExamCount,
+                onOpenSchedule = { onOpenPlanner(PlannerTab.SCHEDULE) }
             )
 
             Spacer(Modifier.height(16.dp))
@@ -258,9 +266,21 @@ fun DashboardScreen(
     }
 }
 
+/**
+ * بطاقة "المحاضرة التالية" — القلب العملي للشاشة الرئيسية:
+ * تقرأ الجدول الأسبوعي وتعرض أقرب محاضرة باسمها وقاعتها ووقتها مع عدّ تنازلي
+ * حيّ (يتحدث كل 30 ثانية من المستودع). عند فراغ الجدول تتحول إلى ملخص اليوم
+ * مع دعوة واضحة لبناء الجدول — لا مساحة مهدورة على ترحيب ثابت.
+ */
 @Composable
-private fun HeroSummaryCard(pendingTasks: Int, upcomingExams: Int) {
+private fun NextLectureCard(
+    next: NextLecture?,
+    pendingTasks: Int,
+    upcomingExams: Int,
+    onOpenSchedule: () -> Unit
+) {
     ElevatedCard(
+        onClick = onOpenSchedule,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(
@@ -268,17 +288,86 @@ private fun HeroSummaryCard(pendingTasks: Int, upcomingExams: Int) {
         )
     ) {
         Column(Modifier.padding(18.dp)) {
-            Text(
-                text = "ملخص يومك",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = buildSummaryText(pendingTasks, upcomingExams),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-            )
+            if (next == null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "جدولك فارغ",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = buildSummaryText(pendingTasks, upcomingExams),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "أضف محاضراتك ليظهر هنا أقرب موعد مع القاعة والعد التنازلي",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                val lecture = next.lecture
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "المحاضرة التالية",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(Modifier.weight(1f))
+                    TintChip(
+                        text = if (next.status == NextLecture.Status.ONGOING) "الآن"
+                        else NextLectureResolver.dayLabel(next.dayOffset),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = lecture.subject,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = listOfNotNull(
+                        lecture.timeFrom +
+                            (if (lecture.timeTo.isNotBlank()) " – ${lecture.timeTo}" else ""),
+                        lecture.room.takeIf { it.isNotBlank() }?.let { "قاعة $it" },
+                        lecture.doctor.takeIf { it.isNotBlank() }
+                    ).joinToString("  •  "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.AccessTime,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = NextLectureResolver.formatCountdown(next),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
         }
     }
 }
