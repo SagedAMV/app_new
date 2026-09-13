@@ -19,8 +19,16 @@ import java.io.File
  *
  * الحل: قبل أن يلمس أي مكوّن (Hilt/ViewModel) القاعدة، نفتح الملف فعلياً عبر
  * نسخة اختبار مهملة. نجح الفتح؟ نغلقها ويكمل التطبيق طبيعياً. فشل؟ نحذف الملف
- * مع ملحقاته (`-wal`/`-shm`) ويُنشئ Room قاعدة نظيفة عند أول استخدام. التطبيق
- * شخصي وبياناته محلية، فالإعادة النظيفة أفضل من حلقة كراش لا نهائية عند الإقلاع.
+ * مع ملحقاته ويُنشئ Room قاعدة نظيفة عند أول استخدام. التطبيق شخصي وبياناته
+ * محلية، فالإعادة النظيفة أفضل من حلقة كراش لا نهائية عند الإقلاع.
+ *
+ * تحصين الجلسة الحالية (ما أُضيف على النسخة السابقة):
+ * 1) شبكة أمان خارجية حول الفحص كله — المُداوي نفسه لا يجوز أن يكون سبب كراش
+ *    الإقلاع مهما حدث داخله.
+ * 2) التحقق من نجاح الحذف: `Context.deleteDatabase` يعيد `false` بصمت إن فشل
+ *    (ملف مقفول/قيد الاستخدام)، وبقاء الملف التالف يعني عودة الكراش في كل
+ *    إقلاع — لذلك نتحقق ونكمل بالحذف المباشر للملف وملحقاته
+ *    (`-wal`/`-shm`/`-journal`) مع تسجيل النتيجة.
  */
 object DatabaseSelfHeal {
 
@@ -28,6 +36,16 @@ object DatabaseSelfHeal {
 
     /** يُستدعى مرة واحدة في [com.unihub.app.UniHubApplication.onCreate] */
     fun ensureHealthyDatabase(context: Context) {
+        try {
+            healIfNeeded(context)
+        } catch (unexpected: Throwable) {
+            // المُداوي لا يُسقط التطبيق أبداً: أي مفاجأة غير متوقعة تُسجَّل
+            // ويُكمل التطبيق إقلاعه (أسوأ ما يحدث هنا = سلوك ما قبل الاستشفاء).
+            Log.e(TAG, "فحص قاعدة البيانات تعذّر — يُكمل التطبيق الإقلاع", unexpected)
+        }
+    }
+
+    private fun healIfNeeded(context: Context) {
         val dbFile = context.getDatabasePath(UniHubDatabase.NAME)
         // تثبيت جديد: لا يوجد ملف أصلاً — لا حاجة لأي فحص
         if (!dbFile.exists()) return
@@ -45,16 +63,37 @@ object DatabaseSelfHeal {
                     "السبب: ${error.message}"
             )
             runCatching { probe.close() }
-            context.deleteDatabase(UniHubDatabase.NAME)
-            deleteJournalFiles(dbFile)
+            wipeDatabaseFiles(context, dbFile)
         }
     }
 
-    /** حذف ملحقات SQLite التي قد تبقى بعد فتح فاشل */
-    private fun deleteJournalFiles(dbFile: File) {
-        runCatching {
-            File(dbFile.absolutePath + "-wal").delete()
-            File(dbFile.absolutePath + "-shm").delete()
+    /**
+     * حذف القاعدة مع كل ملحقاتها والتحقق من نجاح الحذف فعلياً.
+     * نبدأ بـ [Context.deleteDatabase] (الطريق النظامي)، وإن بقي أي ملف على القرص
+     * نحذفه مباشرة — بقاء أي جزء من القاعدة التالفة يعيد الكراش التالي.
+     */
+    private fun wipeDatabaseFiles(context: Context, dbFile: File) {
+        runCatching { context.deleteDatabase(UniHubDatabase.NAME) }
+
+        val leftovers = listOf(
+            dbFile,
+            sibling(dbFile, "-wal"),
+            sibling(dbFile, "-shm"),
+            sibling(dbFile, "-journal")
+        ).filter { it.exists() }
+
+        if (leftovers.isEmpty()) return
+
+        leftovers.forEach { file -> runCatching { file.delete() } }
+        val remaining = leftovers.count { it.exists() }
+        if (remaining > 0) {
+            // فشل الحذف حتى بالمباشر — يُسجَّل بخطورة لأنه يعني احتمال تكرار الكراش
+            Log.e(TAG, "تعذّر حذف $remaining من ملفات القاعدة — قد يتكرر كراش الإقلاع")
+        } else {
+            Log.w(TAG, "حُذفت ملفات القاعدة مباشرة بعد فشل deleteDatabase")
         }
     }
+
+    private fun sibling(dbFile: File, suffix: String): File =
+        File(dbFile.absolutePath + suffix)
 }

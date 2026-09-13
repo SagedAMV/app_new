@@ -88,7 +88,8 @@ class FileStorage @Inject constructor(
                 displayName = target.nameWithoutExtension,
                 extension = validExt,
                 mimeType = mimeType,
-                size = if (size >= 0) size else target.length(),
+                // بعض مزودي المحتوى لا يعيدون SIZE (أو يعيدون 0) — حجم النسخة هو الموثوق حينها
+                size = if (size > 0) size else target.length(),
                 absolutePath = target.absolutePath
             )
         }

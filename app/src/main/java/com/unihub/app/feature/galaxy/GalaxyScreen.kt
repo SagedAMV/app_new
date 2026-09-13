@@ -132,7 +132,8 @@ private fun GalaxySystem(folders: List<FolderWithFileCount>, onOpenFolder: (Long
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val centerX = maxWidth / 2
         val centerY = maxHeight / 2 - 12.dp
-        val maxRadius = (min(maxWidth.value, maxHeight.value) / 2 - 52f).dp
+        // حماية من نصف قطر سالب على الشاشات الضيقة/المقسومة — الرسم يبقى سليماً دائماً
+        val maxRadius = (min(maxWidth.value, maxHeight.value) / 2 - 52f).coerceAtLeast(36f).dp
 
         // نجوم ثابتة (بذرة عشوائية ثابتة حتى لا تتغير مع كل إعادة تركيب)
         val stars = remember {
