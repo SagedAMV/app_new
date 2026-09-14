@@ -178,16 +178,6 @@ fun AudioRecorderSheet(
         phase = RecorderPhase.RECORDING
     }
 
-    fun stopRecording() {
-        recorderRef.get()?.let { recorder ->
-            runCatching { recorder.stop() }
-            runCatching { recorder.release() }
-        }
-        recorderRef.set(null)
-        preparePlayer()
-        phase = RecorderPhase.PREVIEW
-    }
-
     fun preparePlayer() {
         val file = recordedFile ?: return
         runCatching {
@@ -204,6 +194,16 @@ fun AudioRecorderSheet(
         }.onFailure {
             showMessage("تعذّر تجهيز المعاينة الصوتية")
         }
+    }
+
+    fun stopRecording() {
+        recorderRef.get()?.let { recorder ->
+            runCatching { recorder.stop() }
+            runCatching { recorder.release() }
+        }
+        recorderRef.set(null)
+        preparePlayer()
+        phase = RecorderPhase.PREVIEW
     }
 
     fun togglePlayback() {

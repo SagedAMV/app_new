@@ -492,7 +492,7 @@ private fun takeShot(
     onShot: (CapturedShot) -> Unit,
     onError: () -> Unit
 ) {
-    capture.takePicture(object : ImageCapture.OnImageCapturedCallback() {
+    capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
         override fun onCaptureSuccess(image: ImageProxy) {
             val rotation = image.imageInfo.rotationDegrees
             val buffer = image.planes[0].buffer
