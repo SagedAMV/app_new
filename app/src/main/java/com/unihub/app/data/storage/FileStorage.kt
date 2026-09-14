@@ -94,6 +94,51 @@ class FileStorage @Inject constructor(
             )
         }
 
+    /**
+     * حفظ صورة التُقطت بكاميرا التطبيق (ملف مؤقت في الكاش) داخل المكتبة.
+     * نفس منطق الاستيراد: اسم آمن فريد بلا تكرار أو محارف مسارات.
+     */
+    suspend fun saveCapturedImage(source: File, baseName: String?): ImportedFile =
+        withContext(Dispatchers.IO) {
+            saveLocalFile(source, baseName ?: "صورة", "jpg", "image/jpeg")
+        }
+
+    /** حفظ تسجيل صوتي (ملف مؤقت في الكاش) داخل المكتبة بصيغة m4a/AAC */
+    suspend fun saveAudioRecording(source: File, baseName: String?): ImportedFile =
+        withContext(Dispatchers.IO) {
+            saveLocalFile(source, baseName ?: "تسجيل صوتي", "m4a", "audio/mp4")
+        }
+
+    /**
+     * نقل ملف محلي (من كاش التطبيق) إلى مجلد المكتبة باسم فريد آمن،
+     * ثم حذف الأصل المؤقت. تُستخدم للملفات التي ينتجها التطبيق نفسه
+     * (الكاميرا والمسجل) بدل منتقي النظام.
+     */
+    private fun saveLocalFile(
+        source: File,
+        rawBase: String,
+        extension: String,
+        mimeType: String
+    ): ImportedFile {
+        if (!source.isFile) throw java.io.IOException("الملف المؤقت لم يعد متاحاً")
+        val safeBase = InputValidator.sanitizeName(rawBase).ifBlank { "ملف" }
+        var target = File(libraryDir, "$safeBase.$extension")
+        var counter = 1
+        while (target.exists()) {
+            target = File(libraryDir, "$safeBase ($counter).$extension")
+            counter++
+        }
+        source.copyTo(target, overwrite = true)
+        runCatching { source.delete() }
+        return ImportedFile(
+            displayName = target.nameWithoutExtension,
+            extension = extension,
+            mimeType = mimeType,
+            size = target.length(),
+            absolutePath = target.absolutePath
+        )
+    }
+
     /** حذف ملف فيزيائي بصمت — فشله لا يجب أن يُفشل حذف السجل */
     fun delete(absolutePath: String) {
         if (absolutePath.isBlank()) return

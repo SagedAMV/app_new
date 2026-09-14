@@ -244,6 +244,52 @@ class FilesViewModel @Inject constructor(
         }
     }
 
+    // ─── المرفقات الجديدة (كاميرا / تسجيل صوتي) ─────────────────────────
+
+    /**
+     * حفظ دفعات الصور الملتقطة بالكاميرا داخل المجلد الحالي.
+     * كل عنصر زوج (الملف المؤقت في الكاش، الاسم الاختياري الذي أدخله المستخدم).
+     * تقرير نجاح/فشل دقيق بنفس نمط الاستيراد من المنتقي.
+     */
+    fun saveCapturedImages(items: List<com.unihub.app.feature.files.capture.CapturedImageInput>) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            importing.value = true
+            var ok = 0
+            var failed = 0
+            items.forEach { item ->
+                runCatching { fileRepository.saveCapturedImage(item.file, item.name, folderId) }
+                    .onSuccess { ok++ }
+                    .onFailure {
+                        failed++
+                        runCatching { item.file.delete() } // لا نترك ملفات مؤقتة يتيمة
+                    }
+            }
+            importing.value = false
+            when {
+                ok > 0 && failed == 0 -> messenger.notify(
+                    if (ok == 1) "أُضيفت الصورة إلى الملفات" else "أُضيفت $ok صور إلى الملفات"
+                )
+                ok > 0 -> messenger.notifyError("أُضيفت $ok صور وتعذّر حفظ $failed")
+                else -> messenger.notifyError("تعذّر حفظ الصور الملتقطة")
+            }
+        }
+    }
+
+    /** حفظ تسجيل صوتي واحد داخل المجلد الحالي — الملف مؤقت في الكاش */
+    fun saveAudioRecording(file: java.io.File, name: String?) {
+        viewModelScope.launch {
+            importing.value = true
+            runCatching { fileRepository.saveAudioRecording(file, name, folderId) }
+                .onSuccess { messenger.notify("تم حفظ التسجيل الصوتي") }
+                .onFailure {
+                    messenger.notifyError("تعذّر حفظ التسجيل الصوتي")
+                    runCatching { file.delete() }
+                }
+            importing.value = false
+        }
+    }
+
     fun renameFile(file: FileEntity, newName: String) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(newName)

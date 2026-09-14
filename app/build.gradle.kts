@@ -106,6 +106,12 @@ dependencies {
     // WorkManager لتذكيرات المهام والامتحانات
     implementation(libs.androidx.work.runtime)
 
+    // CameraX — التقاط الصور من داخل التطبيق (المكتبة الرسمية الموصى بها من Google)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+
     // اختبارات الوحدة
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -18,6 +18,14 @@ data object DashboardRoute
 @Serializable
 data class FilesRoute(val folderId: Long? = null)
 
+/**
+ * شاشة التقاط الصور بالكاميرا — تُفتح من زر الإضافة في شاشة الملفات وتعمل
+ * ضمن المجلد نفسه الذي كان مفتوحاً (تمرير folderId يحفظ الصور داخله مباشرة).
+ * لا تظهر في الشريط السفلي لأنها وجهة عمل مؤقتة فوق شاشة الملفات.
+ */
+@Serializable
+data class CameraCaptureRoute(val folderId: Long? = null)
+
 @Serializable
 data object GalaxyRoute
 

@@ -23,10 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -45,13 +45,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -87,6 +84,8 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.data.local.entity.FolderEntity
+import com.unihub.app.feature.files.capture.AddMenuSheet
+import com.unihub.app.feature.files.capture.AudioRecorderSheet
 import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
@@ -111,6 +110,7 @@ fun FilesScreen(
     folderId: Long?,
     onOpenFolder: (Long) -> Unit,
     onBack: () -> Unit,
+    onOpenCamera: () -> Unit,
     viewModel: FilesViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -128,7 +128,9 @@ fun FilesScreen(
     val selectedFiles = remember(files, selection) { files.filter { it.id in selection } }
 
     var searchActive by remember { mutableStateOf(false) }
+    var showAddMenuSheet by remember { mutableStateOf(false) }
     var showAddFolderSheet by remember { mutableStateOf(false) }
+    var showAudioRecorder by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
     var deleteFolderTarget by remember { mutableStateOf<FolderEntity?>(null) }
     var menuFolder by remember { mutableStateOf<FolderEntity?>(null) }
@@ -312,12 +314,11 @@ fun FilesScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
 
-        // زر عائم حقيقي بقائمة خيارات (يُبنى فوق السقالة لضمان الوصول إليه)
+        // زر عائم يفتح قائمة الإضافة المنبثقة (يُبنى فوق السقالة لضمان الوصول إليه)
         if (!isSelecting) {
-            FloatingAddMenu(
+            FloatingAddButton(
                 padding = padding,
-                onNewFolder = { showAddFolderSheet = true },
-                onImportFiles = { importLauncher.launch("*/*") }
+                onOpenMenu = { showAddMenuSheet = true }
             )
         } else {
             // شريط إجراءات التحديد: مشاركة/إرسال + مفضلة + حذف
@@ -359,12 +360,46 @@ fun FilesScreen(
         )
 
         // أوراق الحوار
+        // قائمة الإضافة المنبثقة: 4 خيارات (رفع ملف، مجلد، صورة بالكاميرا، تسجيل صوتي)
+        if (showAddMenuSheet) {
+            AddMenuSheet(
+                onDismiss = { showAddMenuSheet = false },
+                onImportFiles = {
+                    showAddMenuSheet = false
+                    importLauncher.launch("*/*") // السلوك السابق كما هو
+                },
+                onNewFolder = {
+                    showAddMenuSheet = false
+                    showAddFolderSheet = true // السلوك السابق كما هو
+                },
+                onCapturePhoto = {
+                    showAddMenuSheet = false
+                    onOpenCamera() // وجهة كاميرا بملء الشاشة فوق شاشة الملفات
+                },
+                onRecordAudio = {
+                    showAddMenuSheet = false
+                    showAudioRecorder = true
+                }
+            )
+        }
+
         if (showAddFolderSheet) {
             AddFolderSheet(
                 onDismiss = { showAddFolderSheet = false },
                 onCreate = { name, description, color ->
                     viewModel.createFolder(name, description, color)
                     showAddFolderSheet = false
+                }
+            )
+        }
+
+        // المسجل الصوتي — الحفظ يمر عبر ViewModel ليتخذ رسائل النجاح/الفشل نمطاً واحداً
+        if (showAudioRecorder) {
+            AudioRecorderSheet(
+                onDismiss = { showAudioRecorder = false },
+                onSave = { file, name ->
+                    showAudioRecorder = false
+                    viewModel.saveAudioRecording(file, name)
                 }
             )
         }
@@ -416,46 +451,25 @@ fun FilesScreen(
     }
 }
 
-/** الزر العائم مع قائمة (مجلد جديد / استيراد ملفات) */
+/**
+ * الزر العائم للإضافة — يفتح قائمة منبثقة سفلية (AddMenuSheet) بأربعة خيارات
+ * بدل القائمة المنسدلة القديمة: رفع ملف، مجلد جديد، التقاط صورة، تسجيل صوتي.
+ */
 @Composable
-private fun FloatingAddMenu(
+private fun FloatingAddButton(
     padding: androidx.compose.foundation.layout.PaddingValues,
-    onNewFolder: () -> Unit,
-    onImportFiles: () -> Unit
+    onOpenMenu: () -> Unit
 ) {
     Box(Modifier.fillMaxSize()) {
-        var expanded by remember { mutableStateOf(false) }
-        Column(
+        ExtendedFloatingActionButton(
+            onClick = onOpenMenu,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(padding)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("مجلد جديد") },
-                    leadingIcon = { Icon(Icons.Filled.CreateNewFolder, contentDescription = null) },
-                    onClick = {
-                        expanded = false
-                        onNewFolder()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("استيراد ملفات من الجهاز") },
-                    leadingIcon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
-                    onClick = {
-                        expanded = false
-                        onImportFiles()
-                    }
-                )
-            }
-            ExtendedFloatingActionButton(
-                onClick = { expanded = true },
-                icon = { Icon(Icons.Filled.CreateNewFolder, contentDescription = null) },
-                text = { Text("إضافة") }
-            )
-        }
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            text = { Text("إضافة") }
+        )
     }
 }
 

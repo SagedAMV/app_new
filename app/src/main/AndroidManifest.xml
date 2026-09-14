@@ -6,6 +6,14 @@
          لا أذونات تخزين: الملفات تُختار عبر SAF وتُنسخ لتخزين التطبيق الداخلي. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- إذن الكاميرا لالتقاط صور الملاحظات، والميكروفون للتسجيل الصوتي.
+         الكاميرا ليست إلزامية: التطبيق يعمل كاملاً على جهاز بلا كاميرا. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
     <application
         android:name=".UniHubApplication"
         android:allowBackup="false"

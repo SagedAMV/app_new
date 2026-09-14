@@ -24,6 +24,26 @@ class FileRepository @Inject constructor(
     /** استيراد ملف من المنتقي وتسجيله في مجلد معيّن */
     suspend fun import(uri: android.net.Uri, mimeTypeFallback: String, folderId: Long?): FileEntity {
         val imported: ImportedFile = fileStorage.import(uri, mimeTypeFallback)
+        return insertFromImport(imported, folderId)
+    }
+
+    /**
+     * حفظ صورة التُقطت من كاميرا التطبيق داخل مجلد معيّن.
+     * [source] ملف مؤقت في الكاش — يُنقل للمكتبة ويُحذف الأصل.
+     */
+    suspend fun saveCapturedImage(source: java.io.File, name: String?, folderId: Long?): FileEntity {
+        val imported = fileStorage.saveCapturedImage(source, name)
+        return insertFromImport(imported, folderId)
+    }
+
+    /** حفظ تسجيل صوتي من مسجل التطبيق داخل مجلد معيّن */
+    suspend fun saveAudioRecording(source: java.io.File, name: String?, folderId: Long?): FileEntity {
+        val imported = fileStorage.saveAudioRecording(source, name)
+        return insertFromImport(imported, folderId)
+    }
+
+    /** بناء سجل FileEntity من نتيجة حفظ/استيراد ناجحة وإدراجه في القاعدة */
+    private suspend fun insertFromImport(imported: ImportedFile, folderId: Long?): FileEntity {
         val entity = FileEntity(
             name = imported.displayName,
             extension = imported.extension,

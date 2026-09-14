@@ -14,6 +14,7 @@ import androidx.navigation.toRoute
 import com.unihub.app.feature.backup.BackupScreen
 import com.unihub.app.feature.dashboard.DashboardScreen
 import com.unihub.app.feature.files.FilesScreen
+import com.unihub.app.feature.files.capture.CameraCaptureScreen
 import com.unihub.app.feature.galaxy.GalaxyScreen
 import com.unihub.app.feature.planner.PlannerScreen
 import com.unihub.app.feature.settings.SettingsScreen
@@ -57,6 +58,15 @@ fun AppNavHost() {
                 FilesScreen(
                     folderId = route.folderId,
                     onOpenFolder = { id -> navController.navigate(FilesRoute(id)) },
+                    onBack = { navController.popBackStack() },
+                    onOpenCamera = { navController.navigate(CameraCaptureRoute(route.folderId)) }
+                )
+            }
+
+            composable<CameraCaptureRoute> { entry ->
+                val route = entry.toRoute<CameraCaptureRoute>()
+                CameraCaptureScreen(
+                    folderId = route.folderId,
                     onBack = { navController.popBackStack() }
                 )
             }
