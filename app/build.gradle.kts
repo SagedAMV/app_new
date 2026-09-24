@@ -22,10 +22,23 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        create("release") {
+            // توقيع شخصي للنسخة المصغّرة — تطبيق غير منشور (البيانات في keystore/unihub-release.jks)
+            storeFile = file("keystore/unihub-release.jks")
+            storePassword = "unihub2026"
+            keyAlias = "unihub"
+            keyPassword = "unihub2026"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // النسخة المصغّرة: R8 يحذف الكود غير المستخدم ويصغّر ما يبقى،
+            // مع تقليص الموارد غير المرجعية — قواعد الحماية في proguard-rules.pro
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
