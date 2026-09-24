@@ -20,7 +20,7 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.AccessTime
-import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
@@ -188,7 +188,7 @@ fun DashboardScreen(
             )
             if (todayLectures.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Outlined.MenuBook,
+                    icon = Icons.AutoMirrored.Outlined.MenuBook,
                     title = "لا محاضرات اليوم",
                     subtitle = "استمتع بيومك أو أضف محاضراتك من الجدول الأسبوعي"
                 )

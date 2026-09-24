@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.EventNote
-import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.EventNote
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -75,7 +75,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                 sheetLecture = null
                 showSheet = true
             }) {
-                Icon(Icons.Outlined.EventNote, contentDescription = "محاضرة جديدة")
+                Icon(Icons.AutoMirrored.Outlined.EventNote, contentDescription = "محاضرة جديدة")
             }
         }
     ) { padding ->
@@ -86,7 +86,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                     .padding(padding)
             ) {
                 EmptyState(
-                    icon = Icons.Outlined.MenuBook,
+                    icon = Icons.AutoMirrored.Outlined.MenuBook,
                     title = "جدولك فارغ",
                     subtitle = "أضف محاضراتك الأسبوعة لتظهر هنا وفي الرئيسية حسب اليوم"
                 )

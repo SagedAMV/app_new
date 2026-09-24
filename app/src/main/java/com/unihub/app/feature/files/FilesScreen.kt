@@ -34,9 +34,9 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
@@ -45,7 +45,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -617,7 +617,7 @@ private fun SelectionBar(
             if (singleFile != null) {
                 IconButton(onClick = { onOpenSingle(singleFile) }) {
                     Icon(
-                        imageVector = Icons.Filled.OpenInNew,
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                         contentDescription = "فتح الملف",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -788,8 +788,8 @@ private fun fileIcon(kind: FileKind): ImageVector = when (kind) {
     FileKind.VIDEO -> Icons.Filled.Movie
     FileKind.AUDIO -> Icons.Filled.Audiotrack
     FileKind.ARCHIVE -> Icons.Filled.FolderZip
-    FileKind.TEXT -> Icons.Outlined.Article
-    FileKind.OTHER -> Icons.Filled.InsertDriveFile
+    FileKind.TEXT -> Icons.AutoMirrored.Outlined.Article
+    FileKind.OTHER -> Icons.AutoMirrored.Filled.InsertDriveFile
 }
 
 private fun fileColor(kind: FileKind): Color = when (kind) {

@@ -12,6 +12,7 @@ import com.unihub.app.data.local.entity.FolderEntity
 import com.unihub.app.data.repository.FileRepository
 import com.unihub.app.data.repository.FolderRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,7 @@ import javax.inject.Inject
  * جديد هذه الجولة: وضع التحديد المتعدد (نقر مطول) مع حذف/مشاركة جماعية،
  * ورسائل خطأ استيراد مفصلة حسب السبب الحقيقي.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class FilesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,

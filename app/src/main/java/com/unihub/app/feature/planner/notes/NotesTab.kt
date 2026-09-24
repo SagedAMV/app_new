@@ -18,7 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.StickyNote2
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -102,7 +102,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
             if (notes.isEmpty()) {
                 item {
                     EmptyState(
-                        icon = Icons.Outlined.StickyNote2,
+                        icon = Icons.AutoMirrored.Outlined.StickyNote2,
                         title = if (searchQuery.isBlank()) "لا ملاحظات بعد" else "لا نتائج للبحث",
                         subtitle = if (searchQuery.isBlank()) {
                             "اكتب أفكارك وملخصاتك — الملاحظات المثبتة تظهر أولاً دائماً"
