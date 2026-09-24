@@ -49,7 +49,7 @@ object FileOpener {
             context.startActivity(Intent.createChooser(intent, "فتح الملف").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
-            FileOpResult.Success as FileOpResult
+            FileOpResult.Success
         }.getOrElse { it.toResult() }
     }
 
@@ -93,7 +93,7 @@ object FileOpener {
             context.startActivity(Intent.createChooser(intent, "مشاركة الملفات").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
-            FileOpResult.Success as FileOpResult
+            FileOpResult.Success
         }.getOrElse { it.toResult() }
 
     private fun uriFor(context: Context, file: FileEntity) =
