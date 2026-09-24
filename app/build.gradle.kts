@@ -34,10 +34,23 @@ android {
 
     buildTypes {
         release {
-            // النسخة المصغّرة: R8 يحذف الكود غير المستخدم ويصغّر ما يبقى،
-            // مع تقليص الموارد غير المرجعية — قواعد الحماية في proguard-rules.pro
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // ⚠️ قرار متعمّد ونهائي — لا تُفعّل التصغير مجدداً دون قراءة هذا كاملاً:
+            //
+            // السبب الجذري لكراش الإقلاع (تشخيص مؤكَّد بجلسات سابقة على جهاز أندرويد 12
+            // حقيقي، commits a53523b/6d20ade/01b0753): نسخة Release المصغّرة (R8 +
+            // تقليص الموارد) كانت تُسقط التطبيق فوراً عند أول فتح. تحصين قواعد proguard
+            // (kotlinx.serialization) عالج جزءاً من الخطر لكنه لم يُختبر فعلياً على جهاز
+            // حقيقي عند إعادة تفعيل التصغير في commit bc1a26b — فقط تحقّق ثابت من بقاء
+            // الأصناف داخل الـ dex، وهو غير كافٍ للتأكد من سلامة كل مسار انعكاسي
+            // (reflection) يستخدمه Room / WorkManager / Navigation في وقت التشغيل الفعلي.
+            //
+            // القرار: تطبيق شخصي غير منشور على متجر — لا فائدة عملية من تصغير الحجم
+            // (لا حدود توزيع، لا قياسات تنزيل) بينما الخطر (كراش إقلاع كامل) كارثي.
+            // العائد لا يبرر المخاطرة إطلاقاً. لذلك: بلا تصغير ولا تقليص موارد بشكل دائم.
+            // قواعد proguard-rules.pro أُبقيت ومُتّنت كطبقة أمان إضافية فقط تحسّباً،
+            // وليست ترخيصاً لإعادة تفعيل isMinifyEnabled.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
