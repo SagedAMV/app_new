@@ -24,9 +24,17 @@ data class ImportedFile(
 
 /**
  * إدارة الملفات الفيزيائية داخل تخزين التطبيق الداخلي.
- * التحسين الجوهري: في التطبيق المرجعي كان النسخ والفتح والحذف موزعاً داخل
- * ملفات الواجهة (FilesScreen/ViewModel)؛ هنا كل عمليات القرص معزولة في صف واحد
- * قابل للاختبار، مع إزالة تكرار الأسماء وحجم أقصى وتنظيف محارف.
+ *
+ * جولة الإصلاح الحالية (راجع تعليمات.md):
+ * 1) توحيد منطق "اسم فريد بلا تكرار" في [uniqueTarget] بدل تكراره في كل دالة
+ *    (كان مكرراً حرفياً في import() و saveLocalFile()) — إزالة تكرار كود حقيقي.
+ * 2) إضافة [rename] الذي يُعيد تسمية الملف الفعلي على القرص ليطابق دائماً الاسم
+ *    الظاهر في التطبيق، بدل بقاء الاسم الأصلي وقت الاستيراد إلى الأبد. هذا هو
+ *    السبب الجذري لعطلين مُبلَّغ عنهما معاً: تعذّر "تعديل الاسم الأصلي" فعلياً،
+ *    وإرسال/مشاركة الملف باسمه القديم بدل اسمه الحالي — لأن FileProvider يقرأ
+ *    اسم الملف الحقيقي من القرص وليس عمود "name" في قاعدة البيانات.
+ * 3) إضافة [importBytes] لاستعادة نسخة فعلية من محتوى مضمّن داخل أرشيف نسخة
+ *    احتياطية (انظر BackupRepository) بدل الاكتفاء بمسار نصّي لم يعد موجوداً.
  */
 @Singleton
 class FileStorage @Inject constructor(
@@ -36,6 +44,21 @@ class FileStorage @Inject constructor(
     /** مجلد المكتبة داخل التخزين الداخلي الخاص بالتطبيق */
     private val libraryDir: File
         get() = File(context.filesDir, "library").apply { if (!exists()) mkdirs() }
+
+    /**
+     * يبني ملف هدف بامتداد ثابت داخل مجلد المكتبة بلا تصادم اسم مع ملف موجود
+     * فعلاً — "الاسم (1)"، "الاسم (2)"... بالترتيب. مستخدمة من الاستيراد،
+     * الحفظ المحلي (كاميرا/تسجيل)، إعادة التسمية، واستعادة النسخ الاحتياطية.
+     */
+    private fun uniqueTarget(safeBase: String, extension: String): File {
+        var target = File(libraryDir, "$safeBase.$extension")
+        var counter = 1
+        while (target.exists()) {
+            target = File(libraryDir, "$safeBase ($counter).$extension")
+            counter++
+        }
+        return target
+    }
 
     /**
      * استيراد ملف عبر نسخة فعلية إلى تخزين التطبيق.
@@ -68,12 +91,7 @@ class FileStorage @Inject constructor(
 
             // 3) اسم فريد آمن على القرص (بدون تكرار أو محارف مسارات)
             val safeBase = InputValidator.sanitizeName(baseName).ifBlank { "ملف" }
-            var target = File(libraryDir, "$safeBase.$validExt")
-            var counter = 1
-            while (target.exists()) {
-                target = File(libraryDir, "$safeBase ($counter).$validExt")
-                counter++
-            }
+            val target = uniqueTarget(safeBase, validExt)
 
             // 4) نسخ التدفق
             val copied = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -122,12 +140,7 @@ class FileStorage @Inject constructor(
     ): ImportedFile {
         if (!source.isFile) throw java.io.IOException("الملف المؤقت لم يعد متاحاً")
         val safeBase = InputValidator.sanitizeName(rawBase).ifBlank { "ملف" }
-        var target = File(libraryDir, "$safeBase.$extension")
-        var counter = 1
-        while (target.exists()) {
-            target = File(libraryDir, "$safeBase ($counter).$extension")
-            counter++
-        }
+        val target = uniqueTarget(safeBase, extension)
         source.copyTo(target, overwrite = true)
         runCatching { source.delete() }
         return ImportedFile(
@@ -138,6 +151,65 @@ class FileStorage @Inject constructor(
             absolutePath = target.absolutePath
         )
     }
+
+    /**
+     * إعادة تسمية النسخة الفعلية على القرص لتطابق دائماً الاسم الظاهر في
+     * التطبيق. تُستدعى من [com.unihub.app.data.repository.FileRepository.rename]
+     * بعد كل إعادة تسمية ناجحة في قاعدة البيانات.
+     *
+     * لماذا فعليًا وليس فقط في القاعدة؟ لأن FileProvider (المستخدَم في الفتح
+     * والمشاركة) يقرأ اسم العرض (DISPLAY_NAME) من اسم الملف الحقيقي على القرص،
+     * وليس من عمود "name" في Room. بدون هذه الخطوة يبقى أي تطبيق يستقبل الملف
+     * (مشاركة) يرى الاسم القديم دائماً — وهذا هو العطل المُبلَّغ عنه بالضبط.
+     *
+     * إن لم تعد النسخة الفعلية موجودة (حُذفت خارج التطبيق)، نرمي استثناءً
+     * ليتعامل معه المستدعي بإبقاء السجل مع الاسم الجديد فقط (تدهور رشيق) بدل
+     * فشل العملية كلها.
+     */
+    suspend fun rename(oldAbsolutePath: String, newDisplayName: String, extension: String): String =
+        withContext(Dispatchers.IO) {
+            val source = File(oldAbsolutePath)
+            if (!source.isFile) {
+                throw java.io.IOException("النسخة الفعلية للملف لم تعد موجودة على القرص")
+            }
+
+            val safeBase = InputValidator.sanitizeName(newDisplayName).ifBlank { "ملف" }
+            val safeExt = extension.trim('.').ifBlank { source.extension }
+
+            // إن كان الاسم الفعلي مطابقاً أصلاً (نفس القاعدة والامتداد) لا داعي لأي عملية قرص
+            if (source.nameWithoutExtension == safeBase && source.extension.equals(safeExt, ignoreCase = true)) {
+                return@withContext source.absolutePath
+            }
+
+            val target = uniqueTarget(safeBase, safeExt)
+            val moved = source.renameTo(target)
+            if (!moved) {
+                // renameTo() قد يفشل نادراً (مثلاً عبر أنظمة ملفات مختلفة) — خطة بديلة: نسخ ثم حذف الأصل
+                source.copyTo(target, overwrite = true)
+                if (!source.delete()) {
+                    // فشل حذف الأصل بعد النسخ لا يجب أن يُفشل إعادة التسمية —
+                    // النسخة الجديدة صحيحة، والأصل يُنظَّف لاحقاً بأمان (ملف يتيم لا يشير له أي سجل)
+                    android.util.Log.w(TAG, "تعذّر حذف الملف الأصلي بعد النسخ أثناء إعادة التسمية: ${source.absolutePath}")
+                }
+            }
+            target.absolutePath
+        }
+
+    /**
+     * استعادة نسخة فعلية من بايتات مضمّنة داخل أرشيف نسخة احتياطية (ZIP)
+     * إلى مجلد المكتبة الخاص بهذا الجهاز، وإرجاع مسارها الجديد الصالح محلياً.
+     */
+    suspend fun importBytes(bytes: ByteArray, displayName: String, extension: String): String =
+        withContext(Dispatchers.IO) {
+            val safeBase = InputValidator.sanitizeName(displayName).ifBlank { "ملف" }
+            // نتساهل هنا عمداً في التحقق من الامتداد مقارنة بـ import(): بيانات النسخة
+            // الاحتياطية سبق التحقق منها عند تصديرها، ورفض الاستعادة بسبب تغيّر قائمة
+            // الامتدادات المسموحة بين إصدارين يفقد المستخدم بياناته بلا داعٍ.
+            val safeExt = extension.trim('.').ifBlank { "bin" }.filter { it.isLetterOrDigit() }.ifBlank { "bin" }
+            val target = uniqueTarget(safeBase, safeExt)
+            target.writeBytes(bytes)
+            target.absolutePath
+        }
 
     /** حذف ملف فيزيائي بصمت — فشله لا يجب أن يُفشل حذف السجل */
     fun delete(absolutePath: String) {
@@ -156,5 +228,9 @@ class FileStorage @Inject constructor(
         runCatching {
             libraryDir.listFiles()?.forEach { it.delete() }
         }
+    }
+
+    private companion object {
+        const val TAG = "FileStorage"
     }
 }

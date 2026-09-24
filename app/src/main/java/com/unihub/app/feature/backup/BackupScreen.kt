@@ -41,7 +41,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.ui.components.SectionHeader
 
-/** شاشة النسخ الاحتياطي: تصدير/استيراد عبر منتقي ملفات النظام (SAF) */
+/**
+ * شاشة النسخ الاحتياطي: تصدير/استيراد عبر منتقي ملفات النظام (SAF).
+ *
+ * تحديث هذه الجولة: النسخة الآن أرشيف ZIP (‎.zip) يتضمّن محتوى الملفات الفعلي
+ * نفسه، وليس فقط بياناتها الوصفية كما كان سابقاً — لذا حُدِّث نوع MIME واسم
+ * الملف المقترح والنصوص التوضيحية. استيراد نسخ JSON القديمة لا يزال يعمل.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupScreen(
@@ -53,7 +59,7 @@ fun BackupScreen(
     val busy by viewModel.busy.collectAsStateWithLifecycle()
 
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let(viewModel::exportTo) }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -89,12 +95,13 @@ fun BackupScreen(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "احفظ نسخة من مجلداتك وملفاتك (بياناتها الوصفية) ومهامك وملاحظاتك وامتحاناتك وجدولك في ملف JSON.",
+                        "احفظ نسخة كاملة من مجلداتك وملفاتك (بالمحتوى الفعلي نفسه) ومهامك وملاحظاتك " +
+                            "وامتحاناتك وجدولك في أرشيف واحد.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { exportLauncher.launch("unihub_backup.json") },
+                        onClick = { exportLauncher.launch("unihub_backup.zip") },
                         enabled = !busy
                     ) {
                         Icon(Icons.Outlined.FileDownload, contentDescription = null)
@@ -111,12 +118,15 @@ fun BackupScreen(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "الاستيراد يستبدل كل البيانات الحالية بمحتوى النسخة ويعيد جدولة التذكيرات تلقائياً.",
+                        "الاستيراد يستبدل كل البيانات الحالية بمحتوى النسخة (بما فيها الملفات نفسها) " +
+                            "ويعيد جدولة التذكيرات تلقائياً. نُسخ JSON القديمة لا تزال مدعومة (بيانات وصفية فقط).",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
-                        onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                        onClick = {
+                            importLauncher.launch(arrayOf("application/zip", "application/json", "*/*"))
+                        },
                         enabled = !busy
                     ) {
                         Icon(Icons.Outlined.FileUpload, contentDescription = null)
@@ -148,8 +158,8 @@ fun BackupScreen(
 
             Spacer(Modifier.height(20.dp))
             Text(
-                "ملاحظة: محتوى الملفات المستوردة نفسه يبقى داخل تخزين التطبيق ولا يُضمَّن في ملف " +
-                    "النسخة؛ تُستعاد سجلاتها ومساراتها. التطبيق يعمل بالكامل دون إنترنت.",
+                "ملاحظة: أرشيف النسخة الآن يتضمّن محتوى ملفاتك الفعلي، لذا قد يكون حجمه كبيراً " +
+                    "بحسب حجم مكتبتك. التطبيق يعمل بالكامل دون إنترنت.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

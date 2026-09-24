@@ -68,10 +68,21 @@ class FileRepository @Inject constructor(
         fileDao.delete(file)
     }
 
+    /**
+     * إعادة تسمية ملف: تُعيد تسمية النسخة الفعلية على القرص أولاً لتطابق
+     * الاسم الجديد (يُصلح فشل مشاركة/فتح الملف باسمه القديم عبر FileProvider)،
+     * ثم تُحدَّث قاعدة البيانات بالاسم الجديد ومساره الفعلي الجديد معاً.
+     *
+     * إن تعذّرت إعادة التسمية الفعلية (مثلاً حُذفت النسخة الفعلية خارج
+     * التطبيق) نتدهور بلطف: يُحدَّث الاسم الظاهر فقط في قاعدة البيانات بدل
+     * فشل العملية كاملة على المستخدم.
+     */
     suspend fun rename(file: FileEntity, newName: String) {
-        fileDao.update(file.copy(name = newName))
+        val newPath = runCatching {
+            fileStorage.rename(file.filePath, newName, file.extension)
+        }.getOrElse { file.filePath }
+        fileDao.update(file.copy(name = newName, filePath = newPath))
     }
 
-    suspend fun setFavorite(id: Long, favorite: Boolean) =
-        fileDao.setFavorite(id, favorite)
+    suspend fun setFavorite(id: Long, favorite: Boolean) = fileDao.setFavorite(id, favorite)
 }
