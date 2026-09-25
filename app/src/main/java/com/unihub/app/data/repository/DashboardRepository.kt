@@ -15,7 +15,8 @@ import javax.inject.Singleton
 
 /**
  * ملخص الشاشة الرئيسية في مستودع واحد بدل 8 تدفقات متفرقة في ViewModel عام.
- * الشاشة الرئيسية تهمها "لقطة اليوم": محاضرات اليوم، مهام مستحقة، امتحانات قريبة.
+ * الشاشة الرئيسية تهمها "لقطة اليوم": محاضرات اليوم، مهام مستحقة، امتحانات قريبة،
+ * وأقرب مهمة مطلوبة للبطاقة العلوية.
  */
 @Singleton
 class DashboardRepository @Inject constructor(
@@ -48,6 +49,10 @@ class DashboardRepository @Inject constructor(
 
     fun observeDueSoonTasks(limit: Int = 3): Flow<List<TaskEntity>> =
         taskRepository.observeDueSoon(limit)
+
+    /** أقرب مهمة مطلوبة أياً كان موعد استحقاقها — لنصف الاستحقاقات في البطاقة العلوية */
+    fun observeNearestTask(): Flow<TaskEntity?> =
+        taskRepository.observeNearestPending()
 
     fun observeUpcomingExams(limit: Int = 3): Flow<List<ExamEntity>> =
         examRepository.observeUpcomingLimited(limit)

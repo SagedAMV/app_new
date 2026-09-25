@@ -54,4 +54,16 @@ interface TaskDao {
             "AND dueDate <= :todayIso ORDER BY dueDate ASC LIMIT :limit"
     )
     fun observeDueSoon(todayIso: String, limit: Int): Flow<List<TaskEntity>>
+
+    /**
+     * أقرب مهمة مطلوبة: غير منجزة ولها تاريخ استحقاق (ماضٍ أو مستقبلي)، مرتبة
+     * تصاعدياً حسب الاستحقاق فيكون الصف الأول هو الأقرب موعداً. تستعملها
+     * الشاشة الرئيسية لعرض «أقرب مهمة مطلوبة» حتى لو لم يكن استحقاقها اليوم —
+     * بخلاف [observeDueSoon] المحصورة في اليوم وما قبله.
+     */
+    @Query(
+        "SELECT * FROM tasks WHERE isDone = 0 AND dueDate IS NOT NULL " +
+            "AND dueDate != '' ORDER BY dueDate ASC LIMIT 1"
+    )
+    fun observeNearestPending(): Flow<TaskEntity?>
 }

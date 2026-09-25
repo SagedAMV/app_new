@@ -20,6 +20,9 @@ class TaskRepository @Inject constructor(
     fun observeDueSoon(limit: Int = 3): Flow<List<TaskEntity>> =
         taskDao.observeDueSoon(com.unihub.app.core.common.DateFormats.todayIso(), limit)
 
+    /** أقرب مهمة مطلوبة (ماضية أو مستقبلية) — للنصف الأيمن من البطاقة الرئيسية */
+    fun observeNearestPending(): Flow<TaskEntity?> = taskDao.observeNearestPending()
+
     suspend fun create(task: TaskEntity): Long {
         val id = taskDao.insert(task)
         if (!task.dueDate.isNullOrBlank()) {

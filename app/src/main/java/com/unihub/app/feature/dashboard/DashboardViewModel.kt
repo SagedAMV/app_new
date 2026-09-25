@@ -39,6 +39,11 @@ class DashboardViewModel @Inject constructor(
         dashboardRepository.observeDueSoonTasks()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** أقرب مهمة مطلوبة (ماضية أو مستقبلية) — للنصف الأيمن من بطاقة «لقطة اليوم» */
+    val nearestTask: StateFlow<TaskEntity?> =
+        dashboardRepository.observeNearestTask()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     val upcomingExams: StateFlow<List<ExamEntity>> =
         dashboardRepository.observeUpcomingExams()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

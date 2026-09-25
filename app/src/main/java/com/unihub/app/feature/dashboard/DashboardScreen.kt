@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -97,6 +98,7 @@ fun DashboardScreen(
     val todayLectures by viewModel.todayLectures.collectAsStateWithLifecycle()
     val dueSoonTasks by viewModel.dueSoonTasks.collectAsStateWithLifecycle()
     val upcomingExams by viewModel.upcomingExams.collectAsStateWithLifecycle()
+    val nearestTask by viewModel.nearestTask.collectAsStateWithLifecycle()
     val pendingTaskCount by viewModel.pendingTaskCount.collectAsStateWithLifecycle()
     val upcomingExamCount by viewModel.upcomingExamCount.collectAsStateWithLifecycle()
     val noteCount by viewModel.noteCount.collectAsStateWithLifecycle()
@@ -143,13 +145,14 @@ fun DashboardScreen(
             Spacer(Modifier.height(16.dp))
 
             // بطاقة «لقطة اليوم»: النصف الأيسر لجدول المحاضرات وتوقيتها، والنصف
-            // الأيمن لأقرب امتحان وأقرب مهمة، يفصل بينهما خط رأسي — وتدخل
-            // الشاشة بأنيميشن متدرج هادئ
+            // الأيمن لأقرب امتحان وأقرب مهمة مطلوبة، يفصل بينهما خط رأسي — وتدخل
+            // الشاشة بأنيميشن متدرج هادئ. أقرب امتحان من رأس قائمة الامتحانات
+            // المرتبة تصاعدياً، وأقرب مهمة من استعلام مفرد مخصص (ماضٍ أو مستقبل)
             DaySnapshotCard(
                 next = nextLecture,
                 todayLectures = todayLectures,
                 nearestExam = upcomingExams.firstOrNull(),
-                nearestTask = dueSoonTasks.firstOrNull(),
+                nearestTask = nearestTask,
                 onOpenSchedule = { onOpenPlanner(PlannerTab.SCHEDULE) },
                 onOpenExams = { onOpenPlanner(PlannerTab.EXAMS) },
                 onOpenTasks = { onOpenPlanner(PlannerTab.TASKS) }
@@ -290,7 +293,9 @@ fun DashboardScreen(
  *   (عدّ تنازلي بالدقائق من تدفق المستودع) وتحته حتى محاضرتين من بقية اليوم.
  *   الضغط على النصف يفتح الجدول الأسبوعي.
  * - النصف الأيمن: أقرب امتحان قادم وأقرب مهمة مطلوبة، وكل صف اختصار مباشر
- *   لتبويبه. القوائم تصل مرتبة تصاعدياً من DAO فتكون firstOrNull() هي الأقرب.
+ *   لتبويبه. الامتحان من رأس قائمة الامتحانات المرتبة تصاعدياً بالتاريخ من
+ *   DAO، والمهمة من استعلام Room مفرد (LIMIT 1) يعيد أقرب مهمة غير منجزة
+ *   بتاريخ استحقاق — ماضٍ أو مستقبل — فلا تختفي عند غياب مهام اليوم.
  *
  * أنيميشن الدخول: تظهر البطاقة أولاً (تلاشٍ مع ارتفاع خفيف)، ثم ينمو الخط
  * الفاصل من منتصفه وينزلق النصفان من الخارج نحوه بتتابع سريع هادئ —
@@ -368,9 +373,15 @@ private fun DaySnapshotCard(
         // في RTL يُصفّ الطفل الأول يميناً: نصف الاستحقاقات أولاً (يمين
         // البطاقة) ونصف المحاضرات أخيراً (يسارها) — فيكون التقسيم كما يراه
         // المستخدم: محاضرات | فاصل | استحقاقات.
+        //
+        // height(IntrinsicSize.Min) يمنح الصف ارتفاعاً محدداً (ارتفاع أطول نصف)،
+        // فيعمل fillMaxHeight() للفاصل الرأسي داخل الشاشة القابلة للتمرير
+        // ويتساوى النصفان ارتفاعاً — هذا هو النمط المعياري في Compose إذ لا
+        // يوجد محاذاة «تمديد»، وبدونه ينهار الفاصل إلى ارتفاع صفر.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Stretch
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
         ) {
             DeadlinesHalf(
                 nearestExam = nearestExam,
@@ -617,7 +628,8 @@ private fun DeadlinesHalf(
 
         Spacer(Modifier.height(4.dp))
 
-        // أقرب مهمة — القائمة تشمل المتأخرة أولاً بترتيب الاستحقاق من DAO
+        // أقرب مهمة مطلوبة — استعلام مفرد من DAO: أقرب استحقاق غير منجز
+        // (المتأخرة تتصدر لأن تاريخها أقدم)، أياً كان يوم استحقاقها
         if (nearestTask != null) {
             Row(
                 modifier = Modifier
@@ -656,7 +668,7 @@ private fun DeadlinesHalf(
             }
         } else {
             Text(
-                text = "لا مهام مستحقة الآن",
+                text = "لا مهام بموعد قادم",
                 style = MaterialTheme.typography.bodySmall,
                 color = onPrimary.copy(alpha = 0.7f),
                 modifier = Modifier.padding(vertical = 5.dp)
