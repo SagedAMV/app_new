@@ -88,7 +88,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                 EmptyState(
                     icon = Icons.AutoMirrored.Outlined.MenuBook,
                     title = "جدولك فارغ",
-                    subtitle = "أضف محاضراتك الأسبوعة لتظهر هنا وفي الرئيسية حسب اليوم"
+                    subtitle = "أضف محاضراتك الأسبوعية لتظهر هنا وفي الرئيسية حسب اليوم"
                 )
             }
         } else {

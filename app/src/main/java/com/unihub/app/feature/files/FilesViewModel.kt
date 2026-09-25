@@ -74,8 +74,11 @@ class FilesViewModel @Inject constructor(
 
     val folders: StateFlow<List<FolderEntity>> =
         combine(folderRepository.observeChildren(folderId), query) { folders, q ->
-            if (q.isBlank()) folders
-            else folders.filter { it.name.contains(q, ignoreCase = true) }
+            // القص عند الاستخدام لا أثناء الكتابة (انظر setSearchQuery) حتى
+            // تبقى مسافة لوحة المفاتيح قابلة للكتابة في البحث متعدد الكلمات
+            val trimmed = q.trim()
+            if (trimmed.isBlank()) folders
+            else folders.filter { it.name.contains(trimmed, ignoreCase = true) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val files: StateFlow<List<FileEntity>> =
@@ -84,14 +87,16 @@ class FilesViewModel @Inject constructor(
             favoritesOnly,
             query
         ) { files, favOnly, q ->
+            val trimmed = q.trim()
             files.filter { file ->
                 (!favOnly || file.isFavorite) &&
-                    (q.isBlank() || file.name.contains(q, ignoreCase = true))
+                    (trimmed.isBlank() || file.name.contains(trimmed, ignoreCase = true))
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** تخزين نص البحث كما كُتب — القص يحدث عند الاستخدام داخل المرشحات فقط */
     fun setSearchQuery(value: String) {
-        query.value = value.trim()
+        query.value = value
     }
 
     fun toggleFavoritesFilter() {

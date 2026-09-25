@@ -103,8 +103,9 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                 item {
                     EmptyState(
                         icon = Icons.AutoMirrored.Outlined.StickyNote2,
-                        title = if (searchQuery.isBlank()) "لا ملاحظات بعد" else "لا نتائج للبحث",
-                        subtitle = if (searchQuery.isBlank()) {
+                        // الفراغات وحدها لا تُعد بحثاً فعالاً — نفس دلالة القص في مرشح ViewModel
+                        title = if (searchQuery.trim().isBlank()) "لا ملاحظات بعد" else "لا نتائج للبحث",
+                        subtitle = if (searchQuery.trim().isBlank()) {
                             "اكتب أفكارك وملخصاتك — الملاحظات المثبتة تظهر أولاً دائماً"
                         } else {
                             "جرّب كلمات أخرى"

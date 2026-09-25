@@ -32,15 +32,19 @@ class NotesViewModel @Inject constructor(
     /** الملاحظات المعروضة بعد البحث — البحث يشمل العنوان والمحتوى */
     val notes: StateFlow<List<NoteEntity>> =
         combine(allNotes, query) { notes, q ->
-            if (q.isBlank()) notes
+            // القص عند الاستخدام لا أثناء الكتابة (انظر setSearchQuery) حتى
+            // تبقى مسافة لوحة المفاتيح قابلة للكتابة في البحث متعدد الكلمات
+            val trimmed = q.trim()
+            if (trimmed.isBlank()) notes
             else notes.filter {
-                it.title.contains(q, ignoreCase = true) ||
-                    it.content.contains(q, ignoreCase = true)
+                it.title.contains(trimmed, ignoreCase = true) ||
+                    it.content.contains(trimmed, ignoreCase = true)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** تخزين نص البحث كما كُتب — القص يحدث عند الاستخدام داخل المرشح فقط */
     fun setSearchQuery(value: String) {
-        query.value = value.trim()
+        query.value = value
     }
 
     fun save(editing: NoteEntity?, title: String, content: String) {

@@ -39,15 +39,19 @@ class TasksViewModel @Inject constructor(
     /** القائمة المعروضة بعد تطبيق المرشح ثم البحث (العنوان والوصف) */
     val tasks: StateFlow<List<TaskEntity>> =
         combine(allTasks, filter, query) { tasks, f, q ->
+            // القص هنا عند الاستخدام لا في [setSearchQuery]: القص أثناء الكتابة
+            // يبتلع مسافة لوحة المفاتيح لحظة كتابتها (لأنها تكون طرف النص) في
+            // حقل البحث المرتبط بالحالة، فيستحيل البحث بعبارات متعددة الكلمات.
+            val trimmed = q.trim()
             val filtered = when (f) {
                 TaskFilter.ALL -> tasks
                 TaskFilter.PENDING -> tasks.filterNot { it.isDone }
                 TaskFilter.DONE -> tasks.filter { it.isDone }
             }
-            if (q.isBlank()) filtered
+            if (trimmed.isBlank()) filtered
             else filtered.filter {
-                it.title.contains(q, ignoreCase = true) ||
-                    it.description.contains(q, ignoreCase = true)
+                it.title.contains(trimmed, ignoreCase = true) ||
+                    it.description.contains(trimmed, ignoreCase = true)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -55,8 +59,9 @@ class TasksViewModel @Inject constructor(
         filter.value = value
     }
 
+    /** تخزين نص البحث كما كُتب — القص يحدث عند الاستخدام داخل المرشح فقط */
     fun setSearchQuery(value: String) {
-        query.value = value.trim()
+        query.value = value
     }
 
     fun toggle(task: TaskEntity) {

@@ -118,13 +118,14 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
             if (tasks.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.CheckCircle,
-                    title = if (searchQuery.isNotBlank()) "لا نتائج للبحث"
+                    // الفراغات وحدها لا تُعد بحثاً فعالاً — نفس دلالة القص في مرشح ViewModel
+                    title = if (searchQuery.trim().isNotBlank()) "لا نتائج للبحث"
                     else when (filter) {
                         TaskFilter.PENDING -> "لا مهام قيد التنفيذ"
                         TaskFilter.DONE -> "لا مهام منجزة بعد"
                         TaskFilter.ALL -> "لا مهام بعد"
                     },
-                    subtitle = if (searchQuery.isNotBlank()) {
+                    subtitle = if (searchQuery.trim().isNotBlank()) {
                         "جرّب كلمات بحث أخرى أو غيّر المرشح"
                     } else {
                         "أضف مهمة من زر + وحدد أولويتها وموعد استحقاقها"
