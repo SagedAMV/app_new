@@ -470,6 +470,9 @@ private fun LecturesHalf(
 
         Spacer(Modifier.height(12.dp))
 
+        // فرع الفراغ يُكتب هنا بصيغة شرطية كاملة (وليس خروجاً مبكراً):
+        // لامدا محتوى Column ليست دالة سطر-مضمّن، فلا يجوز داخلها `return`
+        // عارٍ ولا شيء غير `if/else` يترجم هنا بشكل سليم.
         if (next == null) {
             Text(
                 text = "جدولك فارغ",
@@ -483,51 +486,50 @@ private fun LecturesHalf(
                 style = MaterialTheme.typography.bodySmall,
                 color = onPrimary.copy(alpha = 0.75f)
             )
-            return
-        }
+        } else {
+            // المحاضرة الأقرب: المادة ثم سطر الحالة الحي
+            Text(
+                text = next.lecture.subject,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = lectureStatusLabel(next),
+                style = MaterialTheme.typography.bodySmall,
+                color = onPrimary.copy(alpha = 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-        // المحاضرة الأقرب: المادة ثم سطر الحالة الحي
-        Text(
-            text = next.lecture.subject,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = onPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(3.dp))
-        Text(
-            text = lectureStatusLabel(next),
-            style = MaterialTheme.typography.bodySmall,
-            color = onPrimary.copy(alpha = 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        // بقية محاضرات اليوم (حتى اثنتين) بصيغة مدمجة: الوقت ثم المادة
-        todayLectures
-            .filter { it.id != next.lecture.id }
-            .take(2)
-            .forEach { lecture ->
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = lecture.timeFrom,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = onPrimary.copy(alpha = 0.9f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = lecture.subject,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = onPrimary.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+            // بقية محاضرات اليوم (حتى اثنتين) بصيغة مدمجة: الوقت ثم المادة
+            todayLectures
+                .filter { it.id != next.lecture.id }
+                .take(2)
+                .forEach { lecture ->
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = lecture.timeFrom,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = onPrimary.copy(alpha = 0.9f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = lecture.subject,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onPrimary.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
-            }
+        }
     }
 }
 
@@ -770,7 +772,11 @@ private fun DueTaskRow(task: TaskEntity, onToggle: () -> Unit) {
 
 @Composable
 private fun UpcomingExamRow(exam: ExamEntity) {
-    val days = exam.daysRemaining ?: 0
+    // التسمية من مصدر واحد مشترك مع شارة البطاقة العلوية (dayCountLabel):
+    // كان الفرع القديم يحوّل التاريخ غير القابل للتحليل (null) إلى «اليوم»
+    // بالقسر `?: 0` وهي دلالة مضللة، بينما المصدر المشترك يعرض «قريباً».
+    // كما يُلغى هنا تكرار منطق التسمية الذي كان مكتوباً مرتين بصيغتين.
+    val days = exam.daysRemaining
     Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -802,15 +808,11 @@ private fun UpcomingExamRow(exam: ExamEntity) {
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = when {
-                    days == 0L -> "اليوم"
-                    days == 1L -> "غداً"
-                    days == 2L -> "بعد يومين"
-                    else -> "بعد $days أيام"
-                },
+                text = dayCountLabel(days),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = if (days <= 2) SemanticDanger else MaterialTheme.colorScheme.primary
+                color = if (days != null && days <= 2) SemanticDanger
+                else MaterialTheme.colorScheme.primary
             )
         }
     }
