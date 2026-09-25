@@ -31,7 +31,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
@@ -693,7 +693,7 @@ private fun SelectionBar(
             }
             IconButton(onClick = onMove) {
                 Icon(
-                    imageVector = Icons.Filled.DriveFileMove,
+                    imageVector = Icons.AutoMirrored.Filled.DriveFileMove,
                     contentDescription = "نقل إلى مجلد",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
