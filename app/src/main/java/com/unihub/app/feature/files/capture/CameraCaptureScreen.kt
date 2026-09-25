@@ -11,6 +11,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -25,6 +26,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +51,9 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -101,6 +106,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** مدخل حفظ صورة واحدة: الملف المؤقت في الكاش + الاسم الاختياري الذي أدخله المستخدم */
@@ -116,6 +122,16 @@ data class CapturedShot(
 /** مرحلتا شاشة الكاميرا: الالتقاط المباشر ثم مراجعة المرفقات */
 private enum class CapturePhase { CAPTURE, REVIEW }
 
+/** حالات الفلاش: مغلق ثم مضاء (تورش ينير المشهد أثناء المعاينة والالتقاط) ثم تلقائي (النظام يقرر لحظة الالتقاط) */
+private enum class FlashState { OFF, ON, AUTO }
+
+/** ترجمة حالة الفلاش في الواجهة إلى ثوابت ImageCapture الموافقة لها */
+private fun flashModeFor(state: FlashState): Int = when (state) {
+    FlashState.OFF -> ImageCapture.FLASH_MODE_OFF
+    FlashState.ON -> ImageCapture.FLASH_MODE_ON
+    FlashState.AUTO -> ImageCapture.FLASH_MODE_AUTO
+}
+
 /** ارتفاع صف المراجعة ثابت حتى تُحسب إزاحة السحب بدقة */
 private val REVIEW_ROW_HEIGHT = 96.dp
 
@@ -123,7 +139,8 @@ private val REVIEW_ROW_HEIGHT = 96.dp
  * شاشة التقاط الصور — تُفتح كوجهة مستقلة فوق شاشة الملفات (كاميرا بملء الشاشة).
  *
  * الجلسة تمر بمرحلتين:
- *  1) [CapturePhase.CAPTURE]: معاينة حية + زر التقاط + تبديل الكاميرا + شريط مصغّرات.
+ *  1) [CapturePhase.CAPTURE]: معاينة حية مع تقريب بالقرص + فلاش ثلاثي الحالات + زر التقاط
+ *     + تبديل الكاميرا + شريط مصغّرات.
  *     الكاميرا تبقى مفتوحة بعد كل لقطة لالتقاط عدة صور في الجلسة نفسها.
  *  2) [CapturePhase.REVIEW]: كل صورة لها اسم اختياري وزر حذف، وإعادة الترتيب بسحبة
  *     مطولة، ثم "إضافة المرفقات" تحفظ الكل دفعة واحدة في المجلد المفتوح.
@@ -243,8 +260,10 @@ fun CameraCaptureScreen(
 // ─────────────────────────────── مرحلة الالتقاط ───────────────────────────────
 
 /**
- * واجهة الكاميرا الحية: معاينة CameraX، زر التقاط (شاتر) بوميض، تبديل أمامية/خلفية،
- * زر إغلاق، وشريط مصغّرات يتجمع أسفل الشاشة مع استمرار الجلسة.
+ * واجهة الكاميرا الحية: معاينة CameraX مع تقريب بالقرص (لتصوير السبورة عن بُعد)،
+ * فلاش ثلاثي الحالات (مغلق/مضاء/تلقائي) يُعطَّل تلقائياً إن لم يملك الجهاز وحدة فلاش،
+ * زر التقاط (شاتر) بوميض، تبديل أمامية/خلفية، زر إغلاق، وشريط مصغّرات يتجمع أسفل
+ * الشاشة مع استمرار الجلسة.
  */
 @Composable
 private fun CaptureContent(
@@ -263,7 +282,17 @@ private fun CaptureContent(
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var cameraFailed by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
-    val flashAlpha = remember { Animatable(0f) }
+    // مرجع الكاميرا المربوطة — بوابة التحكم بالفلاش (التورش) والزوم عبر cameraControl
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var flashState by remember { mutableStateOf(FlashState.OFF) }
+    var hasFlashUnit by remember { mutableStateOf(false) }
+    // نسبة الزوم الحالية لعرضها في المؤشر — المصدر الحي هو zoomState داخل الكاميرا نفسها
+    var zoomRatio by remember { mutableStateOf(1f) }
+    // حارس الربط: لا يُعاد ربط الكاميرا إلا عند تغيّر العدسة فعلاً، وإلا لأُعيد الربط
+    // عند كل إعادة تركيب (مثلاً عند إضافة مصغّرة جديدة) فوميضت المعاينة وتصفّر الزوم
+    var boundLens by remember { mutableStateOf<Int?>(null) }
+    // وميض الشاشة لحظة الضغط على الشاتر — سُمّي بدقة لتمييزه عن فلاش الجهاز الحقيقي
+    val shutterFlashAlpha = remember { Animatable(0f) }
 
     Box(modifier.background(Color.Black)) {
         if (cameraFailed) {
@@ -302,37 +331,65 @@ private fun CaptureContent(
                         scaleType = PreviewView.ScaleType.FILL_CENTER
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(lensFacing) {
+                        // الزوم بالقرص: نقرأ النسبة الحية من الكاميرا نفسها، نقيّدها
+                        // بحدود الجهاز، ثم نطبّقها عبر cameraControl
+                        detectTransformGestures { _, _, gestureZoom, _ ->
+                            if (gestureZoom == 1f) return@detectTransformGestures
+                            val activeCamera = camera ?: return@detectTransformGestures
+                            val liveZoom = activeCamera.cameraInfo.zoomState.value
+                                ?: return@detectTransformGestures
+                            val target = (liveZoom.zoomRatio * gestureZoom)
+                                .coerceIn(liveZoom.minZoomRatio, liveZoom.maxZoomRatio)
+                            zoomRatio = target
+                            activeCamera.cameraControl.setZoomRatio(target)
+                        }
+                    },
                 update = { previewView ->
-                    // يُعاد الربط عند تغيّر الكاميرا المختارة (lensFacing مقروءة هنا)
-                    providerFuture.addListener({
-                        runCatching {
-                            val provider = providerFuture.get()
-                            val preview = Preview.Builder().build().also { p ->
-                                p.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                            val capture = ImageCapture.Builder()
-                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                .build()
-                            val selector = CameraSelector.Builder()
-                                .requireLensFacing(lensFacing)
-                                .build()
-                            provider.unbindAll()
-                            provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
-                            imageCapture = capture
-                            cameraFailed = false
-                        }.onFailure { cameraFailed = true }
-                    }, ContextCompat.getMainExecutor(context))
+                    // الربط فقط عند تغيّر العدسة المختارة — الحارس يمنع إعادة الربط عند كل
+                    // إعادة تركيب (كان البناء السابق يعيد بناء الكاميرا في كل تحديث)
+                    if (boundLens != lensFacing) {
+                        providerFuture.addListener({
+                            runCatching {
+                                val provider = providerFuture.get()
+                                val preview = Preview.Builder().build().also { p ->
+                                    p.setSurfaceProvider(previewView.surfaceProvider)
+                                }
+                                val capture = ImageCapture.Builder()
+                                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                    .build()
+                                val selector = CameraSelector.Builder()
+                                    .requireLensFacing(lensFacing)
+                                    .build()
+                                provider.unbindAll()
+                                val boundCamera = provider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    selector,
+                                    preview,
+                                    capture
+                                )
+                                imageCapture = capture
+                                camera = boundCamera
+                                hasFlashUnit = boundCamera.cameraInfo.hasFlashUnit()
+                                // CameraX يصفّر الزوم عند كل ربط — نزامن الحالة المحلية
+                                zoomRatio = 1f
+                                boundLens = lensFacing
+                                cameraFailed = false
+                            }.onFailure { cameraFailed = true }
+                        }, ContextCompat.getMainExecutor(context))
+                    }
                 }
             )
         }
 
         // وميض الالتقاط فوق المعاينة
-        if (flashAlpha.value > 0f) {
+        if (shutterFlashAlpha.value > 0f) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.White.copy(alpha = flashAlpha.value))
+                    .background(Color.White.copy(alpha = shutterFlashAlpha.value))
             )
         }
 
@@ -354,6 +411,40 @@ private fun CaptureContent(
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
+            // الفلاش: يتنقل مغلق ← مضاء (تورش ينير السبورة أثناء التكوين) ← تلقائي.
+            // يُعطَّل الزر كلياً إن لم يملك الجهاز وحدة فلاش (الكاميرا الأمامية عادة)
+            IconButton(
+                enabled = hasFlashUnit,
+                onClick = {
+                    val next = when (flashState) {
+                        FlashState.OFF -> FlashState.ON
+                        FlashState.ON -> FlashState.AUTO
+                        FlashState.AUTO -> FlashState.OFF
+                    }
+                    flashState = next
+                    imageCapture?.flashMode = flashModeFor(next)
+                    val activeCamera = camera
+                    if (activeCamera != null && activeCamera.cameraInfo.hasFlashUnit()) {
+                        // التورش يبقي الضوء مشتعلاً أثناء المعاينة — ضروري لتصوير السبورة
+                        // في قاعة معتمة. عند الإطفاء يُرسل false فيُغلق فوراً
+                        activeCamera.cameraControl.enableTorch(next == FlashState.ON)
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = when (flashState) {
+                        FlashState.OFF -> Icons.Filled.FlashOff
+                        FlashState.ON -> Icons.Filled.FlashOn
+                        FlashState.AUTO -> Icons.Filled.FlashAuto
+                    },
+                    contentDescription = when (flashState) {
+                        FlashState.OFF -> "الفلاش: مغلق"
+                        FlashState.ON -> "الفلاش: مضاء"
+                        FlashState.AUTO -> "الفلاش: تلقائي"
+                    },
+                    tint = if (hasFlashUnit) Color.White else Color.White.copy(alpha = 0.3f)
+                )
+            }
             IconButton(onClick = {
                 runCatching {
                     val provider = providerFuture.get()
@@ -365,6 +456,9 @@ private fun CaptureContent(
                     val otherSelector = CameraSelector.Builder().requireLensFacing(other).build()
                     if (provider.hasCamera(otherSelector)) {
                         lensFacing = other
+                        // الربط الجديد يولّد ImageCapture جديداً بفلاش مغلق — نزامن الحالة
+                        // حتى لا تبقى أيقونة الفلاش معلّقة على وضع لم يعد مفعّلاً
+                        flashState = FlashState.OFF
                     } else {
                         onError(
                             if (other == CameraSelector.LENS_FACING_FRONT)
@@ -378,6 +472,28 @@ private fun CaptureContent(
                     Icons.Filled.FlipCameraAndroid,
                     contentDescription = "تبديل الكاميرا الأمامية/الخلفية",
                     tint = Color.White
+                )
+            }
+        }
+
+        // مؤشر الزوم: يعرض النسبة الحالية حياً، واللمس عليه يعيدها إلى 1×
+        if (camera != null) {
+            Surface(
+                onClick = {
+                    camera?.cameraControl?.setZoomRatio(1f)
+                    zoomRatio = 1f
+                },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 62.dp),
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.5f),
+                contentColor = Color.White
+            ) {
+                Text(
+                    text = "تكبير " + String.format(Locale.US, "%.1f", zoomRatio) + "×",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
         }
@@ -447,8 +563,8 @@ private fun CaptureContent(
                                 }
                                 capturing = true
                                 scope.launch {
-                                    flashAlpha.snapTo(0.7f)
-                                    flashAlpha.animateTo(0f, tween(280))
+                                    shutterFlashAlpha.snapTo(0.7f)
+                                    shutterFlashAlpha.animateTo(0f, tween(280))
                                 }
                                 takeShot(
                                     capture = capture,
