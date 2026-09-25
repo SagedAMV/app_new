@@ -1,0 +1,16 @@
+# حماية الملفات الثنائية من أي تحويل نصي (التلف التاريخي في unihub-release.jks
+# سببه معاملة ملف ثنائي كنص UTF-8 واستبدال بايتاته غير الصالحة بـ U+FFFD).
+# التعليمات أدناه تضمن بقاء هذه الملفات ثنائية نقية في كل سحب/رفع:
+*.jks   binary
+*.keystore binary
+*.apk   binary
+*.aab   binary
+*.jar   binary
+*.dex   binary
+*.png   binary
+*.webp  binary
+*.jpg   binary
+*.jpeg  binary
+
+# ملفات النصوص تُطبَّع نهاية أسطرها عند اللزوم:
+* text=auto eol=lf
