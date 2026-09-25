@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UniHub — 10 مقترحات لتصميم بطاقة «المحاضرة التالية»</title>
+<style>
+/* ============================================================
+   نظام ألوان UniHub — مطابق لـ ui/theme/Color.kt
+   ============================================================ */
+:root{
+  --bg:#F5F3ED; --surface:#FBFAF6; --surface-variant:#EAE7DE;
+  --ink:#232B27; --muted:#55605A; --outline:#B9C2BB;
+  --sage:#3E6B5E; --sage-on:#FFFFFF; --sage-container:#D8E8DF; --sage-on-container:#14352A;
+  --mint:#A3CDBB; --mint-on:#123A2E;
+  --sand:#7A6A4F; --sand-container:#EBDFC9; --sand-on-container:#463D2A;
+  --slate:#5B6478; --slate-container:#DEE3EE; --slate-on-container:#2A3242;
+  --success:#4C8B6E; --warning:#C79A4B;
+  --shadow:0 10px 30px rgba(35,43,39,.10);
+  --shadow-soft:0 4px 14px rgba(35,43,39,.08);
+}
+[data-theme="dark"]{
+  --bg:#141816; --surface:#1B211E; --surface-variant:#2A312D;
+  --ink:#E0E5E1; --muted:#A9B4AD; --outline:#747F78;
+  --sage:#A3CDBB; --sage-on:#123A2E; --sage-container:#2C5245; --sage-on-container:#D8E8DF;
+  --mint:#2C5245; --mint-on:#A3CDBB;
+  --sand:#CDB894; --sand-container:#3A362B; --sand-on-container:#EBDFC9;
+  --slate:#B4BDD3; --slate-container:#454D60; --slate-on-container:#DEE3EE;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+  --shadow-soft:0 4px 14px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Noto Kufi Arabic","Segoe UI",Tahoma,Arial,sans-serif;
+  background:var(--bg); color:var(--ink);
+  transition:background .35s ease,color .35s ease;
+  line-height:1.7;
+}
+.wrap{max-width:880px;margin:0 auto;padding:32px 20px 80px}
+
+/* ---------- الترويسة ---------- */
+header{margin-bottom:36px}
+.kicker{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;
+  color:var(--sage);background:var(--sage-container);border-radius:999px;padding:6px 14px}
+h1{font-size:clamp(24px,4vw,34px);margin:14px 0 8px;line-height:1.4}
+.sub{color:var(--muted);font-size:15px;max-width:640px}
+.toolbar{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.btn{border:1px solid var(--outline);background:var(--surface);color:var(--ink);
+  border-radius:12px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:transform .15s ease, background .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn.primary{background:var(--sage);color:var(--sage-on);border-color:transparent}
+
+/* ---------- قسم التصميم ---------- */
+.design{background:var(--surface);border:1px solid var(--outline);border-radius:24px;
+  padding:26px;margin:30px 0;box-shadow:var(--shadow-soft);
+  transition:background .35s ease,border-color .35s ease}
+.design-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:6px}
+.num{flex:none;width:44px;height:44px;border-radius:14px;background:var(--sage);
+  color:var(--sage-on);display:grid;place-items:center;font-size:20px;font-weight:800}
+.design-head h2{font-size:20px;line-height:1.5}
+.design-head p{color:var(--muted);font-size:14px}
+.tags{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px}
+.tag{font-size:12px;font-weight:700;border-radius:999px;padding:4px 12px}
+.tag.shape{background:var(--slate-container);color:var(--slate-on-container)}
+.tag.anim{background:var(--sand-container);color:var(--sand-on-container)}
+
+/* إطار هاتف للمعاينة */
+.phone{background:var(--bg);border:1px dashed var(--outline);border-radius:20px;
+  padding:22px 18px;display:flex;justify-content:center;transition:background .35s ease}
+.phone-inner{width:100%;max-width:380px}
+
+/* صندوق ملاحظة التنفيذ */
+.compose{margin-top:18px;background:var(--surface-variant);border-radius:14px;padding:14px 16px;
+  font-size:13px;color:var(--muted);border-inline-start:4px solid var(--sage)}
+.compose b{color:var(--ink)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--surface);
+  border:1px solid var(--outline);border-radius:6px;padding:1px 6px;direction:ltr;unicode-bidi:embed}
+
+footer{margin-top:48px;text-align:center;color:var(--muted);font-size:14px}
+footer .choose{background:var(--sage-container);color:var(--sage-on-container);
+  border-radius:16px;padding:18px;font-weight:700;font-size:15px}
+
+/* عناصر مشتركة داخل البطاقات */
+.lbl{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.2px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;
+  border-radius:999px;padding:4px 12px;background:var(--sage-container);color:var(--sage-on-container)}
+.chip.solid{background:var(--sage);color:var(--sage-on)}
+.chip.ok{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:13px}
+.meta span{display:inline-flex;align-items:center;gap:5px}
+.svg-ic{width:15px;height:15px;flex:none}
+
+/* ============================================================
+   1) ورقة اليوم — Paper Minimal
+   ============================================================ */
+@keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes chipPop{0%{opacity:0;transform:scale(.6)}70%{transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+.d1{background:var(--surface);border:1px solid var(--outline);border-radius:20px;
+  padding:18px;display:flex;gap:14px;box-shadow:var(--shadow-soft);
+  animation:riseIn .6s cubic-bezier(.2,.8,.3,1) both}
+.d1 .bar{width:5px;border-radius:99px;background:linear-gradient(var(--sage),var(--mint));flex:none}
+.d1 .body{flex:1;min-width:0}
+.d1 h3{font-size:19px;font-weight:800;margin:6px 0 2px;animation:riseIn .6s .12s both}
+.d1 .meta{animation:riseIn .6s .2s both}
+.d1 .foot{display:flex;align-items:center;gap:10px;margin-top:12px;animation:riseIn .6s .28s both}
+.d1 .count{font-size:15px;font-weight:800;color:var(--sage-on-container);
+  background:var(--sage-container);border-radius:12px;padding:7px 14px}
+.d1 .chip{animation:chipPop .5s .35s both}
+
+/* ============================================================
+   2) حلقة العدّ التنازلي — Countdown Ring
+   ============================================================ */
+@keyframes ringSweep{from{stroke-dashoffset:264}to{stroke-dashoffset:66}}
+@keyframes softIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.d2{background:var(--surface);border:1px solid var(--outline);border-radius:20px;
+  padding:18px;display:flex;align-items:center;gap:18px;box-shadow:var(--shadow-soft)}
+.d2 .ring{flex:none;position:relative;width:96px;height:96px;animation:softIn .6s both}
+.d2 .ring svg{transform:rotate(-90deg)}
+.d2 .track{fill:none;stroke:var(--surface-variant);stroke-width:9}
+.d2 .prog{fill:none;stroke:var(--sage);stroke-width:9;stroke-linecap:round;
+  stroke-dasharray:264;stroke-dashoffset:264;animation:ringSweep 1.3s .2s cubic-bezier(.3,.7,.2,1) forwards}
+.d2 .ring-txt{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.d2 .ring-txt b{font-size:20px;color:var(--ink);display:block;line-height:1.1}
+.d2 .ring-txt i{font-style:normal;font-size:11px;color:var(--muted)}
+.d2 .info{flex:1;min-width:0;animation:softIn .6s .15s both}
+.d2 h3{font-size:18px;font-weight:800;margin:4px 0}
+.d2 .foot{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+
+/* ============================================================
+   3) التنفّس الهادئ — Breathing Gradient
+   ============================================================ */
+@keyframes breathe{0%,100%{opacity:.35;transform:scale(.9)}50%{opacity:.9;transform:scale(1.15)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.d3{position:relative;overflow:hidden;border-radius:22px;padding:22px;
+  background:linear-gradient(135deg,var(--sage-container),color-mix(in srgb,var(--mint) 55%,var(--sage-container)));
+  border:1px solid color-mix(in srgb,var(--sage) 25%,transparent);box-shadow:var(--shadow)}
+.d3 .glow{position:absolute;width:190px;height:190px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.55),transparent 70%);
+  top:-60px;inset-inline-start:-40px;animation:breathe 4.5s ease-in-out infinite;pointer-events:none}
+[data-theme="dark"] .d3 .glow{background:radial-gradient(circle,rgba(163,205,187,.28),transparent 70%)}
+.d3 .top{display:flex;justify-content:space-between;align-items:center;position:relative;animation:fadeUp .6s both}
+.d3 .count{position:relative;text-align:center;margin:18px 0 6px;animation:fadeUp .7s .15s both}
+.d3 .count b{font-size:30px;font-weight:800;color:var(--sage-on-container)}
+.d3 .count span{display:block;font-size:12px;color:var(--sage-on-container);opacity:.75;margin-top:2px}
+.d3 h3{position:relative;font-size:18px;font-weight:800;color:var(--sage-on-container);text-align:center;animation:fadeUp .7s .25s both}
+.d3 .meta{justify-content:center;position:relative;color:var(--sage-on-container);opacity:.8;margin-top:8px;animation:fadeUp .7s .35s both}
+
+/* ============================================================
+   4) خطّ الزمن — Timeline
+   ============================================================ */
+@keyframes fillLine{from{width:0}to{width:62%}}
+@keyframes dotPop{0%{transform:scale(0)}70%{transform:scale(1.35)}100%{transform:scale(1)}}
+.d4{background:var(--surface);border:1px solid var(--outline);border-radius:20px;padding:18px;box-shadow:var(--shadow-soft)}
+.d4 .head{display:flex;justify-content:space-between;align-items:center}
+.d4 h3{font-size:17px;font-weight:800}
+.d4 .doctor{color:var(--muted);font-size:13px;margin-top:2px}
+.d4 .tl{position:relative;margin-top:26px;height:4px;background:var(--surface-variant);border-radius:99px}
+.d4 .tl .fill{position:absolute;inset-inline-start:0;top:0;bottom:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--mint),var(--sage));width:62%;
+  animation:fillLine 1.5s .2s cubic-bezier(.25,.8,.3,1) both}
+.d4 .dot-now{position:absolute;top:50%;inset-inline-start:0;transform:translate(50%,-50%);
+  width:13px;height:13px;border-radius:50%;background:var(--sage);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--sage) 22%,transparent);animation:dotPop .5s .2s both}
+.d4 .dot-end{position:absolute;top:50%;inset-inline-end:0;transform:translate(-50%,-50%);
+  width:11px;height:11px;border-radius:50%;background:var(--surface);
+  border:2.5px solid var(--sage);animation:dotPop .5s 1.5s both}
+.d4 .marks{display:flex;justify-content:space-between;margin-top:12px;font-size:12px;color:var(--muted);font-weight:700}
+.d4 .marks b{color:var(--ink)}
+
+/* ============================================================
+   5) الطبقات المتوسعة — Stacked Layers
+   ============================================================ */
+.stack{position:relative;padding-top:14px}
+.stack::before,.stack::after{content:"";position:absolute;border-radius:18px;
+  background:var(--surface-variant);border:1px solid var(--outline)}
+.stack::before{inset:7px 10px auto 10px;height:100%;opacity:.7}
+.stack::after{inset:0 20px auto 20px;height:100%;opacity:.4}
+.d5{position:relative;background:var(--surface);border:1px solid var(--outline);
+  border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+.d5 .head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.d5 h3{font-size:17px;font-weight:800}
+.d5 .toggle{border:none;background:var(--sage-container);color:var(--sage-on-container);
+  font-family:inherit;font-size:12px;font-weight:800;border-radius:999px;padding:7px 14px;cursor:pointer;
+  transition:background .2s}
+.d5 .toggle:hover{background:var(--sage);color:var(--sage-on)}
+.d5 .expand{display:grid;grid-template-rows:0fr;transition:grid-template-rows .45s cubic-bezier(.3,.8,.3,1)}
+.d5.open .expand{grid-template-rows:1fr}
+.d5 .expand>div{overflow:hidden}
+.d5 .details{display:flex;flex-direction:column;gap:8px;padding-top:14px;margin-top:12px;
+  border-top:1px dashed var(--outline)}
+.d5 .details .row{display:flex;justify-content:space-between;font-size:13px}
+.d5 .details .row b{color:var(--ink)}
+.d5 .details .row span{color:var(--muted)}
+
+/* ============================================================
+   6) حالة «جارية الآن» — Live Pulse
+   ============================================================ */
+@keyframes pulseRing{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--success) 45%,transparent)}
+  100%{box-shadow:0 0 0 12px transparent}}
+@keyframes liveBar{from{width:12%}to{width:44%}}
+.d6{background:var(--surface);border:1px solid var(--outline);border-radius:20px;padding:18px;box-shadow:var(--shadow-soft)}
+.d6 .head{display:flex;align-items:center;gap:10px}
+.d6 .live-dot{width:11px;height:11px;border-radius:50%;background:var(--success);
+  animation:pulseRing 1.8s ease-out infinite}
+.d6 h3{font-size:18px;font-weight:800;flex:1}
+.d6 .sub{color:var(--muted);font-size:13px;margin-top:8px}
+.d6 .bar{height:8px;border-radius:99px;background:var(--surface-variant);margin-top:14px;overflow:hidden}
+.d6 .bar i{display:block;height:100%;border-radius:99px;width:44%;
+  background:linear-gradient(90deg,var(--success),var(--mint));
+  animation:liveBar 1.6s .3s cubic-bezier(.3,.8,.3,1) both}
+.d6 .bar-marks{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px;font-weight:700}
+.d6 .bar-marks b{color:var(--success)}
+
+/* ============================================================
+   7) اللمحة الضوئية — Soft Shimmer
+   ============================================================ */
+@keyframes sweep{0%{transform:translateX(160%) skewX(-18deg)}100%{transform:translateX(-260%) skewX(-18deg)}}
+.d7{position:relative;overflow:hidden;background:var(--surface);
+  border:1px solid color-mix(in srgb,var(--sage) 35%,var(--outline));
+  border-radius:20px;padding:18px;box-shadow:var(--shadow-soft)}
+.d7 .beam{position:absolute;top:-20%;bottom:-20%;width:34%;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
+  animation:sweep 3.6s ease-in-out infinite}
+[data-theme="dark"] .d7 .beam{background:linear-gradient(90deg,transparent,rgba(224,229,225,.09),transparent)}
+.d7 .head{display:flex;justify-content:space-between;align-items:center}
+.d7 h3{font-size:18px;font-weight:800}
+.d7 .meta{margin-top:8px}
+.d7 .foot{display:flex;align-items:center;justify-content:space-between;margin-top:14px;
+  padding-top:12px;border-top:1px solid var(--surface-variant)}
+.d7 .count{font-size:16px;font-weight:800;color:var(--sage)}
+.d7 .go{font-size:12px;font-weight:700;color:var(--muted)}
+
+/* ============================================================
+   8) العدّاد الكبير — Big Countdown Flip
+   ============================================================ */
+@keyframes digitIn{from{opacity:0;transform:translateY(-70%)}to{opacity:1;transform:none}}
+@keyframes colonBlink{0%,100%{opacity:1}50%{opacity:.25}}
+.d8{background:var(--sage);border-radius:22px;padding:22px;text-align:center;
+  box-shadow:var(--shadow);color:var(--sage-on)}
+.d8 .lbl2{font-size:12px;font-weight:700;opacity:.85}
+.d8 .digits{display:flex;justify-content:center;align-items:center;gap:4px;
+  direction:ltr;font-variant-numeric:tabular-nums;margin:8px 0 4px}
+.d8 .dg{display:inline-block;font-size:40px;font-weight:800;line-height:1.1}
+.d8 .dg.tick{animation:digitIn .35s cubic-bezier(.2,.8,.3,1)}
+.d8 .colon{font-size:36px;font-weight:800;animation:colonBlink 1s steps(1) infinite;transform:translateY(-3px)}
+.d8 h3{font-size:17px;font-weight:800;margin-top:6px}
+.d8 .meta{justify-content:center;color:var(--sage-on);opacity:.85;margin-top:6px;font-size:12.5px}
+.d8 .chip2{display:inline-block;margin-top:12px;font-size:12px;font-weight:800;border-radius:999px;
+  padding:5px 14px;background:rgba(255,255,255,.16)}
+
+/* ============================================================
+   9) البطاقة المدارية — Orbit (Galaxy Echo)
+   ============================================================ */
+@keyframes orbitSpin{to{transform:rotate(360deg)}}
+@keyframes twinkle{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:.9;transform:scale(1)}}
+.d9{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--outline);
+  border-radius:20px;padding:18px;display:flex;gap:16px;align-items:center;box-shadow:var(--shadow-soft)}
+.d9 .planet{flex:none;position:relative;width:74px;height:74px;display:grid;place-items:center}
+.d9 .planet .core{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle at 32% 30%,var(--mint),var(--sage));color:var(--sage-on);font-size:22px}
+.d9 .orbit{position:absolute;inset:0;border:1.5px dashed color-mix(in srgb,var(--sage) 40%,transparent);
+  border-radius:50%;animation:orbitSpin 9s linear infinite}
+.d9 .orbit i{position:absolute;top:-4px;left:calc(50% - 4px);width:9px;height:9px;border-radius:50%;
+  background:var(--sand);box-shadow:0 0 8px color-mix(in srgb,var(--sand) 60%,transparent)}
+.d9 .star{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--muted);
+  animation:twinkle 2.6s ease-in-out infinite}
+.d9 .info{flex:1;min-width:0}
+.d9 h3{font-size:17px;font-weight:800}
+.d9 .meta{margin-top:5px}
+.d9 .count{margin-top:9px;display:inline-block;font-size:13px;font-weight:800;
+  color:var(--sage-on-container);background:var(--sage-container);border-radius:10px;padding:5px 12px}
+
+/* ============================================================
+   10) الورقة اللاصقة — Sticky Note
+   ============================================================ */
+@keyframes noteSettle{0%{opacity:0;transform:rotate(-6deg) translateY(-16px) scale(.92)}
+  60%{opacity:1;transform:rotate(1.2deg) translateY(2px) scale(1.02)}
+  100%{transform:rotate(-1.3deg)}}
+.d10{background:var(--sand-container);border-radius:6px 18px 18px 18px;padding:20px 18px 16px;
+  transform:rotate(-1.3deg);box-shadow:var(--shadow);position:relative;
+  animation:noteSettle .8s cubic-bezier(.3,.8,.3,1) both;
+  transition:transform .35s cubic-bezier(.3,.8,.3,1),box-shadow .35s}
+.d10:hover{transform:rotate(0) scale(1.015);box-shadow:0 16px 36px rgba(35,43,39,.16)}
+.d10::after{content:"";position:absolute;bottom:0;inset-inline-start:0;width:26px;height:26px;
+  background:linear-gradient(45deg,transparent 50%,color-mix(in srgb,var(--sand) 45%,var(--sand-container)) 50%);
+  border-radius:0 0 0 18px}
+.d10 .tape{position:absolute;top:-11px;inset-inline-start:50%;transform:translateX(-50%) rotate(2deg);
+  width:86px;height:20px;background:color-mix(in srgb,var(--mint) 65%,transparent);
+  border-radius:3px;opacity:.9}
+.d10 h3{font-size:19px;font-weight:800;color:var(--sand-on-container)}
+.d10 .meta{color:color-mix(in srgb,var(--sand-on-container) 72%,transparent);margin-top:7px}
+.d10 .foot{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.d10 .count{font-size:14px;font-weight:800;color:var(--sand-on-container);
+  background:color-mix(in srgb,var(--surface) 55%,transparent);border-radius:10px;
+  padding:6px 12px;transform:rotate(1deg)}
+
+.replay{margin-top:14px;font-size:12px;color:var(--muted);background:none;border:1px dashed var(--outline);
+  border-radius:10px;padding:6px 12px;cursor:pointer;font-family:inherit}
+.replay:hover{color:var(--ink);border-color:var(--sage)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="kicker">🎨 UniHub — جلسة تحسين الواجهة الرئيسية</span>
+  <h1>10 مقترحات لتصميم بطاقة «المحاضرة التالية»</h1>
+  <p class="sub">كل مقترح مبني على هوية التطبيق الهادئة (أخضر المريميّة + الورقيات) ويعرض نفس البيانات الحقيقية:
+  المادة، الدكتور، القاعة، وقت البداية، والعدّ التنازلي. يمكنك اختيار تصميم واحد، أو تصميمين:
+  <b>واحد للشكل</b> و<b>واحد للأنيميشن</b>.</p>
+  <div class="toolbar">
+    <button class="btn primary" onclick="toggleTheme()">🌙 تبديل الوضع الليلي / النهاري</button>
+    <button class="btn" onclick="replayAll()">↻ إعادة تشغيل كل الأنيميشنات</button>
+  </div>
+</header>
+
+<!-- ═══════════════ التصميم 1 ═══════════════ -->
+<section class="design" id="d1">
+  <div class="design-head">
+    <div class="num">1</div>
+    <div><h2>ورقة اليوم</h2><p>أناقة ورقية هادئة: شريط جانبي بلون المريميّة مع تسلسل كتابي نظيف — تطوير مباشر للبطاقة الحالية.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: بطاقة ورقية بشريط جانبي + أيقونات وصفّية</span>
+    <span class="tag anim">الأنيميشن: دخول متدرّج (stagger) للعناصر + نبضة الشارة</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d1">
+      <div class="bar"></div>
+      <div class="body">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="lbl">المحاضرة التالية</span>
+          <span class="chip solid">اليوم</span>
+        </div>
+        <h3>هياكل البيانات</h3>
+        <div class="meta">
+          <span><svg class="svg-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>10:00 – 11:30</span>
+          <span><svg class="svg-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>قاعة B-204</span>
+          <span><svg class="svg-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>د. سارة العتيبي</span>
+        </div>
+        <div class="foot">
+          <span class="count">⏳ بعد 45 دقيقة</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d1 .d1, #d1 .d1 *')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> <code>ElevatedCard</code> مع <code>Row</code> يحوي شريطاً بعرض 5.dp و<code>background(Brush.verticalGradient)</code>،
+  والدخول المتدرج عبر <code>AnimatedVisibility(slideInVertically + fadeIn)</code> مع <code>LaunchedEffect</code> وتأخيرات <code>delay()</code> لكل عنصر.</div>
+</section>
+
+<!-- ═══════════════ التصميم 2 ═══════════════ -->
+<section class="design" id="d2">
+  <div class="design-head">
+    <div class="num">2</div>
+    <div><h2>حلقة العدّ التنازلي</h2><p>الوقت المتبقي يُرسم كحلقة تمتلئ — العين تلتقط «كم بقي» قبل أن تقرأ أي شيء.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: حلقة تقدّم دائرية بجانب المعلومات</span>
+    <span class="tag anim">الأنيميشن: امتلاء الحلقة تدريجياً عند الظهور</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d2">
+      <div class="ring">
+        <svg width="96" height="96" viewBox="0 0 96 96">
+          <circle class="track" cx="48" cy="48" r="42"/>
+          <circle class="prog" cx="48" cy="48" r="42"/>
+        </svg>
+        <div class="ring-txt"><div><b>45</b><i>دقيقة للبداية</i></div></div>
+      </div>
+      <div class="info">
+        <span class="lbl">المحاضرة التالية · اليوم</span>
+        <h3>هياكل البيانات</h3>
+        <div class="meta">
+          <span>د. سارة العتيبي</span><span>قاعة B-204</span>
+        </div>
+        <div class="foot"><span class="chip solid">10:00 – 11:30</span></div>
+      </div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d2 .prog')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> <code>Canvas</code> مع <code>drawArc</code> و<code>animateFloatAsState</code>
+  (أو <code>Animatable</code> بـ tween 1300ms) لنسبة الامتلاء، والنص في المنتصف داخل <code>Box(contentAlignment = Center)</code>.</div>
+</section>
+
+<!-- ═══════════════ التصميم 3 ═══════════════ -->
+<section class="design" id="d3">
+  <div class="design-head">
+    <div class="num">3</div>
+    <div><h2>التنفّس الهادئ</h2><p>تدرّج لوني ناعم مع توهّج «يتنفس» ببطء — حركة محسوسة بلا أي إجهاد بصري، انسجاماً مع فلسفة التطبيق.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: بطاقة تدرّج لوني مركزية العدّاد</span>
+    <span class="tag anim">الأنيميشن: توهّج يتنفس (infinite) + ظهور متسلسل</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d3">
+      <div class="glow"></div>
+      <div class="top"><span class="lbl" style="color:var(--sage-on-container)">المحاضرة التالية</span><span class="chip solid">اليوم</span></div>
+      <div class="count"><b>بعد 45 دقيقة</b><span>تبدأ الساعة 10:00 · قاعة B-204</span></div>
+      <h3>هياكل البيانات</h3>
+      <div class="meta"><span>د. سارة العتيبي</span></div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d3 .count, #d3 h3, #d3 .meta, #d3 .top')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> خلفية <code>Brush.linearGradient</code>، والتوهّج عبر <code>rememberInfiniteTransition</code>
+  مع <code>animateFloat</code> (alpha + scale) مرسوم على <code>Canvas</code> بدائرة <code>Brush.radialGradient</code> — دورة 4.5 ثانية.</div>
+</section>
+
+<!-- ═══════════════ التصميم 4 ═══════════════ -->
+<section class="design" id="d4">
+  <div class="design-head">
+    <div class="num">4</div>
+    <div><h2>خطّ الزمن</h2><p>«أين أنا الآن» مقابل «متى تبدأ المحاضرة» — خط أفقي يمتلئ ليحكي القصة في ثانية واحدة.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: خط زمني بنقطتي «الآن» و«البداية»</span>
+    <span class="tag anim">الأنيميشن: امتلاء الخط + ظهور النقطتين بنبضة</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d4">
+      <div class="head">
+        <div><h3>هياكل البيانات</h3><div class="doctor">د. سارة العتيبي · قاعة B-204</div></div>
+        <span class="chip solid">اليوم</span>
+      </div>
+      <div class="tl"><div class="fill"></div><div class="dot-now"></div><div class="dot-end"></div></div>
+      <div class="marks"><span>الآن <b>9:15</b></span><span>تبدأ <b>10:00</b></span></div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d4 .fill, #d4 .dot-now, #d4 .dot-end')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> <code>Box</code> بارتفاع 4.dp للخط مع <code>fillMaxWidth(animateFloatAsState(progress))</code>،
+  والنقطتان <code>Canvas</code> دائريتان مع <code>Animatable</code> للنبضة (overshootInterpolator).</div>
+</section>
+
+<!-- ═══════════════ التصميم 5 ═══════════════ -->
+<section class="design" id="d5">
+  <div class="design-head">
+    <div class="num">5</div>
+    <div><h2>الطبقات المتوسعة</h2><p>أوراق متراكبة خلف البطاقة تعطي عمقاً، وزر يوسّع التفاصيل (القاعة، الدكتور، الوقت) بحركة انسيابية.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: بطاقة فوق طبقتين + منطقة تفاصيل قابلة للطي</span>
+    <span class="tag anim">الأنيميشن: توسّع/انهاء سلس للمحتوى</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="stack">
+      <div class="d5" id="d5card">
+        <div class="head">
+          <div><span class="lbl">المحاضرة التالية · اليوم</span><h3>هياكل البيانات</h3></div>
+          <button class="toggle" onclick="document.getElementById('d5card').classList.toggle('open')">التفاصيل ▾</button>
+        </div>
+        <div class="expand"><div>
+          <div class="details">
+            <div class="row"><b>د. سارة العتيبي</b><span>أستاذة المادة</span></div>
+            <div class="row"><b>قاعة B-204</b><span>المبنى ب</span></div>
+            <div class="row"><b>10:00 – 11:30</b><span>بعد 45 دقيقة</span></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="compose"><b>تنفيذه في Compose:</b> الطبقات عبر <code>Box</code> مع بطاقتين خلفيتين بإزاحة <code>offset</code> وشفافية أقل،
+  والتوسّع عبر <code>AnimatedVisibility</code> أو <code>animateContentSize</code> (spec: tween 450ms, easeOut) — وهي نفسها حيلة <code>grid-template-rows</code> هنا.</div>
+</section>
+
+<!-- ═══════════════ التصميم 6 ═══════════════ -->
+<section class="design" id="d6">
+  <div class="design-head">
+    <div class="num">6</div>
+    <div><h2>نبض «جارية الآن»</h2><p>معالجة خاصة لحالة المحاضرة الجارية: نقطة تنبض وشريط يوضح كم مضى منها — مثالي كمكمّل لأي تصميم آخر.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: شريط تقدّم للمحاضرة الجارية مع وقت النهاية</span>
+    <span class="tag anim">الأنيميشن: نبض النقطة (مستمر) + امتلاء الشريط</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d6">
+      <div class="head">
+        <span class="live-dot"></span>
+        <h3>هياكل البيانات</h3>
+        <span class="chip ok">جارية الآن</span>
+      </div>
+      <div class="sub">د. سارة العتيبي · قاعة B-204 · تنتهي 11:30</div>
+      <div class="bar"><i></i></div>
+      <div class="bar-marks"><b>مضى 40 دقيقة</b><span>بقي 50 دقيقة</span></div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d6 .bar i')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> النبض عبر <code>rememberInfiniteTransition</code> + <code>drawCircle</code> بإشعاع متنامٍ وشفافية متلاشية،
+  وشريط التقدّم <code>LinearProgressIndicator</code> مُخصّص أو <code>Box</code> بعرض متحرّك. يتغذى من <code>NextLecture.Status.ONGOING</code>.</div>
+</section>
+
+<!-- ═══════════════ التصميم 7 ═══════════════ -->
+<section class="design" id="d7">
+  <div class="design-head">
+    <div class="num">7</div>
+    <div><h2>اللمحة الضوئية</h2><p>بطاقة هادئة بحدود بلون المريميّة تعبرها لمعة ضوئية خفيفة دورياً — إحساس «حيّ» دون أي ضجيج.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: بطاقة صف بحدود ملونة وفاصل علوي للعداد</span>
+    <span class="tag anim">الأنيميشن: لمعة ضوئية عابرة (مستمرة وبطيئة)</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d7">
+      <div class="beam"></div>
+      <div class="head">
+        <div><span class="lbl">المحاضرة التالية</span><h3>هياكل البيانات</h3></div>
+        <span class="chip solid">اليوم</span>
+      </div>
+      <div class="meta">
+        <span>د. سارة العتيبي</span><span>قاعة B-204</span><span>10:00 – 11:30</span>
+      </div>
+      <div class="foot"><span class="count">بعد 45 دقيقة</span><span class="go">افتح الجدول ←</span></div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d7 .beam')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> اللمعة عبر <code>rememberInfiniteTransition</code> تحرك إزاحة <code>Brush.linearGradient</code>
+  مرسومة فوق المحتوى بـ <code>graphicsLayer(alpha=0.5f)</code> و<code>clip(RoundedCornerShape)</code> — دورة 3.5 ثانية مع سكون بينها.</div>
+</section>
+
+<!-- ═══════════════ التصميم 8 ═══════════════ -->
+<section class="design" id="d8">
+  <div class="design-head">
+    <div class="num">8</div>
+    <div><h2>العدّاد الكبير</h2><p>الأرقام هي البطل: عدّ تنازلي ضخم حيّ (يعمل فعلاً في هذه المعاينة) مع انزلاق لكل رقم يتغير.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: بطاقة بلون أساسي موحّد تتوسطها الأرقام</span>
+    <span class="tag anim">الأنيميشن: انزلاق الأرقام عند كل تغيّر + وميض النقطتين</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d8">
+      <div class="lbl2">المحاضرة التالية — اليوم</div>
+      <div class="digits" id="bigDigits">
+        <span class="dg">4</span><span class="dg">4</span><span class="colon">:</span><span class="dg">5</span><span class="dg">9</span>
+      </div>
+      <h3>هياكل البيانات</h3>
+      <div class="meta"><span>د. سارة العتيبي · قاعة B-204</span></div>
+      <span class="chip2">تبدأ 10:00</span>
+    </div>
+  </div></div>
+  <div class="compose"><b>تنفيذه في Compose:</b> العدّ من <code>minutesUntilStart</code> بتحديث المستودع كل 30 ثانية (قائم حالياً) أو <code>LaunchedEffect</code> مع <code>delay(60_000)</code>،
+  وانزلاق الأرقام عبر <code>AnimatedContent(transitionSpec = slideInVertically + slideOutVertically)</code> لكل خانة.</div>
+</section>
+
+<!-- ═══════════════ التصميم 9 ═══════════════ -->
+<section class="design" id="d9">
+  <div class="design-head">
+    <div class="num">9</div>
+    <div><h2>البطاقة المدارية</h2><p>صدى لشاشة «المجرّة» في التطبيق: كوكب صغير تدور حوله نقطة — يربط الرئيسية بهوية المشروع البصرية الفريدة.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: كوكب مداري بجانب المحتوى + نجوم خافتة</span>
+    <span class="tag anim">الأنيميشن: دوران مداري بطيء + تلألؤ النجوم</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d9">
+      <span class="star" style="top:14px;inset-inline-end:26px"></span>
+      <span class="star" style="bottom:16px;inset-inline-end:60px;animation-delay:1.2s"></span>
+      <div class="planet">
+        <div class="orbit"><i></i></div>
+        <div class="core">📚</div>
+      </div>
+      <div class="info">
+        <span class="lbl">المحاضرة التالية · اليوم</span>
+        <h3>هياكل البيانات</h3>
+        <div class="meta"><span>د. سارة العتيبي</span><span>قاعة B-204</span></div>
+        <span class="count">بعد 45 دقيقة · 10:00</span>
+      </div>
+    </div>
+  </div></div>
+  <div class="compose"><b>تنفيذه في Compose:</b> المدار عبر <code>Canvas</code> مع <code>drawArc</code> منقّطة وتدوير النقطة بزاوية من
+  <code>rememberInfiniteTransition</code> (9 ثواني/دورة)، بنفس أسلوب الحركة البطيئة المريحة في <code>GalaxyScreen.kt</code>.</div>
+</section>
+
+<!-- ═══════════════ التصميم 10 ═══════════════ -->
+<section class="design" id="d10">
+  <div class="design-head">
+    <div class="num">10</div>
+    <div><h2>الورقة اللاصقة</h2><p>ورقة ملاحظات رمليّة مثبّتة بشريط لاصق، مائلة قليلاً وتستقيم عند اللمس — دفء وشخصية مع بقاء كل البيانات واضحة.</p></div>
+  </div>
+  <div class="tags">
+    <span class="tag shape">الشكل: ورقة لاصقة بحواف غير متساوية + شريط تثبيت</span>
+    <span class="tag anim">الأنيميشن: هبوط واستقرار بميلان + استقامة عند اللمس</span>
+  </div>
+  <div class="phone"><div class="phone-inner">
+    <div class="d10">
+      <div class="tape"></div>
+      <span class="lbl" style="color:inherit;opacity:.7">المحاضرة التالية · اليوم</span>
+      <h3>هياكل البيانات</h3>
+      <div class="meta"><span>د. سارة العتيبي</span><span>قاعة B-204</span><span>10:00 – 11:30</span></div>
+      <div class="foot"><span class="count">⏳ بعد 45 دقيقة</span></div>
+    </div>
+  </div></div>
+  <button class="replay" onclick="replay(this,'#d10 .d10')">↻ إعادة تشغيل أنيميشن هذا التصميم</button>
+  <div class="compose"><b>تنفيذه في Compose:</b> الميلان عبر <code>graphicsLayer(rotationZ = animateFloatAsState(if (pressed) 0f else -1.3f))</code>،
+  والشريط اللاصق <code>Box</code> شبه شفاف مُزاح، والزاوية المطوية <code>Canvas</code> بمثلث — حركة الهبوط بـ <code>Animatable</code> مع مفتاحيات ذات تجاوز طفيف.</div>
+</section>
+
+<footer>
+  <div class="choose">✍️ اختر رقم التصميم الذي أعجبك (أو رقمين: واحد للشكل وواحد للأنيميشن) وسيُطبَّق على كود
+  <code>NextLectureCard</code> في <code>DashboardScreen.kt</code> بنفس المنطق الحالي (العدّ التنازلي، حالة «الآن»، وحالة الجدول الفارغ).</div>
+</footer>
+
+</div>
+<script>
+function toggleTheme(){
+  const r=document.documentElement;
+  r.dataset.theme=r.dataset.theme==='light'?'dark':'light';
+}
+function restart(el){el.style.animation='none';void el.offsetWidth;el.style.animation='';}
+function replay(btn,selector){
+  const scope=btn.closest('.design');
+  scope.querySelectorAll('*').forEach(restart);
+}
+function replayAll(){document.querySelectorAll('.phone-inner *').forEach(restart);}
+
+/* عدّاد حي للتصميم 8: يبدأ من 44:59 ويتناقص كل ثانية */
+(function(){
+  let total=44*60+59;
+  const box=document.getElementById('bigDigits');
+  if(!box)return;
+  const spans=box.querySelectorAll('.dg');
+  setInterval(()=>{
+    total=Math.max(0,total-1);
+    const m=String(Math.floor(total/60)).padStart(2,'0');
+    const s=String(total%60).padStart(2,'0');
+    const val=[m[0],m[1],s[0],s[1]];
+    spans.forEach((sp,i)=>{
+      if(sp.textContent!==val[i]){
+        sp.textContent=val[i];
+        sp.classList.remove('tick');void sp.offsetWidth;sp.classList.add('tick');
+      }
+    });
+  },1000);
+})();
+</script>
+</body>
+</html>
