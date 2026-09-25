@@ -30,21 +30,33 @@ class TasksViewModel @Inject constructor(
     private val filter = MutableStateFlow(TaskFilter.ALL)
     val currentFilter: StateFlow<TaskFilter> = filter.asStateFlow()
 
+    private val query = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = query.asStateFlow()
+
     private val allTasks = taskRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** القائمة المعروضة بعد تطبيق المرشح */
+    /** القائمة المعروضة بعد تطبيق المرشح ثم البحث (العنوان والوصف) */
     val tasks: StateFlow<List<TaskEntity>> =
-        combine(allTasks, filter) { tasks, f ->
-            when (f) {
+        combine(allTasks, filter, query) { tasks, f, q ->
+            val filtered = when (f) {
                 TaskFilter.ALL -> tasks
                 TaskFilter.PENDING -> tasks.filterNot { it.isDone }
                 TaskFilter.DONE -> tasks.filter { it.isDone }
+            }
+            if (q.isBlank()) filtered
+            else filtered.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                    it.description.contains(q, ignoreCase = true)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setFilter(value: TaskFilter) {
         filter.value = value
+    }
+
+    fun setSearchQuery(value: String) {
+        query.value = value.trim()
     }
 
     fun toggle(task: TaskEntity) {

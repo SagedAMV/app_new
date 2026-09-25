@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AddTask
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Card
@@ -23,6 +24,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,6 +67,7 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
 
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val filter by viewModel.currentFilter.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     var sheetTask by remember { mutableStateOf<TaskEntity?>(null) }
     var showSheet by remember { mutableStateOf(false) }
@@ -89,6 +92,16 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
                 .padding(horizontal = 18.dp)
         ) {
             Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = viewModel::setSearchQuery,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("ابحث في المهام…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.small
+            )
+            Spacer(Modifier.height(10.dp))
             ChoiceChips(
                 labels = listOf("الكل", "قيد التنفيذ", "منجزة"),
                 selectedIndex = when (filter) {
@@ -105,12 +118,17 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
             if (tasks.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.CheckCircle,
-                    title = when (filter) {
+                    title = if (searchQuery.isNotBlank()) "لا نتائج للبحث"
+                    else when (filter) {
                         TaskFilter.PENDING -> "لا مهام قيد التنفيذ"
                         TaskFilter.DONE -> "لا مهام منجزة بعد"
                         TaskFilter.ALL -> "لا مهام بعد"
                     },
-                    subtitle = "أضف مهمة من زر + وحدد أولويتها وموعد استحقاقها",
+                    subtitle = if (searchQuery.isNotBlank()) {
+                        "جرّب كلمات بحث أخرى أو غيّر المرشح"
+                    } else {
+                        "أضف مهمة من زر + وحدد أولويتها وموعد استحقاقها"
+                    },
                     modifier = Modifier.weight(1f)
                 )
             } else {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,9 +27,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
@@ -66,6 +69,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +88,7 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.data.local.entity.FolderEntity
+import com.unihub.app.data.repository.FolderTree
 import com.unihub.app.feature.files.capture.AddMenuSheet
 import com.unihub.app.feature.files.capture.AudioRecorderSheet
 import com.unihub.app.ui.components.AppSheet
@@ -102,6 +107,12 @@ import java.util.Locale
 private sealed interface RenameTarget {
     data class FolderRename(val folder: FolderEntity) : RenameTarget
     data class FileRename(val file: FileEntity) : RenameTarget
+}
+
+/** هدف النقل إلى مجلد آخر: ملفات محددة أو مجلد كامل */
+private sealed interface MoveTarget {
+    data class FilesMove(val files: List<FileEntity>) : MoveTarget
+    data class FolderMove(val folder: FolderEntity) : MoveTarget
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,6 +146,13 @@ fun FilesScreen(
     var deleteFolderTarget by remember { mutableStateOf<FolderEntity?>(null) }
     var menuFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var confirmBulkDelete by remember { mutableStateOf(false) }
+    var moveTarget by remember { mutableStateOf<MoveTarget?>(null) }
+    var pickerFolders by remember { mutableStateOf<List<FolderEntity>>(emptyList()) }
+
+    // جلب لقطة المجلدات الكاملة عند فتح منتقي النقل فقط (لا اشتراك دائم)
+    LaunchedEffect(moveTarget != null) {
+        if (moveTarget != null) pickerFolders = viewModel.allFoldersOnce()
+    }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -321,7 +339,7 @@ fun FilesScreen(
                 onOpenMenu = { showAddMenuSheet = true }
             )
         } else {
-            // شريط إجراءات التحديد: مشاركة/إرسال + مفضلة + حذف
+            // شريط إجراءات التحديد: مشاركة/إرسال + مفضلة + نقل + حذف
             Box(Modifier.fillMaxSize()) {
                 SelectionBar(
                     modifier = Modifier
@@ -339,6 +357,7 @@ fun FilesScreen(
                     },
                     onShare = { shareFiles(selectedFiles) },
                     onFavorite = { viewModel.setFavoriteFor(selectedFiles) },
+                    onMove = { moveTarget = MoveTarget.FilesMove(selectedFiles) },
                     onDelete = { confirmBulkDelete = true }
                 )
             }
@@ -351,6 +370,10 @@ fun FilesScreen(
             onDismiss = { menuFolder = null },
             onRename = { folder ->
                 renameTarget = RenameTarget.FolderRename(folder)
+                menuFolder = null
+            },
+            onMove = { folder ->
+                moveTarget = MoveTarget.FolderMove(folder)
                 menuFolder = null
             },
             onDelete = { folder ->
@@ -439,13 +462,43 @@ fun FilesScreen(
         if (confirmBulkDelete) {
             ConfirmDialog(
                 title = if (selectedFiles.size == 1) "حذف الملف؟"
-                else "حذف ${selectedFiles.size} ملفات؟",
+                else "حذف " + Formatters.fileCountLabel(selectedFiles.size) + "؟",
                 message = "ستُحذف الملفات المحددة نهائياً من التخزين ولا يمكن التراجع.",
                 onConfirm = {
                     viewModel.deleteFiles(selectedFiles)
                     confirmBulkDelete = false
                 },
                 onDismiss = { confirmBulkDelete = false }
+            )
+        }
+
+        // منتقي «نقل إلى مجلد» — مشترك بين نقل الملفات المحددة ونقل مجلد كامل
+        moveTarget?.let { target ->
+            MoveToFolderSheet(
+                title = when (target) {
+                    is MoveTarget.FilesMove ->
+                        "نقل " + Formatters.fileCountLabel(target.files.size)
+                    is MoveTarget.FolderMove -> "نقل المجلد"
+                },
+                folders = pickerFolders,
+                blockedFolderIds = when (target) {
+                    is MoveTarget.FilesMove -> emptySet()
+                    is MoveTarget.FolderMove ->
+                        FolderTree.subtreeIds(pickerFolders, target.folder.id)
+                },
+                // الموقع الحالي: معطّل كوجهة لأن «النقل إليه» عملية بلا أثر
+                currentLocationId = when (target) {
+                    is MoveTarget.FilesMove -> folderId
+                    is MoveTarget.FolderMove -> target.folder.parentId
+                },
+                onDismiss = { moveTarget = null },
+                onConfirm = { destination ->
+                    when (target) {
+                        is MoveTarget.FilesMove -> viewModel.moveFiles(target.files, destination)
+                        is MoveTarget.FolderMove -> viewModel.moveFolder(target.folder, destination)
+                    }
+                    moveTarget = null
+                }
             )
         }
     }
@@ -601,6 +654,7 @@ private fun SelectionBar(
     onRenameSingle: (FileEntity) -> Unit,
     onShare: () -> Unit,
     onFavorite: () -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit
 ) {
     Surface(
@@ -637,6 +691,13 @@ private fun SelectionBar(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            IconButton(onClick = onMove) {
+                Icon(
+                    imageVector = Icons.Filled.DriveFileMove,
+                    contentDescription = "نقل إلى مجلد",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Spacer(Modifier.weight(1f))
             if (singleFile != null) {
                 IconButton(onClick = { onRenameSingle(singleFile) }) {
@@ -665,6 +726,7 @@ private fun FolderContextMenu(
     onOpenFolder: (Long) -> Unit,
     onDismiss: () -> Unit,
     onRename: (FolderEntity) -> Unit,
+    onMove: (FolderEntity) -> Unit,
     onDelete: (FolderEntity) -> Unit
 ) {
     if (folder == null) return
@@ -685,6 +747,10 @@ private fun FolderContextMenu(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("إعادة التسمية") }
                 TextButton(
+                    onClick = { onMove(folder) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("نقل إلى مجلد…") }
+                TextButton(
                     onClick = { onDelete(folder) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -694,6 +760,139 @@ private fun FolderContextMenu(
         },
         confirmButton = {}
     )
+}
+
+/**
+ * منتقي وجهة النقل: ورقة سفلية واحدة تُبحر في شجرة المجلدات — نقر على مجلد
+ * للدخول إليه، زر صعود للمستوى الأعلى، وزر «نقل إلى هنا» يثبّت الوجهة الحالية.
+ * الوجهات المحظورة (المجلد المنقول وأحفاده) تظهر باهتة غير قابلة للنقر،
+ * والمستوى المطابق لموقع المصدر يُعطَّل فيه زر التأكيد لأنه عملية بلا أثر.
+ */
+@Composable
+private fun MoveToFolderSheet(
+    title: String,
+    folders: List<FolderEntity>,
+    blockedFolderIds: Set<Long>,
+    currentLocationId: Long?,
+    onDismiss: () -> Unit,
+    onConfirm: (Long?) -> Unit
+) {
+    var browseId by remember { mutableStateOf(currentLocationId) }
+    val browseFolder = remember(folders, browseId) {
+        folders.firstOrNull { it.id == browseId }
+    }
+    val children = remember(folders, browseId) {
+        folders.filter { it.parentId == browseId }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+    val onBlockedLevel = browseId != null && browseId in blockedFolderIds
+    val sameAsSource = browseId == currentLocationId
+
+    AppSheet(
+        title = title,
+        onDismiss = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            FilledTonalButton(
+                onClick = { onConfirm(browseId) },
+                enabled = !onBlockedLevel && !sameAsSource
+            ) { Text("نقل إلى هنا") }
+        }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = { browseId = browseFolder?.parentId },
+                enabled = browseId != null
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ArrowUpward,
+                    contentDescription = "المستوى الأعلى",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = browseFolder?.name ?: "المستوى الرئيسي",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        when {
+            onBlockedLevel -> Text(
+                "لا يمكن نقل المجلد داخل نفسه أو داخل أحد فروعه",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            sameAsSource -> Text(
+                "العناصر موجودة في هذا المجلد بالفعل",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (children.isEmpty()) {
+            Text(
+                "لا مجلدات فرعية هنا",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 300.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(children, key = { it.id }) { folder ->
+                    FolderPickerRow(
+                        folder = folder,
+                        blocked = folder.id in blockedFolderIds,
+                        onClick = { browseId = folder.id }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** صف واحد في منتقي النقل: لون المجلد + اسمه، باهت إن كان وجهة محظورة */
+@Composable
+private fun FolderPickerRow(
+    folder: FolderEntity,
+    blocked: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = !blocked,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = if (blocked) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        else MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Folder,
+                contentDescription = null,
+                tint = if (blocked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                else folder.color.toComposeColor(),
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = folder.name,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (blocked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                else MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
 }
 
 @Composable

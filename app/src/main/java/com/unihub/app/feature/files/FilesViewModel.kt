@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.core.validation.InputValidationException
@@ -127,12 +128,34 @@ class FilesViewModel @Inject constructor(
             }
             _selection.value = emptySet()
             when {
-                failed == 0 -> messenger.notify(
-                    if (ok == 1) "حُذف الملف" else "حُذف $ok ملفات"
-                )
+                failed == 0 -> messenger.notify("حُذف " + Formatters.fileCountLabel(ok))
                 ok > 0 -> messenger.notifyError("حُذف $ok وبقي $failed تعذّر حذفه")
                 else -> messenger.notifyError("تعذّر حذف الملفات")
             }
+        }
+    }
+
+    /**
+     * نقل الملفات المحددة إلى مجلد آخر (أو إلى الجذر). التخزين الفيزيائي مسطح
+     * فالنقل تحديث منطقي آمن — لا حركة ملفات على القرص. المجلد الحالي يُستبعد
+     * من الوجهات في الواجهة، وهذه حماية دفاعية إضافية إن وصل نفس المجلد.
+     */
+    fun moveFiles(files: List<FileEntity>, targetFolderId: Long?) {
+        if (files.isEmpty()) return
+        if (targetFolderId == folderId) {
+            messenger.notify("الملفات موجودة في هذا المجلد بالفعل")
+            return
+        }
+        viewModelScope.launch {
+            runCatching { fileRepository.moveToFolder(files.map { it.id }, targetFolderId) }
+                .onSuccess {
+                    messenger.notify(
+                        "تم نقل " + Formatters.fileCountLabel(files.size) +
+                            if (targetFolderId == null) " إلى المستوى الرئيسي" else ""
+                    )
+                }
+                .onFailure { messenger.notifyError("تعذّر نقل الملفات") }
+            _selection.value = emptySet()
         }
     }
 
@@ -212,6 +235,35 @@ class FilesViewModel @Inject constructor(
             runCatching { folderRepository.deleteDeep(folder) }
                 .onSuccess { messenger.notify("حُذف المجلد ومحتوياته") }
                 .onFailure { messenger.notifyError("فشل حذف المجلد") }
+        }
+    }
+
+    /** لقطة كل المجلدات لمنتقي «نقل إلى مجلد» — تُجلب عند فتح المنتقي فقط */
+    suspend fun allFoldersOnce(): List<FolderEntity> = folderRepository.allOnce()
+
+    /** نقل مجلد إلى أب جديد مع رسائل دقيقة لكل سبب رفض */
+    fun moveFolder(folder: FolderEntity, newParentId: Long?) {
+        viewModelScope.launch {
+            val result = runCatching { folderRepository.move(folder, newParentId) }
+                .getOrElse {
+                    messenger.notifyError("تعذّر نقل المجلد")
+                    return@launch
+                }
+            when (result) {
+                FolderRepository.MoveResult.MOVED -> messenger.notify(
+                    if (newParentId == null) "نُقل المجلد إلى المستوى الرئيسي"
+                    else "تم نقل المجلد"
+                )
+                FolderRepository.MoveResult.SAME_PLACE ->
+                    messenger.notify("المجلد موجود هنا بالفعل")
+                FolderRepository.MoveResult.CYCLE ->
+                    messenger.notifyError("لا يمكن نقل المجلد داخل أحد مجلداته الفرعية")
+                FolderRepository.MoveResult.MISSING_PARENT ->
+                    messenger.notifyError("المجلد الهدف لم يعد موجوداً")
+            }
+            if (result == FolderRepository.MoveResult.MOVED && folder.id == folderId) {
+                folderVersion.value++
+            }
         }
     }
 

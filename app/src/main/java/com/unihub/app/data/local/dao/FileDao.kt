@@ -40,6 +40,14 @@ interface FileDao {
     @Query("UPDATE files SET isFavorite = :isFavorite WHERE id = :id")
     suspend fun setFavorite(id: Long, isFavorite: Boolean)
 
+    /**
+     * نقل جماعي: تحديث المجلد المنطقي لعدة ملفات دفعة واحدة. التخزين الفيزيائي
+     * مسطح (مجلد مكتبة واحد) لذا النقل لا يحتاج أي حركة ملفات على القرص —
+     * تحديث [folderId] يكفي. القيمة NULL تعني النقل إلى المستوى الجذر.
+     */
+    @Query("UPDATE files SET folderId = :folderId WHERE id IN (:ids)")
+    suspend fun setFolder(ids: List<Long>, folderId: Long?)
+
     @Query("SELECT COUNT(*) FROM files")
     fun observeFileCount(): Flow<Int>
 }

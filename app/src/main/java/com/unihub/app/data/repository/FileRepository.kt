@@ -85,4 +85,14 @@ class FileRepository @Inject constructor(
     }
 
     suspend fun setFavorite(id: Long, favorite: Boolean) = fileDao.setFavorite(id, favorite)
+
+    /**
+     * نقل ملفات إلى مجلد آخر (أو إلى الجذر عند NULL). التخزين الفيزيائي مسطح
+     * في مجلد مكتبة واحد، فالنقل تحديث منطقي لقاعدة البيانات فقط — لا حركة
+     * ملفات على القرص ولا خطر فقدان نسخ فعلية.
+     */
+    suspend fun moveToFolder(fileIds: List<Long>, targetFolderId: Long?) {
+        if (fileIds.isEmpty()) return
+        fileDao.setFolder(fileIds, targetFolderId)
+    }
 }
