@@ -1,7 +1,6 @@
 package com.unihub.app.core.common
 
 import com.unihub.app.data.local.entity.LectureEntity
-import com.unihub.app.data.local.entity.Weekday
 import java.time.LocalDateTime
 
 /**

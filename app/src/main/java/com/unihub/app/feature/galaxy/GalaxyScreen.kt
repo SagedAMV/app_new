@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.data.local.model.FolderWithFileCount
-import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.theme.toComposeColor
 import kotlin.math.PI
 import kotlin.math.cos
