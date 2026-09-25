@@ -1,5 +1,17 @@
 package com.unihub.app.feature.dashboard
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +31,6 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.School
@@ -38,13 +49,23 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.core.common.DateFormats
@@ -64,8 +85,11 @@ import com.unihub.app.ui.theme.SemanticDanger
 import com.unihub.app.ui.theme.SemanticInfo
 import com.unihub.app.ui.theme.SemanticSuccess
 import com.unihub.app.ui.theme.SemanticWarning
+import kotlinx.coroutines.delay
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /**
@@ -267,10 +291,15 @@ fun DashboardScreen(
 }
 
 /**
- * بطاقة "المحاضرة التالية" — القلب العملي للشاشة الرئيسية:
- * تقرأ الجدول الأسبوعي وتعرض أقرب محاضرة باسمها وقاعتها ووقتها مع عدّ تنازلي
- * حيّ (يتحدث كل 30 ثانية من المستودع). عند فراغ الجدول تتحول إلى ملخص اليوم
- * مع دعوة واضحة لبناء الجدول — لا مساحة مهدورة على ترحيب ثابت.
+ * بطاقة "المحاضرة التالية" — القلب العملي للشاشة الرئيسية.
+ *
+ * التصميم رقم 8 «العدّاد الكبير» (جلسة مقترحات تصاميم البطاقة): بطاقة بلون
+ * أساسي موحّد تتوسطها أرقام العدّ التنازلي الضخمة. العدّاد حيّ فعلاً: ينبض
+ * محلياً كل ثانية انطلاقاً من وقت بداية المحاضرة الفعلي، تنزلق الخانات عند
+ * تغيّرها وتومض النقطتان بنبض هادئ انسجاماً مع هوية التطبيق المريحة للعين.
+ * إن كانت المحاضرة أبعد من اليوم يُعرض «غداً/بعد يومين» بدل الأرقام، وإن
+ * كانت جارية يظهر «جارية الآن». عند فراغ الجدول تتحول إلى ملخص اليوم مع
+ * دعوة واضحة لبناء الجدول — لا مساحة مهدورة على ترحيب ثابت.
  */
 @Composable
 private fun NextLectureCard(
@@ -284,92 +313,259 @@ private fun NextLectureCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.primary
         )
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             if (next == null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "جدولك فارغ",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = buildSummaryText(pendingTasks, upcomingExams),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "أضف محاضراتك ليظهر هنا أقرب موعد مع القاعة والعد التنازلي",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                EmptyScheduleHero(pendingTasks, upcomingExams)
             } else {
-                val lecture = next.lecture
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "المحاضرة التالية",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(Modifier.weight(1f))
-                    TintChip(
-                        text = if (next.status == NextLecture.Status.ONGOING) "الآن"
-                        else NextLectureResolver.dayLabel(next.dayOffset),
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = lecture.subject,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                NextLectureHero(next)
+            }
+        }
+    }
+}
+
+/**
+ * محتوى البطاقة عند وجود محاضرة: ترويسة اليوم، العدّاد الضخم، تحته وصف
+ * قصير، ثم المادة والدكتور والقاعة وشارة وقت البداية.
+ */
+@Composable
+private fun NextLectureHero(next: NextLecture) {
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+    val lecture = next.lecture
+    val ongoing = next.status == NextLecture.Status.ONGOING
+
+    Text(
+        text = if (ongoing) "المحاضرة التالية · جارية الآن"
+        else "المحاضرة التالية · ${NextLectureResolver.dayLabel(next.dayOffset)}",
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        color = onPrimary.copy(alpha = 0.85f)
+    )
+    Spacer(Modifier.height(10.dp))
+
+    when {
+        ongoing -> HeroWord("جارية الآن")
+        next.dayOffset > 0 -> HeroWord(NextLectureResolver.dayLabel(next.dayOffset))
+        else -> LiveDigitCountdown(next)
+    }
+
+    Text(
+        text = when {
+            ongoing && lecture.timeTo.isNotBlank() -> "تنتهي ${lecture.timeTo}"
+            ongoing -> "بدأت ${lecture.timeFrom}"
+            next.dayOffset > 0 -> "تبدأ ${lecture.timeFrom}"
+            else -> "متبقٍ على بداية المحاضرة"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = onPrimary.copy(alpha = 0.75f)
+    )
+    Spacer(Modifier.height(14.dp))
+
+    Text(
+        text = lecture.subject,
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        color = onPrimary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center
+    )
+    Spacer(Modifier.height(4.dp))
+
+    val meta = listOfNotNull(
+        lecture.doctor.takeIf { it.isNotBlank() },
+        lecture.room.takeIf { it.isNotBlank() }?.let { "قاعة $it" }
+    ).joinToString("  ·  ")
+    if (meta.isNotBlank()) {
+        Text(
+            text = meta,
+            style = MaterialTheme.typography.bodyMedium,
+            color = onPrimary.copy(alpha = 0.8f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(12.dp))
+    } else {
+        Spacer(Modifier.height(8.dp))
+    }
+
+    val timeChip = if (ongoing) {
+        "بدأت ${lecture.timeFrom}"
+    } else {
+        buildString {
+            append("تبدأ ").append(lecture.timeFrom)
+            if (lecture.timeTo.isNotBlank()) append(" – ").append(lecture.timeTo)
+        }
+    }
+    TintChip(
+        text = timeChip,
+        containerColor = onPrimary.copy(alpha = 0.16f),
+        contentColor = onPrimary
+    )
+}
+
+/** كلمة كبيرة بدل الأرقام (جارية الآن / غداً / بعد يومين) مع انتقال انزلاقي */
+@Composable
+private fun HeroWord(text: String) {
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = {
+            (slideInVertically(animationSpec = tween(300)) { -it } +
+                fadeIn(animationSpec = tween(300)))
+                .togetherWith(
+                    slideOutVertically(animationSpec = tween(300)) { it } +
+                        fadeOut(animationSpec = tween(300))
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = listOfNotNull(
-                        lecture.timeFrom +
-                            (if (lecture.timeTo.isNotBlank()) " – ${lecture.timeTo}" else ""),
-                        lecture.room.takeIf { it.isNotBlank() }?.let { "قاعة $it" },
-                        lecture.doctor.takeIf { it.isNotBlank() }
-                    ).joinToString("  •  "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.AccessTime,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(Modifier.width(6.dp))
+        },
+        label = "hero-word"
+    ) { current ->
+        Text(
+            text = current,
+            style = MaterialTheme.typography.displaySmall.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color = MaterialTheme.colorScheme.onPrimary,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * العدّاد الحي: يحسب محلياً الثواني المتبقية حتى وقت بداية المحاضرة
+ * (حالة اليوم فقط؛ الأيام الأبعد تتولاها [HeroWord]) ويعرضها بصيغة
+ * «د:ث» أو «س:د:ث». كل خانة تنزلق عند تغيّرها والنقطتان تومضان بنبض
+ * هادئ. إن تعذّر تفسير وقت البداية يعود إلى [NextLectureResolver.formatCountdown]
+ * بدل التخمين.
+ */
+@Composable
+private fun LiveDigitCountdown(next: NextLecture) {
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalDateTime.now()
+            delay(1_000L)
+        }
+    }
+    // وميض النقطتين يُعلَن قبل أي فرع مبكر حتى يبقى عدد الـ hooks ثابتاً
+    val colonAlpha by rememberInfiniteTransition(label = "countdown-colon").animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "colon-alpha"
+    )
+
+    val startAt = remember(next) {
+        DateFormats.parseTimeOrNull(next.lecture.timeFrom)?.let { from ->
+            LocalDate.now().plusDays(next.dayOffset.toLong()).atTime(from)
+        }
+    }
+    val remainingSeconds = startAt?.let { ChronoUnit.SECONDS.between(now, it) } ?: 0L
+    if (startAt == null || remainingSeconds <= 0L) {
+        HeroWord(if (startAt == null) NextLectureResolver.formatCountdown(next) else "تبدأ الآن")
+        return
+    }
+
+    val hours = remainingSeconds / 3_600
+    val minutes = (remainingSeconds % 3_600) / 60
+    val seconds = remainingSeconds % 60
+    val text = if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%02d:%02d".format(minutes, seconds)
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription = "الوقت المتبقي حتى بداية المحاضرة $text"
+            },
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for (char in text) {
+                if (char == ':') {
                     Text(
-                        text = NextLectureResolver.formatCountdown(next),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        text = ":",
+                        style = heroDigitStyle(),
+                        color = onPrimary.copy(alpha = colonAlpha)
                     )
+                } else {
+                    SlidingDigit(char)
                 }
             }
         }
     }
+}
+
+/** نمط الأرقام الضخم الموحّد للعدّاد */
+@Composable
+private fun heroDigitStyle() = MaterialTheme.typography.displaySmall.copy(
+    fontWeight = FontWeight.ExtraBold,
+    letterSpacing = 1.sp
+)
+
+/** خانة واحدة من العدّاد تنزلق عمودياً عند تغيّر قيمتها */
+@Composable
+private fun SlidingDigit(char: Char) {
+    AnimatedContent(
+        targetState = char,
+        transitionSpec = {
+            (slideInVertically(animationSpec = tween(300)) { -it } +
+                fadeIn(animationSpec = tween(300)))
+                .togetherWith(
+                    slideOutVertically(animationSpec = tween(300)) { it } +
+                        fadeOut(animationSpec = tween(300))
+                )
+        },
+        label = "digit"
+    ) { current ->
+        Text(
+            text = current.toString(),
+            style = heroDigitStyle(),
+            color = MaterialTheme.colorScheme.onPrimary
+        )
+    }
+}
+
+/** حالة الجدول الفارغ داخل البطاقة الأساسية بنفس لونها */
+@Composable
+private fun EmptyScheduleHero(pendingTasks: Int, upcomingExams: Int) {
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+    Icon(
+        imageVector = Icons.Outlined.Schedule,
+        contentDescription = null,
+        modifier = Modifier.size(34.dp),
+        tint = onPrimary.copy(alpha = 0.9f)
+    )
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = "جدولك فارغ",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = onPrimary
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = buildSummaryText(pendingTasks, upcomingExams),
+        style = MaterialTheme.typography.bodyMedium,
+        color = onPrimary.copy(alpha = 0.85f),
+        textAlign = TextAlign.Center
+    )
+    Spacer(Modifier.height(12.dp))
+    TintChip(
+        text = "أضف محاضراتك من الجدول ليظهر العدّ التنازلي هنا",
+        containerColor = onPrimary.copy(alpha = 0.16f),
+        contentColor = onPrimary
+    )
 }
 
 private fun buildSummaryText(pendingTasks: Int, upcomingExams: Int): String {
