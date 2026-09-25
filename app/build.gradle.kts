@@ -64,6 +64,17 @@ android {
         debug {
             isMinifyEnabled = false
         }
+
+        // النسخة الكاملة (غير المصغّرة): جودة Release نفسها (موقَّعة بمفتاح
+        // الإصدار) لكن بلا تصغير موارد ولا تصغير شيفرة — لكل من يريد النسخة
+        // الكاملة دون معالجة R8. أُنشئت بجلسة التحقق العميق 2026 لتسليم
+        // «النسخة الكاملة فقط» إلى مستودع buled، دون المساس بإعدادات
+        // النسخة المصغّرة أعلاه (راجع تعليقها قبل أي تعديل هناك).
+        create("releaseFull") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
     }
 
     compileOptions {
