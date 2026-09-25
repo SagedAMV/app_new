@@ -31,9 +31,13 @@ class ReminderWorker(
             .setAutoCancel(true)
             .build()
 
-        // قد يرفض النظام العرض إن لم يُمنح إذن الإشعارات — نتعامل معه بأمان
-        runCatching {
-            NotificationManagerCompat.from(applicationContext).notify(notificationId, notification)
+        // فحص صريح لحالة الإشعارات قبل العرض: على أندرويد 13+ يكون الإذن
+        // مرفوضاً إن لم يمنحه المستخدم، وفحص areNotificationsEnabled() هو الحارس
+        // الذي يعتمده androidx نفسه — يمنع SecurityException من الأساس بدل
+        // ابتلاعه، ويحترم أيضاً تعطيل المستخدم للإشعارات من إعدادات النظام.
+        val manager = NotificationManagerCompat.from(applicationContext)
+        if (manager.areNotificationsEnabled()) {
+            runCatching { manager.notify(notificationId, notification) }
         }
         return Result.success()
     }

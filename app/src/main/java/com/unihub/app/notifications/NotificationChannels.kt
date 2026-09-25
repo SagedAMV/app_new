@@ -3,7 +3,6 @@ package com.unihub.app.notifications
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.os.Build
 
 /** قنوات الإشعارات — تُنشأ مرة واحدة عند بدء التطبيق */
 object NotificationChannels {
@@ -12,7 +11,8 @@ object NotificationChannels {
     const val TASKS = "tasks"
 
     fun create(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        // minSdk = 26 (أندرويد 8.0) — قنوات الإشعارات متاحة دائماً، فلا حاجة
+        // لفحص إصدار النظام (فحص قديم أُزيل بتنبيه ObsoleteSdkInt من lint).
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
 
         manager.createNotificationChannel(
