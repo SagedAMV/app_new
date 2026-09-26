@@ -87,7 +87,11 @@ class AutoBackupExporter @Inject constructor(
 
     companion object {
         const val MIME_ZIP = "application/zip"
-        const val LATEST_FILE_NAME = "unihub_backup_latest"
+        // إصلاح (جلسة التدقيق): الامتداد جزء ثابت من الاسم. بعض مزودي SAF يلحقون
+        // «.zip» تلقائياً حسب MIME عند الإنشاء بلا امتداد، فلا يعود findFile() يجد
+        // النسخة السابقة باسمها المجرد وتتراكم نسخ مكررة بدل الكتابة فوقها. باسم
+        // صريح الامتداد يبقى findFile/حذف/إعادة الإنشاء متسقاً لدى كل المزودين.
+        const val LATEST_FILE_NAME = "unihub_backup_latest.zip"
         private val TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
     }
 }

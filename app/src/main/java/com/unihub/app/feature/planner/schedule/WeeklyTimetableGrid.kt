@@ -175,10 +175,15 @@ fun WeeklyTimetableGrid(
                 .horizontalScroll(rememberScrollState())
                 .padding(start = 4.dp, end = 4.dp, bottom = 90.dp)
         ) {
-            // صف التواقيت الأفقي: حد زمني عند بداية كل مقطع
+            // صف التواقيت الأفقي: حد زمني عند بداية كل مقطع.
+            // إصلاح (جلسة التدقيق): صف الـ RTL يرتّب التسميات متلاصقةً تلقائياً،
+            // عرض كل تسمية يساوي عرض مقطعها فتقع بدايته عند حدّه الزمني تماماً.
+            // كانت التسميات تُزاح أيضاً بإزاحة تراكمية (مجموع عروض المقاطع السابقة)
+            // فوق ترتيب الصف — أي تُحسب الإزاحة مرتين، فانجراف كل تسمية يزداد كلما
+            // تقدمنا (في مثال 7-9 و12-2 تبتعد تسمية «12 م» مئات الـ dp عن موضعها).
+            // ترتيب الصف وحده يكفي، والإزاحة الإضافية أزيلت.
             Row(verticalAlignment = Alignment.Bottom) {
                 Spacer(Modifier.width(DAY_COLUMN_WIDTH))
-                var cursor = 0f
                 segments.forEachIndexed { index, (a, _) ->
                     Text(
                         text = formatHourLabel(a),
@@ -186,11 +191,9 @@ fun WeeklyTimetableGrid(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
-                            .offset(x = cursor.dp)
                             .width(segmentWidths[index])
                             .padding(start = 4.dp, bottom = 4.dp)
                     )
-                    cursor += segmentWidths[index].value
                 }
             }
 

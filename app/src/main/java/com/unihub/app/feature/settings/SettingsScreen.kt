@@ -298,7 +298,9 @@ fun SettingsScreen(
                 Column {
                     Text("النسخ الاحتياطي والاستعادة", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "تصدير بياناتك إلى ملف JSON أو استعادتها",
+                        // إصلاح (جلسة التدقيق): النسخة أصبحت أرشيف ZIP يتضمن محتوى
+                        // الملفات الفعلي — الوصف القديم «ملف JSON» لم يعد دقيقاً.
+                        "تصدير بياناتك إلى أرشيف نسخة احتياطية أو استعادتها",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
