@@ -144,8 +144,15 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
 
-    // WorkManager لتذكيرات المهام والامتحانات
+    // WorkManager لتذكيرات المهام والامتحانات والنسخ الاحتياطي التلقائي
     implementation(libs.androidx.work.runtime)
+
+    // DocumentFile — التعامل مع مجلد المستخدم المختار عبر SAF في النسخ التلقائي
+    implementation(libs.androidx.documentfile)
+
+    // حقن العمال (@HiltWorker) لعمّال النسخ الاحتياطي التلقائي
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // CameraX — التقاط الصور من داخل التطبيق (المكتبة الرسمية الموصى بها من Google)
     implementation(libs.androidx.camera.core)

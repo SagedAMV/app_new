@@ -1,6 +1,8 @@
 package com.unihub.app.feature.settings
 
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,16 +20,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,13 +43,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.unihub.app.core.prefs.AutoBackupPreferences
 import com.unihub.app.core.prefs.ThemeMode
+import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
+import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.UiMessagesHost
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +72,12 @@ fun SettingsScreen(
     val useDynamicColor by viewModel.useDynamicColor.collectAsStateWithLifecycle()
 
     var showClearConfirm by remember { mutableStateOf(false) }
+
+    // النسخ الاحتياطي التلقائي: الإعدادات الحية + منتقي مجلد النظام (SAF)
+    val autoBackup by viewModel.autoBackupSettings.collectAsStateWithLifecycle()
+    val backupFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let(viewModel::onBackupFolderSelected) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -135,6 +154,129 @@ fun SettingsScreen(
                     checked = useDynamicColor,
                     onCheckedChange = viewModel::setDynamicColor,
                     enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                )
+            }
+
+            SectionHeader(title = "النسخ الاحتياطي التلقائي")
+
+            // ── مجلد النسخ: اختيار عبر النظام + تغذية راجعة حقيقية عن الوصول ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("مجلد النسخ التلقائي", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = if (autoBackup?.isFolderConfigured == true) {
+                            "تم تحديد مجلد نسخ الاحتياطية ✓"
+                        } else {
+                            "لم يتم تحديد مجلد نسخ الاحتياطية"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (autoBackup?.isFolderConfigured == true) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                if (autoBackup?.isFolderConfigured == true) {
+                    TextButton(onClick = viewModel::clearBackupFolder) { Text("إلغاء") }
+                }
+                FilledTonalButton(onClick = { backupFolderLauncher.launch(null) }) {
+                    Text(if (autoBackup?.isFolderConfigured == true) "تغيير" else "اختيار مجلد")
+                }
+            }
+
+            // ── فاصل النسخ: يومي / 3 أيام / أسبوعي / شهري / يوم مخصص ──
+            val intervalDays = autoBackup?.intervalDays
+                ?: AutoBackupPreferences.DEFAULT_INTERVAL_DAYS
+            val chipIndex = when (intervalDays) {
+                1 -> 0
+                3 -> 1
+                7 -> 2
+                30 -> 3
+                else -> 4
+            }
+            Text(
+                "كل كم يُعمل النسخ التلقائي؟",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            ChoiceChips(
+                labels = listOf("يومي", "كل 3 أيام", "أسبوعي", "شهري", "مخصص"),
+                selectedIndex = chipIndex,
+                onSelect = { index ->
+                    when (index) {
+                        0 -> viewModel.setIntervalDays(1)
+                        1 -> viewModel.setIntervalDays(3)
+                        2 -> viewModel.setIntervalDays(7)
+                        3 -> viewModel.setIntervalDays(30)
+                        else -> {
+                            // «مخصص»: يطبق القيمة الحالية في خانة اليوم المخصص
+                            val custom = autoBackup?.customDaysInput?.toIntOrNull()
+                            if (custom != null && custom in AutoBackupPreferences.MIN_INTERVAL_DAYS..AutoBackupPreferences.MAX_INTERVAL_DAYS) {
+                                viewModel.setIntervalDays(custom)
+                            } else {
+                                viewModel.messenger.notifyError("اكتب عدد الأيام في الخانة أولاً (1-365)")
+                            }
+                        }
+                    }
+                }
+            )
+
+            // خانة اليوم المخصص — تظهر عند اختيار «مخصص» أو وجود قيمة مخصصة
+            if (chipIndex == 4) {
+                Spacer(Modifier.height(8.dp))
+                Field(
+                    label = "عدد الأيام المخصص (1-365)",
+                    value = autoBackup?.customDaysInput.orEmpty(),
+                    onValueChange = viewModel::setCustomDaysInput,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+
+            // ── نسخة بعد كل عملية تعديل (تجربة أن النسخ يعمل) ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("نسخة بعد كل عملية تعديل", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "للتجربة: تُحدَّث نسخة «آخر حفظ» بعد أي تعديل على بياناتك",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = autoBackup?.backupOnChange ?: false,
+                    onCheckedChange = viewModel::setBackupOnChange
+                )
+            }
+
+            // ── نسخ الآن + آخر نتيجة ──
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = viewModel::backupNow,
+                enabled = autoBackup?.isFolderConfigured == true
+            ) {
+                Text("نسخ احتياطي الآن")
+            }
+            val lastAt = autoBackup?.lastBackupAt ?: 0L
+            if (lastAt > 0L) {
+                val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+                Text(
+                    text = "آخر محاولة: ${dateFormat.format(Date(lastAt))}" +
+                        autoBackup?.lastBackupMessage?.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
 

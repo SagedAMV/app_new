@@ -12,8 +12,11 @@ import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FolderEntity
 import com.unihub.app.data.repository.FileRepository
 import com.unihub.app.data.repository.FolderRepository
+import com.unihub.app.feature.share.InboxItem
+import com.unihub.app.feature.share.ShareInbox
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -41,12 +44,56 @@ import javax.inject.Inject
 class FilesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val folderRepository: FolderRepository,
-    private val fileRepository: FileRepository
+    private val fileRepository: FileRepository,
+    private val shareInbox: ShareInbox
 ) : ViewModel() {
 
     private val folderId: Long? = savedStateHandle.get<Long?>("folderId")
 
     val messenger = UiMessenger()
+
+    // ─── صندوق المشاركة (ملفات واردة من قائمة مشاركة النظام) ─────────────
+
+    /** الملفات المشتركة التي تنتظر اختيار مجلدها — تظهر في كل شاشات الملفات */
+    val inboxItems: StateFlow<List<InboxItem>> = shareInbox.items
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** معرّفات الملفات الموضوعة للتو — لإبرازها بانميشن تلاشي ثم يبهت التمييز */
+    private val _recentlyPlaced = MutableStateFlow<Set<Long>>(emptySet())
+    val recentlyPlaced: StateFlow<Set<Long>> = _recentlyPlaced.asStateFlow()
+
+    /**
+     * نسخ كل ملفات الصندوق إلى المجلد المفتوح حالياً: إدراج منطقي فقط —
+     * النسخ الفعلية موجودة سلفاً في المكتبة المسطحة (نفس مبدأ النقل).
+     */
+    fun placeSharedFilesHere() {
+        viewModelScope.launch {
+            val placedIds = runCatching { shareInbox.placeAll(folderId) }
+                .getOrElse {
+                    messenger.notifyError("تعذّر وضع الملفات المشتركة")
+                    return@launch
+                }
+            if (placedIds.isEmpty()) return@launch
+            _recentlyPlaced.value = placedIds.toSet()
+            messenger.notify(
+                "وُضع " + Formatters.fileCountLabel(placedIds.size) +
+                    if (folderId == null) " في المستوى الرئيسي" else " في هذا المجلد"
+            )
+            launch {
+                delay(2_500)
+                _recentlyPlaced.value = emptySet()
+            }
+        }
+    }
+
+    /** التخلي عن ملف مشترك واحد وحذف نسخته الفعلية */
+    fun removeInboxItem(item: InboxItem) {
+        viewModelScope.launch {
+            runCatching { shareInbox.remove(item) }
+                .onSuccess { messenger.notify("أُهمل الملف المشترك") }
+                .onFailure { messenger.notifyError("تعذّر حذف الملف المشترك") }
+        }
+    }
 
     /** عداد يُحدَّث بعد أي تغيير على المجلد الحالي كي يُعاد جلب بياناته */
     private val folderVersion = MutableStateFlow(0)

@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -64,6 +65,8 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
     var sheetLecture by remember { mutableStateOf<LectureEntity?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<LectureEntity?>(null) }
+    // العرض الشبكي: عمود أيام اليمين + صف تواقيت أعلى + محاضرات ممددة
+    var showGrid by remember { mutableStateOf(false) }
 
     val today = Weekdays.today()
 
@@ -71,11 +74,26 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                sheetLecture = null
-                showSheet = true
-            }) {
-                Icon(Icons.AutoMirrored.Outlined.EventNote, contentDescription = "محاضرة جديدة")
+            // عمود زرين: زر الجدول الشبكي فوق زر «محاضرة جديدة» تماماً كما
+            // طلبت التعليمات («زر فوق الذي يضيف توقيت واسم محاضرة جديدة»)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FloatingActionButton(onClick = { showGrid = !showGrid }) {
+                    Icon(
+                        imageVector = if (showGrid) Icons.AutoMirrored.Outlined.MenuBook
+                        else Icons.Filled.GridOn,
+                        contentDescription = if (showGrid) "العودة لقائمة المحاضرات"
+                        else "عرض الجدول الزمني الشبكي"
+                    )
+                }
+                FloatingActionButton(onClick = {
+                    sheetLecture = null
+                    showSheet = true
+                }) {
+                    Icon(Icons.AutoMirrored.Outlined.EventNote, contentDescription = "محاضرة جديدة")
+                }
             }
         }
     ) { padding ->
@@ -91,6 +109,15 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                     subtitle = "أضف محاضراتك الأسبوعية لتظهر هنا وفي الرئيسية حسب اليوم"
                 )
             }
+        } else if (showGrid) {
+            // الجدول الشبكي: تواقيت مشتقة من المحاضرات نفسها + تمدد أفقي حسب المدة
+            WeeklyTimetableGrid(
+                lectures = lectures,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 10.dp)
+            )
         } else {
             Column(
                 Modifier

@@ -77,44 +77,59 @@ class BackupRepository @Inject constructor(
 
     suspend fun export(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val fileRecords = database.fileDao().getAllOnce()
-            val manifest = JSONObject().apply {
-                put("app", "unihub")
-                put("schemaVersion", SCHEMA_VERSION)
-                put("exportedAt", System.currentTimeMillis())
-                put("folders", exportFolders())
-                put("files", exportFiles(fileRecords))
-                put("tasks", exportTasks())
-                put("notes", exportNotes())
-                put("exams", exportExams())
-                put("lectures", exportLectures())
-            }
+            context.contentResolver.openOutputStream(uri)?.use { exportToStream(it) }
+                ?: throw IOException("تعذّر فتح ملف الوجهة للكتابة")
+        }.onFailure { android.util.Log.e(TAG, "فشل التصدير", it) }
+    }
 
-            context.contentResolver.openOutputStream(uri)?.use { rawOut ->
-                ZipOutputStream(rawOut).use { zip ->
-                    // 1) بيانات وصفية
-                    zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
-                    zip.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
-                    zip.closeEntry()
+    /**
+     * الكتابة إلى تدفق خارجي — مشتركة بين التصدير اليدوي (اختيار ملف عبر SAF)
+     * والنسخ الاحتياطي التلقائي إلى مجلد المستخدم (انظر AutoBackupExporter).
+     * يجب استدعاؤها من خيط إدخال/إخراج.
+     *
+     * يُكتب سطر الشفرة [BackupSignature] في الرأس قبل أرشيف ZIP — بهذه الشفرة
+     * يتعرّف التطبيق على ملف النسخة إذا شُورك إليه ويعرض حوار الاستيراد.
+     */
+    suspend fun exportToStream(rawOut: java.io.OutputStream): Int {
+        val fileRecords = database.fileDao().getAllOnce()
+        val manifest = JSONObject().apply {
+            put("app", "unihub")
+            put("schemaVersion", SCHEMA_VERSION)
+            put("exportedAt", System.currentTimeMillis())
+            put("folders", exportFolders())
+            put("files", exportFiles(fileRecords))
+            put("tasks", exportTasks())
+            put("notes", exportNotes())
+            put("exams", exportExams())
+            put("lectures", exportLectures())
+        }
 
-                    // 2) محتوى كل ملف موجود فعلياً على القرص وقت التصدير
-                    fileRecords.forEach { file ->
-                        val disk = File(file.filePath)
-                        if (disk.isFile) {
-                            runCatching {
-                                zip.putNextEntry(ZipEntry(fileEntryName(file.id, file.extension)))
-                                disk.inputStream().use { it.copyTo(zip) }
-                                zip.closeEntry()
-                            }.onFailure {
-                                android.util.Log.e(TAG, "تعذّر أرشفة الملف الفعلي #${file.id}", it)
-                            }
-                        }
+        // 0) شفرة التعريف في بداية الملف (سطر نصي قبل تدفق ZIP)
+        rawOut.write(BackupSignature.HEADER_BYTES)
+        rawOut.flush()
+
+        ZipOutputStream(rawOut).use { zip ->
+            // 1) بيانات وصفية
+            zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
+            zip.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            // 2) محتوى كل ملف موجود فعلياً على القرص وقت التصدير
+            fileRecords.forEach { file ->
+                val disk = File(file.filePath)
+                if (disk.isFile) {
+                    runCatching {
+                        zip.putNextEntry(ZipEntry(fileEntryName(file.id, file.extension)))
+                        disk.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                    }.onFailure {
+                        android.util.Log.e(TAG, "تعذّر أرشفة الملف الفعلي #${file.id}", it)
                     }
                 }
-            } ?: throw IOException("تعذّر فتح ملف الوجهة للكتابة")
+            }
+        }
 
-            totalCount(manifest)
-        }.onFailure { android.util.Log.e(TAG, "فشل التصدير", it) }
+        return totalCount(manifest)
     }
 
     // ====== الاستيراد ======
@@ -126,7 +141,9 @@ class BackupRepository @Inject constructor(
             if (bytes.size.toLong() > MAX_BACKUP_BYTES) {
                 throw IOException("ملف النسخة الاحتياطية أكبر من الحد المسموح")
             }
-            if (isZipArchive(bytes)) importFromZip(bytes) else importFromLegacyJson(String(bytes, Charsets.UTF_8))
+            // إسقاط سطر الشفرة إن وُجد — النسخ الجديدة تبدأ به والقديمة تبدأ بـ PK مباشرة
+            val payload = BackupSignature.stripIfPresent(bytes)
+            if (isZipArchive(payload)) importFromZip(payload) else importFromLegacyJson(String(payload, Charsets.UTF_8))
         }.onFailure { android.util.Log.e(TAG, "فشل الاستيراد", it) }
     }
 

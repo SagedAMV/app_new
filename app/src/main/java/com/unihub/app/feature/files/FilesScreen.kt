@@ -2,6 +2,11 @@ package com.unihub.app.feature.files
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -49,9 +54,12 @@ import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -91,6 +99,7 @@ import com.unihub.app.data.local.entity.FolderEntity
 import com.unihub.app.data.repository.FolderTree
 import com.unihub.app.feature.files.capture.AddMenuSheet
 import com.unihub.app.feature.files.capture.AudioRecorderSheet
+import com.unihub.app.feature.share.InboxItem
 import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
@@ -138,8 +147,13 @@ fun FilesScreen(
     val isSelecting = selection.isNotEmpty()
     val selectedFiles = remember(files, selection) { files.filter { it.id in selection } }
 
+    // صندوق المشاركة: ملفات واردة من تطبيقات النظام تنتظر اختيار مجلدها
+    val inboxItems by viewModel.inboxItems.collectAsStateWithLifecycle()
+    val recentlyPlaced by viewModel.recentlyPlaced.collectAsStateWithLifecycle()
+
     var searchActive by remember { mutableStateOf(false) }
     var showAddMenuSheet by remember { mutableStateOf(false) }
+    var showInboxSheet by remember { mutableStateOf(false) }
     var showAddFolderSheet by remember { mutableStateOf(false) }
     var showAudioRecorder by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
@@ -255,6 +269,20 @@ fun FilesScreen(
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // شريط وضع الملفات المشتركة — يظهر بأي مجلد دخلته لتضعها فيه
+            item(key = "inbox_banner") {
+                AnimatedVisibility(
+                    visible = inboxItems.isNotEmpty() && !isSelecting,
+                    enter = fadeIn(tween(700)),
+                    exit = fadeOut(tween(300))
+                ) {
+                    InboxPlacementBanner(
+                        count = inboxItems.size,
+                        onPlace = viewModel::placeSharedFilesHere
+                    )
+                }
+            }
+
             if (searchActive) {
                 item {
                     OutlinedTextField(
@@ -300,18 +328,21 @@ fun FilesScreen(
             if (files.isNotEmpty()) {
                 item { SectionHeader(title = "الملفات (${files.size})") }
                 items(files, key = { it.id }) { file ->
-                    FileRow(
-                        file = file,
-                        selectionMode = isSelecting,
-                        selected = file.id in selection,
-                        onClick = {
-                            if (isSelecting) viewModel.toggleSelection(file.id)
-                            else openFile(file)
-                        },
-                        onToggleFavorite = { viewModel.toggleFavorite(file) },
-                        // نقرة مطولة = بدء/تبديل التحديد المتعدد
-                        onLongPress = { viewModel.toggleSelection(file.id) }
-                    )
+                    // الملفات الموضوعة للتو من صندوق المشاركة تدخل بتلاشي واضح
+                    FadeInIfHighlighted(highlight = file.id in recentlyPlaced) {
+                        FileRow(
+                            file = file,
+                            selectionMode = isSelecting,
+                            selected = file.id in selection,
+                            onClick = {
+                                if (isSelecting) viewModel.toggleSelection(file.id)
+                                else openFile(file)
+                            },
+                            onToggleFavorite = { viewModel.toggleFavorite(file) },
+                            // نقرة مطولة = بدء/تبديل التحديد المتعدد
+                            onLongPress = { viewModel.toggleSelection(file.id) }
+                        )
+                    }
                 }
             }
 
@@ -332,10 +363,12 @@ fun FilesScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
 
-        // زر عائم يفتح قائمة الإضافة المنبثقة (يُبنى فوق السقالة لضمان الوصول إليه)
+        // الأزرار العائمة: زر الإضافة + أيقونة صغيرة جنبه للملفات المشتركة الواردة
         if (!isSelecting) {
-            FloatingAddButton(
+            FilesFloatingActions(
                 padding = padding,
+                inboxCount = inboxItems.size,
+                onOpenInbox = { showInboxSheet = true },
                 onOpenMenu = { showAddMenuSheet = true }
             )
         } else {
@@ -403,6 +436,15 @@ fun FilesScreen(
                     showAddMenuSheet = false
                     showAudioRecorder = true
                 }
+            )
+        }
+
+        // لوحة صندوق المشاركة — الملفات الواردة من تطبيقات النظام
+        if (showInboxSheet) {
+            InboxSheet(
+                items = inboxItems,
+                onDismiss = { showInboxSheet = false },
+                onRemove = viewModel::removeInboxItem
             )
         }
 
@@ -505,24 +547,210 @@ fun FilesScreen(
 }
 
 /**
- * الزر العائم للإضافة — يفتح قائمة منبثقة سفلية (AddMenuSheet) بأربعة خيارات
- * بدل القائمة المنسدلة القديمة: رفع ملف، مجلد جديد، التقاط صورة، تسجيل صوتي.
+ * الأزرار العائمة أسفل شاشة الملفات:
+ *  - زر «إضافة» الموسع (كما كان) يفتح قائمة الإضافة المنبثقة.
+ *  - أيقونة صغيرة جنبه تظهر فقط عندما توجد ملفات مشتركة واردة من تطبيقات
+ *    النظام (واتساب وغيره)، بشارة تعرض عددها — نقرة تفتح لوحة الصندوق.
  */
 @Composable
-private fun FloatingAddButton(
+private fun FilesFloatingActions(
     padding: androidx.compose.foundation.layout.PaddingValues,
+    inboxCount: Int,
+    onOpenInbox: () -> Unit,
     onOpenMenu: () -> Unit
 ) {
     Box(Modifier.fillMaxSize()) {
-        ExtendedFloatingActionButton(
-            onClick = onOpenMenu,
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(padding)
                 .padding(16.dp),
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("إضافة") }
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            AnimatedVisibility(
+                visible = inboxCount > 0,
+                enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
+                exit = fadeOut(tween(300))
+            ) {
+                BadgedBox(
+                    badge = {
+                        Badge { Text(inboxCount.toString()) }
+                    }
+                ) {
+                    SmallFloatingActionButton(
+                        onClick = onOpenInbox,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.DriveFileMove,
+                            contentDescription = "الملفات المشتركة الواردة"
+                        )
+                    }
+                }
+            }
+
+            ExtendedFloatingActionButton(
+                onClick = onOpenMenu,
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("إضافة") }
+            )
+        }
+    }
+}
+
+/**
+ * شريط «ضعها هنا»: يظهر أعلى أي مجلد عندما تكون هناك ملفات مشتركة بانتظار
+ * مكان — ضغطة واحدة تنسخها كلها إلى المجلد المفتوح.
+ */
+@Composable
+private fun InboxPlacementBanner(
+    count: Int,
+    onPlace: () -> Unit
+) {
+    ElevatedCard(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.DriveFileMove,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = Formatters.fileCountLabel(count) + " مشتركة بانتظار مكان",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+            FilledTonalButton(onClick = onPlace) {
+                Text("ضعها هنا")
+            }
+        }
+    }
+}
+
+/** غلاف تلاشي: يُظهر المحتوى بانميشن دخول عندما يكون مُبرزاً، ومباشرة وإلا */
+@Composable
+private fun FadeInIfHighlighted(highlight: Boolean, content: @Composable () -> Unit) {
+    if (highlight) {
+        var visible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { visible = true }
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.94f, animationSpec = tween(800)),
+            content = content
         )
+    } else {
+        content()
+    }
+}
+
+/**
+ * لوحة صندوق المشاركة: قائمة الملفات الواردة من تطبيقات النظام مع إمكانية
+ * إهمال أي ملف. العناصر تدخل بتلاشي متدرج — «انميشن دخولها بشكل تلاشي».
+ * الوضع الفعلي في المجلدات يتم عبر شريط «ضعها هنا».
+ */
+@Composable
+private fun InboxSheet(
+    items: List<InboxItem>,
+    onDismiss: () -> Unit,
+    onRemove: (InboxItem) -> Unit
+) {
+    AppSheet(
+        title = "الملفات المشتركة الواردة",
+        onDismiss = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss) { Text("إغلاق") }
+        },
+        content = {
+            if (items.isEmpty()) {
+                Text(
+                    "لا ملفات مشتركة حالياً — شارك ملفات من أي تطبيق وستظهر هنا.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "ادخل المجلد الذي تريده واضغط «ضعها هنا» لنسخها إليه — أو أهمل ما لا تريده.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items.forEachIndexed { index, item ->
+                        InboxSheetRow(item = item, index = index, onRemove = { onRemove(item) })
+                    }
+                }
+            }
+        }
+    )
+}
+
+/** صف ملف واحد في لوحة الصندوق — دخول متدرج بتلاشي + تكبير */
+@Composable
+private fun InboxSheetRow(
+    item: InboxItem,
+    index: Int,
+    onRemove: () -> Unit
+) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(120L + index * 70L)
+        visible = true
+    }
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(450)) + scaleIn(initialScale = 0.85f, animationSpec = tween(450))
+    ) {
+        Card(
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = fileIcon(item.kind),
+                    contentDescription = null,
+                    tint = fileColor(item.kind),
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${item.extension.uppercase()} • ${Formatters.fileSize(item.size)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "إهمال الملف المشترك",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -42,6 +42,16 @@ class FileRepository @Inject constructor(
         return insertFromImport(imported, folderId)
     }
 
+    /**
+     * إدراج سجل ملف نسخته الفعلية موجودة سلفاً في المكتبة — مسار «صندوق
+     * المشاركة» حيث تُنسخ الملفات فور وصولها وتُدرج سجلاتها لاحقاً عند
+     * اختيار المستخدم المجلد الوجهة.
+     */
+    suspend fun insertSharedFile(file: FileEntity): FileEntity {
+        val id = fileDao.insert(file)
+        return file.copy(id = id)
+    }
+
     /** بناء سجل FileEntity من نتيجة حفظ/استيراد ناجحة وإدراجه في القاعدة */
     private suspend fun insertFromImport(imported: ImportedFile, folderId: Long?): FileEntity {
         val entity = FileEntity(
