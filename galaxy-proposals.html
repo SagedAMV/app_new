@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>معرض مقترحات واجهة المجرة — UniHub</title>
+<style>
+  :root{
+    --bg:#141816; --surface:#1B211E; --surface2:#2A312D;
+    --on:#E0E5E1; --muted:#A9B4AD; --outline:#3A423E;
+    --mint:#A3CDBB; --sage:#3E6B5E; --sand:#CDB894; --slate:#B4BDD3;
+    --gold:#C79A4B;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--on);
+    font-family:"Segoe UI", Roboto, "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    min-height:100vh;
+  }
+  /* ===== الشريط العلوي (Material 3 Top App Bar) ===== */
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(20,24,22,.86); backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--outline);
+    padding:14px 22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  .logo{
+    width:42px;height:42px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 35% 35%, #E8D9A0, #C79A4B 55%, #7A5B2E);
+    box-shadow:0 0 18px rgba(199,154,75,.35);
+  }
+  header h1{font-size:1.06rem; font-weight:700; letter-spacing:.2px}
+  header .sub{font-size:.78rem; color:var(--muted); margin-top:2px}
+  .grow{flex:1}
+  .count-badge{
+    background:var(--sage); color:#fff; border-radius:999px;
+    padding:6px 14px; font-size:.8rem; font-weight:600; white-space:nowrap;
+  }
+  .btn{
+    border:1px solid var(--outline); background:var(--surface);
+    color:var(--on); border-radius:999px; padding:9px 18px;
+    font-size:.85rem; cursor:pointer; font-family:inherit;
+    transition:background .2s, transform .15s;
+  }
+  .btn:hover{background:var(--surface2)}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:var(--sage); border-color:var(--sage); color:#fff; font-weight:600}
+  .btn.primary:hover{background:#47796a}
+  /* ===== شرائح التصفية (Filter Chips) ===== */
+  .chips{
+    display:flex; gap:8px; padding:14px 22px 4px; overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .chips::-webkit-scrollbar{display:none}
+  .chip{
+    border:1px solid var(--outline); background:transparent; color:var(--muted);
+    border-radius:999px; padding:7px 16px; font-size:.8rem; cursor:pointer;
+    white-space:nowrap; font-family:inherit; transition:all .2s;
+  }
+  .chip.active{background:var(--surface2); color:var(--mint); border-color:var(--mint)}
+  /* ===== الشبكة ===== */
+  .grid{
+    display:grid; gap:18px; padding:18px 22px 110px;
+    grid-template-columns:repeat(auto-fill, minmax(238px,1fr));
+    max-width:1420px; margin:0 auto;
+  }
+  .card{
+    background:var(--surface); border:1px solid var(--outline);
+    border-radius:18px; overflow:hidden; cursor:pointer;
+    transition:transform .22s, border-color .22s, box-shadow .22s;
+    position:relative;
+  }
+  .card:hover{transform:translateY(-4px); border-color:#4a554f; box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  .card.selected{border-color:var(--mint); box-shadow:0 0 0 1px var(--mint), 0 10px 30px rgba(62,107,94,.28)}
+  .cardHead{display:flex; align-items:center; gap:10px; padding:12px 14px 8px}
+  .num{
+    font-size:.72rem; font-weight:700; color:var(--mint);
+    background:rgba(163,205,187,.10); border:1px solid rgba(163,205,187,.3);
+    border-radius:8px; padding:4px 8px; flex:none;
+  }
+  .cardHead h3{font-size:.86rem; font-weight:700; line-height:1.35; flex:1}
+  .selBtn{
+    flex:none; width:32px; height:32px; border-radius:50%;
+    border:1.6px solid var(--outline); background:transparent; color:transparent;
+    cursor:pointer; font-size:1rem; line-height:1; transition:all .2s;
+  }
+  .card.selected .selBtn{background:var(--mint); border-color:var(--mint); color:#123A2E}
+  .ph{padding:0 14px}
+  .phFrame{
+    border-radius:20px; overflow:hidden; border:1px solid var(--outline);
+    aspect-ratio:1/2; background:#101614; position:relative;
+  }
+  .phFrame canvas{width:100%; height:100%; display:block}
+  .catTag{
+    position:absolute; top:8px; right:8px; z-index:2;
+    font-size:.62rem; color:var(--muted); background:rgba(20,24,22,.72);
+    border:1px solid var(--outline); padding:3px 9px; border-radius:999px;
+    backdrop-filter:blur(4px);
+  }
+  .card .desc{
+    padding:10px 14px 14px; font-size:.74rem; color:var(--muted); line-height:1.7;
+  }
+  /* ===== النافذة المنبثقة (M3 Dialog) ===== */
+  .modal{
+    position:fixed; inset:0; z-index:50; display:flex;
+    align-items:center; justify-content:center; padding:18px;
+    background:rgba(6,9,8,.66); backdrop-filter:blur(6px);
+  }
+  .modal.hidden{display:none}
+  .dialog{
+    background:var(--surface); border:1px solid var(--outline);
+    border-radius:26px; max-width:860px; width:100%; max-height:92vh;
+    overflow-y:auto; padding:26px; display:flex; gap:26px; flex-wrap:wrap;
+  }
+  .dialog .phoneCol{flex:none; margin:0 auto}
+  .dialog .phone{
+    width:min(330px, 78vw); aspect-ratio:9/19; border-radius:34px; overflow:hidden;
+    border:3px solid #0a0d0b; box-shadow:0 0 0 1px var(--outline), 0 24px 60px rgba(0,0,0,.55);
+    background:#101614; position:relative;
+  }
+  .dialog .phone canvas{width:100%; height:100%; display:block; touch-action:none}
+  .dialog .infoCol{flex:1; min-width:250px}
+  .dialog h2{font-size:1.25rem; margin-bottom:6px}
+  .mChip{
+    display:inline-block; font-size:.7rem; color:var(--mint);
+    border:1px solid rgba(163,205,187,.4); background:rgba(163,205,187,.08);
+    padding:4px 12px; border-radius:999px; margin-bottom:14px;
+  }
+  .dialog .descL{font-size:.9rem; color:var(--on); line-height:1.9; margin-bottom:14px}
+  .composeBox{
+    background:#141916; border:1px solid var(--outline); border-radius:14px;
+    padding:14px 16px; font-size:.78rem; color:var(--sand); line-height:1.9; margin-bottom:16px;
+  }
+  .composeBox b{color:var(--muted); font-weight:600; display:block; margin-bottom:4px; font-size:.72rem}
+  .faithNote{font-size:.68rem; color:var(--muted); margin-bottom:16px; line-height:1.7}
+  .mActions{display:flex; gap:10px; flex-wrap:wrap}
+  .closeX{
+    position:absolute; top:14px; left:16px; width:36px; height:36px; border-radius:50%;
+    border:1px solid var(--outline); background:var(--surface); color:var(--muted);
+    cursor:pointer; font-size:1rem; z-index:60;
+  }
+  /* ===== زر التصدير العائم (FAB) ===== */
+  .fab{
+    position:fixed; bottom:22px; left:22px; z-index:30;
+    background:linear-gradient(135deg, var(--sage), #2C5245); color:#fff;
+    border:none; border-radius:18px; padding:15px 24px; font-size:.92rem;
+    font-weight:700; cursor:pointer; font-family:inherit;
+    box-shadow:0 14px 34px rgba(20,40,32,.55);
+    display:flex; align-items:center; gap:10px;
+    transition:transform .18s;
+  }
+  .fab:hover{transform:translateY(-3px)}
+  .fab .dot{background:#fff; color:var(--sage); border-radius:999px; padding:1px 9px; font-size:.78rem}
+  /* ===== Snackbar ===== */
+  .snack{
+    position:fixed; bottom:24px; right:50%; transform:translateX(50%); z-index:70;
+    background:#ECF0EC; color:#232B27; padding:12px 22px; border-radius:12px;
+    font-size:.84rem; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
+  }
+  .snack.show{opacity:1; transform:translateX(50%) translateY(-6px)}
+  .intro{max-width:1420px; margin:0 auto; padding:20px 22px 0}
+  .intro p{font-size:.85rem; color:var(--muted); line-height:1.9; max-width:760px}
+  .intro b{color:var(--mint)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"></div>
+  <div>
+    <h1>معرض مقترحات واجهة المجرة — UniHub</h1>
+    <div class="sub">30 اقتراحاً لأنيميشن وتصميم شاشة «مجرّة المواد» • معاينة تحاكي Jetpack Compose 100٪</div>
+  </div>
+  <div class="grow"></div>
+  <span class="count-badge" id="countBadge">0 مختار</span>
+  <button class="btn" id="resetBtn">مسح الاختيارات</button>
+  <button class="btn primary" id="exportTopBtn">تصدير اختياراتي (md) ⬇</button>
+</header>
+
+<div class="intro">
+  <p>
+    كل بطاقة أدناه هي <b>معاينة حيّة</b> مبنية بألوان وقياسات شاشة المجرة الفعلية من الكود
+    (<b>GalaxyScreen.kt</b>): نفس التدرّج الخلفي، النجوم السبعون، المدارات البيضاوية الثلاثة، شمس «جامعتي»
+    والكواكب الستة لعينات المجلدات. اضغط أي بطاقة لفتح <b>معاينة كبيرة تفاعلية</b>، وعلّم ✓ على ما يعجبك،
+    ثم صدّر اختياراتك إلى ملف <b>اختيارات.md</b> مرتّب جاهز للتنفيذ في التطبيق.
+  </p>
+</div>
+
+<div class="chips" id="chips"></div>
+<main class="grid" id="grid"></main>
+
+<button class="fab" id="fab">تصدير اختياراتي <span class="dot" id="fabCount">0</span></button>
+
+<div class="modal hidden" id="modal">
+  <button class="closeX" id="closeBtn">✕</button>
+  <div class="dialog">
+    <div class="phoneCol">
+      <div class="phone"><canvas id="mCanvas"></canvas></div>
+    </div>
+    <div class="infoCol">
+      <span class="mChip" id="mCat"></span>
+      <h2 id="mTitle"></h2>
+      <p class="descL" id="mDesc"></p>
+      <div class="composeBox"><b>التنفيذ المقترح في Jetpack Compose</b><span id="mCompose"></span></div>
+      <p class="faithNote">🎯 المعاينة مرسومة بنفس قيم الألوان والقياسات في <span dir="ltr">GalaxyScreen.kt</span>
+      (تدرّج 101614→182220، تفلطح المدار 0.72، الزاوية الذهبية 137.5°، لوحة ألوان المجلدات) لتقدير النتيجة الواقعية قبل التنفيذ.</p>
+      <div class="mActions">
+        <button class="btn primary" id="mSelBtn">إضافة إلى اختياراتي ✓</button>
+        <button class="btn" id="mCloseBtn2">إغلاق</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="snack" id="snack"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   بيانات العينة: نفس لوحة ألوان المجلدات من Color.kt
+   ============================================================ */
+var FOLDERS = [
+  {n:"رياضيات",     c:"#4E7D6E", f:12},
+  {n:"فيزياء",      c:"#5B6478", f:8},
+  {n:"برمجة",       c:"#5E7A8A", f:15},
+  {n:"كيمياء",      c:"#8A5E5E", f:5},
+  {n:"تاريخ",       c:"#7A6A4F", f:9},
+  {n:"إنجليزي",     c:"#7D5A7A", f:6}
+];
+var CATS = ["حركة المدارات","الكواكب","الشمس والمركز","الخلفية والنجوم","التفاعل واللمس","تصاميم جذرية"];
+
+/* ============================================================
+   الخيارات الثلاثون — كل خيار: رقم، عنوان، فئة، وصف،
+   طريقة التنفيذ في Compose، وإعدادات محرك الرسم (cfg)
+   ============================================================ */
+var OPTIONS = [
+ {id:1, title:"عكس اتجاه المدارات", cat:"حركة المدارات",
+  desc:"الحلقة الوسطى تدور عكس الحلقتين الخارجيتين — يخلق إحساساً ميكانيكياً حياً بكواكب تتقاطع دون رتابة، مع الحفاظ على البطء المريح للبطارية.",
+  compose:"داخل <span dir='ltr'>GalaxySystem</span>: استبدال <span dir='ltr'>speed = 1f/(ringIndex+1)</span> بـ <span dir='ltr'>val dir = if (ringIndex==1) -1f else 1f</span> وضرب زاوية الدوران بها. صفر كلفة إضافية.",
+  cfg:{dirs:"alt"}},
+
+ {id:2, title:"عمق ثلاثي الأبعاد للمدارات", cat:"حركة المدارات",
+  desc:"الكوكب يتضاءل ويخفت قليلاً حين يكون في الجزء الخلفي من المدار ويتقدم ويكبر في الأمام — وهم عمق حقيقي من نفس الحسابات البيضاوية الحالية.",
+  compose:"حساب <span dir='ltr'>z = (sin(angle)+1)/2</span> ثم <span dir='ltr'>Modifier.graphicsLayer(scaleX = .72f+.42f*z, scaleY=...)</span> مع <span dir='ltr'>alpha</span>، و<span dir='ltr'>zIndex(z)</span> لترتيب الرسم.",
+  cfg:{depth:true}},
+
+ {id:3, title:"مدارات تتنفس", cat:"حركة المدارات",
+  desc:"أنصاف أقطار المدارات الثلاثة تنبض ببطء (±5٪) بطوراً غير متزامن، فتبدو المجرة ككائن حي يتنفس دون أي تشتيت بصري.",
+  compose:"<span dir='ltr'>animateFloat</span> على <span dir='ltr'>infiniteRepeatable(tween(6000))</span> لكل حلقة مع <span dir='ltr'>phase</span> مختلف، وضرب <span dir='ltr'>maxRadius * fraction * pulse</span>.",
+  cfg:{orbitPulse:true}},
+
+ {id:4, title:"سرعات كبلر الطبيعية", cat:"حركة المدارات",
+  desc:"مثل الفيزياء الحقيقية: الكواكب القريبة من الشمس أسرع والبعيدة أبطأ بشكل ملحوظ — يعطي النظام مصداقية فلكية هادئة.",
+  compose:"استبدال <span dir='ltr'>1f/(ringIndex+1)</span> بـ <span dir='ltr'>speed = 1f / pow(fraction, 1.25f) / 2.2f</span> حيث <span dir='ltr'>fraction</span> نسبة نصف قطر الحلقة.",
+  cfg:{speed:"kepler"}},
+
+ {id:5, title:"الدخول الحلزوني", cat:"حركة المدارات",
+  desc:"عند فتح الشاشة تنزلق الكواكب واحداً تلو الآخر من المركز إلى مداراتها بمسار حلزوني ناعم — لحظة افتتاحية ساحرة تتكرر في المعاينة.",
+  compose:"<span dir='ltr'>Animatable</span> لكل كوكب مع <span dir='ltr'>launch { delay(i*300); animateTo(1f, tween(1500, easing=FastOutSlowInEasing)) }</span> وضرب نصف القطر والزاوية بالتقدم.",
+  cfg:{spiral:true}},
+
+ {id:6, title:"ذيول المذنّبات", cat:"حركة المدارات",
+  desc:"خلف كل كوكب ذيل ضوئي خفيف يتلاشى تدريجياً كأنه مذنّب — يوضّح اتجاه الحركة ويضيف أناقة دون ضجيج.",
+  compose:"داخل <span dir='ltr'>Canvas</span>: رسم 12–16 نقطة على زوايا سابقة من المدار بنقص شفافية خطي <span dir='ltr'>alpha * (1-k/N)</span> ونصف قطر متناقص، قبل رسم الكوكب نفسه.",
+  cfg:{comet:true}},
+
+ {id:7, title:"كواكب غازية مخططة", cat:"الكواكب",
+  desc:"استلهام من المشتري: شرائط أفقية داكنة فاتحة داخل كل كوكب تجعل المجلدات تبدو كعوالم حقيقية لا دوائر مسطحة.",
+  compose:"<span dir='ltr'>drawWithContent</span> + <span dir='ltr'>clipPath(CircleShape)</span> ثم رسم 3–4 أقواس بيضاوية بلون <span dir='ltr'>color.copy(alpha=.25f)</span> مائلة قليلاً فوق التدرّج الشعاعي.",
+  cfg:{planet:"striped"}},
+
+ {id:8, title:"حلقات زُحل", cat:"الكواكب",
+  desc:"المجلدات الكبيرة (8+ ملفات) تحصل على حلقة زُحل ذهبية — تمييز بصري فوري للمواد الأكثر محتوى.",
+  compose:"رسم نصف الحلقة الخلفي <span dir='ltr'>drawOval(style=Stroke)</span> قبل الكوكب والأمامي بعده، بميل عبر <span dir='ltr'>rotate(18f)</span> حول مركز الكوكب.",
+  cfg:{planet:"ringed"}},
+
+ {id:9, title:"أقمار تابعة", cat:"الكواكب",
+  desc:"أغنى مجلد بالمحتوى يصبح له قمر صغير يدور حوله — استعارة جميلة: المادة الكبيرة لها توابعها.",
+  compose:"حلقة <span dir='ltr'>rememberInfiniteTransition</span> ثانية بفترة 6 ثوانٍ لحساب زاوية القمر، ورسم دائرة نصف قطرها <span dir='ltr'>planetSize*0.22</span> على مدار <span dir='ltr'>*1.9</span>.",
+  cfg:{moons:true}},
+
+ {id:10, title:"نبض التوهج القلبي", cat:"الكواكب",
+  desc:"هالة كل كوكب تنبض بنعومة كنبض قلب — حيوية لطيفة تجعل الشاشة تشعر بالحياة دون حركة مدارية إضافية.",
+  compose:"<span dir='ltr'>animateFloat(0f..1f, infiniteRepeatable(tween(2800)))</span> ثم <span dir='ltr'>glowRadius = r + 6f + 3.5f*sin(...)</span> في <span dir='ltr'>drawBehind</span>.",
+  cfg:{planet:"glowPulse"}},
+
+ {id:11, title:"كواكب سائلة متشكّلة", cat:"الكواكب",
+  desc:"حواف الكواكب تتماوج كقطرات سائلة بطيئة — لمسة عضوية فنية مختلفة كلياً عن الدوائر الهندسية.",
+  compose:"<span dir='ltr'>Path</span> قطبي: <span dir='ltr'>r(a) = R*(1 + .10*sin(3a+t) + .06*sin(5a-t))</span> على 24 نقطة مع <span dir='ltr'>close()</span>، يُحدَّث كل إطار عبر قيمة متحركة.",
+  cfg:{planet:"blob"}},
+
+ {id:12, title:"حلقات تقدّم حول الكواكب", cat:"الكواكب",
+  desc:"قوس حول كل كوكب يوضح نسبة ملفاته مقارنة بأكبر مادة — بيانات مفيدة مدمجة في الجمالية نفسها.",
+  compose:"<span dir='ltr'>drawArc(startAngle=-90f, sweepAngle=360f*ratio, useCenter=false, style=Stroke(3.dp))</span> بلون <span dir='ltr'>MintSoft</span> فوق مسار خافت.",
+  cfg:{planet:"progress"}},
+
+ {id:13, title:"هالة شمسية دوّارة", cat:"الشمس والمركز",
+  desc:"أشعة ضوئية ناعمة تدور ببطء حول شمس الجامعة وتتوهج — تجعل المركز مهيباً دون سطوع مزعج.",
+  compose:"طبقة <span dir='ltr'>Canvas</span> قبل الشمس: 12 مثلثاً شعاعياً بتدرّج <span dir='ltr'>Brush.radialGradient</span> شفافية .06 مع دوران <span dir='ltr'>animateFloat(0..360, tween(40000))</span>.",
+  cfg:{sun:"corona"}},
+
+ {id:14, title:"النواة النابضة", cat:"الشمس والمركز",
+  desc:"شمس «جامعتي» تتنفس تكبيراً وتصغيراً (±5٪) ببطء — بثّ الحياة في قلب المجرة بأقل كلفة ممكنة.",
+  compose:"<span dir='ltr'>val pulse by transition.animateFloat(1f, 1.05f, infiniteRepeatable(tween(3200, easing=FastOutSlowInEasing), RepeatMode.Reverse))</span> ثم <span dir='ltr'>Modifier.scale(pulse)</span> على الشمس.",
+  cfg:{sun:"pulse"}},
+
+ {id:15, title:"الثقب الأسود", cat:"الشمس والمركز",
+  desc:"وضع درامي: المركز ثقب أسود بقرص تراكمي ذهبي متوهج بدل الشمس — لعشاق الفخامة الكونية الداكنة.",
+  compose:"استبدال تدرّج الشمس بدائرة <span dir='ltr'>Color(0xFF06090B)</span> محاطة بحلقات بيضاوية <span dir='ltr'>Stroke</span> بألوان <span dir='ltr'>#E8D9A0/#C79A4B</span> شفافة + توهج خلفي.",
+  cfg:{sun:"blackhole"}},
+ {id:16, title:"شمس ببريق مداري", cat:"الشمس والمركز",
+  desc:"نقاط ضوئية صغيرة لامعة تدور حول الشمس بسرعات متفاوتة وتتلألأ — تفاصيل مجوهراتية رقيقة تثرِي المركز.",
+  compose:"قائمة 5 جسيمات بزاوية <span dir='ltr'>angle = t*(0.8f+k*0.13f)</span> على نصف قطر <span dir='ltr'>54.dp</span> مع شفافية <span dir='ltr'>abs(sin(...))</span> داخل نفس <span dir='ltr'>Canvas</span> الحالي.",
+  cfg:{sunSparkles:true}},
+
+ {id:17, title:"نجوم بمنظور ثلاثي الطبقات", cat:"الخلفية والنجوم",
+  desc:"النجوم تنقسم لثلاث طبقات تنجرف أفقياً بسرعات مختلفة — إيحاء باراللاكس يجعل الخلفية عميقة بلا تكلفة تذكر.",
+  compose:"تقسيم قائمة <span dir='ltr'>stars</span> على <span dir='ltr'>i % 3</span> وإزاحة <span dir='ltr'>x = (x + t*speed*layer) % width</span> داخل <span dir='ltr'>Canvas</span> نفسه.",
+  cfg:{bg:"parallax"}},
+
+ {id:18, title:"شُهُب عابرة", cat:"الخلفية والنجوم",
+  desc:"شهاب يقطع السماء كل بضع ثوانٍ بذيل ضوئي متلاشٍ — لحظة مفاجأة صغيرة تكسر ثبات الخلفية.",
+  compose:"حساب <span dir='ltr'>phase = (t % 3.8f)/3.8f</span> ورسم خط بتدرّج <span dir='ltr'>Brush.linearGradient</span> شفاف الذيل عند <span dir='ltr'>phase < 0.22</span> بموضع عشوائي مبذور.",
+  cfg:{bg:"shooting"}},
+
+ {id:19, title:"سديم بألوان السِمة", cat:"الخلفية والنجوم",
+  desc:"سحب سديمية ناعمة بألوان لوحة التطبيق نفسها (المرمية، الرملي، الأزرق الرمادي) تنجرف ببطء شديد — عمق لوني دافئ.",
+  compose:"3–4 دوائر بتدرّج شعاعي <span dir='ltr'>Brush.radialGradient</span> شفافة (~0.14) بمواقع <span dir='ltr'>sin(t*0.1)</span> قبل رسم النجوم.",
+  cfg:{bg:"nebula"}},
+
+ {id:20, title:"أشفاق قطبية", cat:"الخلفية والنجوم",
+  desc:"أشرطة ضوئية متموجة كالأورورا تتراقص بهدوء أعلى الشاشة بدرجة الأخضر المرمري — أجواء شمال الأرض في تطبيقك.",
+  compose:"<span dir='ltr'>Path</span> أفقي بتموج <span dir='ltr'>sin(x*0.02 + t)</span> يُملأ بتدرّج عمودي شفاف من <span dir='ltr'>MintSoft</span>، طبقتان بطور مختلف.",
+  cfg:{bg:"aurora"}},
+
+ {id:21, title:"غبار نجمي هابط", cat:"الخلفية والنجوم",
+  desc:"جسيمات دقيقة تهطل ببطء كثلج كوني مع تمايل جانبي خفيف — سكينة بصرية مطلقة.",
+  compose:"إعادة استخدام نقاط النجوم: <span dir='ltr'>y = (y + t*speed) % height</span> مع <span dir='ltr'>x += sin(t)*3</span> وشفافية أقل (0.3).",
+  cfg:{bg:"dust"}},
+
+ {id:22, title:"أبراج متصلة", cat:"الخلفية والنجوم",
+  desc:"خطوط رفيعة تصل الكواكب ببعضها كشبكة أبراج — تحوّل المدارات إلى خريطة علاقات بين موادك.",
+  compose:"بعد حساب مواقع الكواكب: <span dir='ltr'>Path.moveTo/lineTo</span> بين المواضع المتعاقبة مع <span dir='ltr'>Stroke(1.dp)</span> بلون <span dir='ltr'>rgba(163,205,187,.3)</span>.",
+  cfg:{bg:"constellation"}},
+
+ {id:23, title:"تموّج اللمس", cat:"التفاعل واللمس",
+  desc:"عند الضغط على كوكب تنطلق منه حلقة تموّج ويتمدد الكوكب ثم يعود — استجابة لمسية مرضية (جرّب النقر في المعاينة الكبيرة).",
+  compose:"<span dir='ltr'>Modifier.pointerInput { detectTapGestures }</span> + دائرة تتمدد عبر <span dir='ltr'>animateFloat</span> من <span dir='ltr'>r</span> إلى <span dir='ltr'>r+46dp</span> بتلاشي شفافية، مع <span dir='ltr'>scale</span> نابض للكوكب.",
+  cfg:{interaction:"ripple"}},
+
+ {id:24, title:"تدوير بالسحب مع قصور", cat:"التفاعل واللمس",
+  desc:"المستخدم يسحب الشاشة لتدوير المجرة بيده، وعند الإفلات تستمر بالدوران ثم تتباطأ تدريجياً كعجلة حقيقية (جرّب السحب).",
+  compose:"<span dir='ltr'>detectDragGestures</span> يجمع <span dir='ltr'>velocity</span>، ثم في <span dir='ltr'>LaunchedEffect</span>: <span dir='ltr'>rotation += velocity*dt; velocity *= exp(-1.25f*dt)</span>.",
+  cfg:{interaction:"drag"}},
+
+ {id:25, title:"تركيز بالضغطة", cat:"التفاعل واللمس",
+  desc:"الضغط على كوكب يكبّره بتركيز ويخفت الباقون — إبراز فوري للمادة المطلوبة قبل فتحها (جرّب النقر).",
+  compose:"حالة <span dir='ltr'>focusedFolderId</span> + <span dir='ltr'>Animatable</span> للتكبير 1.5× والشفافية 0.35 للبقية، مع <span dir='ltr'>spring(stiffness=Spring.StiffnessMedium)</span>.",
+  cfg:{interaction:"focus"}},
+
+ {id:26, title:"اهتزاز الضغط اللطيف", cat:"التفاعل واللمس",
+  desc:"الكوكب المضغوط يهتز يميناً ويساراً بتسارع لطيف كأنه يرفض أن يُضغط — شخصية مرحة بأقل حركة ممكنة.",
+  compose:"<span dir='ltr'>animateFloatAsState</span> مع <span dir='ltr'>spring(dampingRatio = Bouncy)</span> على <span dir='ltr'>offset.x = sin(t*26)*2.dp</span> أثناء الضغط فقط.",
+  cfg:{interaction:"wobble"}},
+
+ {id:27, title:"المستعر الأعظم", cat:"التفاعل واللمس",
+  desc:"دورة درامية كل 7 ثوانٍ: الكواكب تنجذب للشمس، وميض انفجار ذهبي، شظايا ضوئية، ثم تعود الكواكب لمداراتها — مشهد لا يُنسى.",
+  compose:"<span dir='ltr'>phase = (t % 7f)/7f</span> تقسم الزمن لقطعات (انجذاب/وميض/شظايا/عودة) وتحسب الموضع بـ <span dir='ltr'>lerp</span> بين الموضع الطبيعي والمركز — بلا مكتبات خارجية.",
+  cfg:{fx:"supernova"}},
+
+ {id:28, title:"الخريطة السماوية العمودية", cat:"تصاميم جذرية",
+  desc:"تصميم جذري مختلف: بدل المدارات، موادك نجوم على مسار عمودي يمر عبر الشاشة ويتحرك ببطء — أسلوب قصصي هادئ.",
+  compose:"استبدال <span dir='ltr'>GalaxySystem</span> بـ <span dir='ltr'>LazyColumn</span> بخط مركزي <span dir='ltr'>drawBehind</span> وعناصر متبادلة اليمين/اليسار، مع حركة تلقائية بـ <span dir='ltr'>rememberScrollState</span> متحرك أو <span dir='ltr'>Animatable</span>.",
+  cfg:{layout:"sky", hint:"خريطة سماوية — تمرير ذاتي بطيء"}},
+
+ {id:29, title:"خلية سداسية", cat:"تصاميم جذرية",
+  desc:"تصميم جذري مختلف: كل مادة داخل خلية سداسية كقرص عسل فضائي، مع تنفس خفيف متعاقب — تنظيم هندسي صارم وجميل.",
+  compose:"<span dir='ltr'>FlowRow</span> أو <span dir='ltr'>Layout</span> مخصص يوزع الخلايا، وكل خلية <span dir='ltr'>Path</span> سداسي مع <span dir='ltr'>clip</span>، والتنفس عبر <span dir='ltr'>animateFloat</span> بطور <span dir='ltr'>i*1.1</span>.",
+  cfg:{layout:"hex"}},
+
+ {id:30, title:"قرص الساعات", cat:"تصاميم جذرية",
+  desc:"تصميم جذري مختلف: الكواكب على علامات قرص كقرص الساعة، ومؤشر ضوئي يدور ببطء يضيء المادة التي يمر عليها — إحساس أجهزة القياس الفلكية.",
+  compose:"رسم 12 علامة <span dir='ltr'>Canvas</span> على زوايا 30°، والمؤشر <span dir='ltr'>animateFloat(0..360, tween(40000))</span>، وإبراز الكوكب حين <span dir='ltr'>abs(angleDiff) < 25°</span>.",
+  cfg:{layout:"dial"}}
+];
+
+/* ============================================================
+   محرك الرسم — يحاكي GalaxyScreen.kt بنفس القيم
+   ============================================================ */
+function mulberry(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; var t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+var STARS=(function(){ var r=mulberry(42), a=[], i; for(i=0;i<70;i++) a.push({x:r(),y:r(),p:r()}); return a; })();
+function hexRGB(c){ var n=parseInt(c.slice(1),16); return ((n>>16)&255)+","+((n>>8)&255)+","+(n&255); }
+function hexA(c,a){ return "rgba("+hexRGB(c)+","+a+")"; }
+function easeOut(p){ return 1-Math.pow(1-p,3); }
+function easeInOut(p){ return p<0.5 ? 4*p*p*p : 1-Math.pow(-2*p+2,3)/2; }
+function pad(id){ return String(id).padStart(2,"0"); }
+
+function makeItem(canvas,w,h,cfg,kind){
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+  if(w<10) w=210; if(h<10) h=420;
+  canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr);
+  canvas._cssW=w; canvas._cssH=h;
+  var ctx=canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return { canvas:canvas, ctx:ctx, cv:{w:w,h:h,u:Math.min(w/340,h/646)}, cfg:cfg, kind:kind,
+    visible:(kind==="modal"), last:0, planets:[], _sn:0, _snPh:0,
+    st:{extra:0,vel:0,ripples:[],focus:-1,focusT:-9,lastRip:-9,lastRipIdx:-1,lastFoc:-9,lastFlick:-9,drag:false,lastX:0} };
+}
+
+function drawStars(ctx,cv,t,cfg){
+  var w=cv.w,h=cv.h,u=cv.u,i,s;
+  for(i=0;i<STARS.length;i++){
+    s=STARS[i];
+    var x=s.x*w, y=s.y*h, am=1;
+    if(cfg.bg==="parallax"){ var layer=i%3; x=(x+t*(3+layer*5)*u)%w; }
+    if(cfg.bg==="dust"){ y=(y+t*(7+s.p*10)*u)%h; x+=Math.sin(t*0.5+s.p*6)*3*u; am=0.7; }
+    var alpha=(0.25+0.55*Math.abs(Math.sin((t/4+s.p)*6.283)))*am;
+    ctx.globalAlpha=alpha*0.8; ctx.fillStyle="#ffffff";
+    ctx.beginPath(); ctx.arc(x,y,(1.2+s.p*1.6)*u*0.9,0,6.283); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  if(cfg.bg==="shooting"){
+    var period=3.8, k=Math.floor(t/period), ph=(t%period)/period;
+    if(ph<0.22){
+      var rnd=mulberry(k+7), sx=rnd()*w*0.9, sy=rnd()*h*0.35, p=ph/0.22;
+      var len=95*u, dx=len*0.9, dy=len*0.45;
+      var hx=sx+dx*p*1.7, hy=sy+dy*p*1.7;
+      var g=ctx.createLinearGradient(hx-dx,hy-dy,hx,hy);
+      g.addColorStop(0,"rgba(255,255,255,0)"); g.addColorStop(1,"rgba(255,255,255,"+(0.9*(1-p*0.5))+")");
+      ctx.strokeStyle=g; ctx.lineWidth=1.5*u; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(hx-dx,hy-dy); ctx.lineTo(hx,hy); ctx.stroke();
+    }
+  }
+}
+
+function drawNebula(ctx,cv,t){
+  var w=cv.w,h=cv.h,m=Math.min(w,h);
+  var blobs=[[0.25,0.28,0.55,"62,107,94",0.11],[0.76,0.2,0.45,"205,184,148",0.09],[0.62,0.78,0.6,"91,100,120",0.12],[0.18,0.72,0.4,"163,205,187",0.07]];
+  for(var i=0;i<blobs.length;i++){
+    var b=blobs[i];
+    var bx=(b[0]+Math.sin(t*b[4]+i*2)*0.06)*w, by=(b[1]+Math.cos(t*b[4]*1.3+i)*0.05)*h, R=b[2]*m;
+    var g=ctx.createRadialGradient(bx,by,0,bx,by,R);
+    g.addColorStop(0,"rgba("+b[3]+",0.16)"); g.addColorStop(1,"rgba("+b[3]+",0)");
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+}
+
+function drawAurora(ctx,cv,t){
+  var w=cv.w,h=cv.h,u=cv.u;
+  for(var band=0;band<2;band++){
+    var baseY=h*(band?0.26:0.14), amp=(band?9:13)*u, alpha=(band?0.09:0.13);
+    ctx.beginPath(); ctx.moveTo(0,0);
+    for(var x=0;x<=w;x+=8){
+      var y=baseY+Math.sin(x*0.018+t*(band?0.6:0.9)+band*2)*amp+Math.sin(x*0.007-t*0.4)*amp*0.6;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(w,0); ctx.closePath();
+    var g=ctx.createLinearGradient(0,baseY+amp*1.5,0,0);
+    g.addColorStop(0,"rgba(163,205,187,"+alpha+")"); g.addColorStop(1,"rgba(163,205,187,0)");
+    ctx.fillStyle=g; ctx.fill();
+  }
+}
+
+function drawOrbits(ctx,cv,t,cfg){
+  var cx=cv.w/2, cy=cv.h/2-12*cv.u;
+  var maxR=Math.max(36*cv.u, Math.min(cv.w,cv.h)/2-52*cv.u);
+  var fr=[0.34,0.66,1];
+  for(var ri=0;ri<3;ri++){
+    var pulse=cfg.orbitPulse?(1+0.05*Math.sin(t*0.9+ri*1.8)):1;
+    var rx=maxR*fr[ri]*pulse, ry=rx*0.72;
+    ctx.beginPath(); ctx.ellipse(cx,cy,rx,ry,0,0,6.283);
+    ctx.strokeStyle="rgba(255,255,255,0.10)"; ctx.lineWidth=1.2*cv.u; ctx.stroke();
+  }
+}
+
+function drawSun(ctx,cv,t,cfg){
+  var cx=cv.w/2, cy=cv.h/2-12*cv.u, u=cv.u, R=44*u, k;
+  if(cfg.sun==="blackhole"){
+    var g0=ctx.createRadialGradient(cx,cy,R*0.3,cx,cy,R*2.1);
+    g0.addColorStop(0,"rgba(199,154,75,0.30)"); g0.addColorStop(1,"rgba(199,154,75,0)");
+    ctx.fillStyle=g0; ctx.beginPath(); ctx.arc(cx,cy,R*2.1,0,6.283); ctx.fill();
+    var rot=t*0.12;
+    for(k=0;k<3;k++){
+      ctx.beginPath();
+      ctx.ellipse(cx,cy,R*(1.32+k*0.30),R*(0.40+k*0.10),rot*0.25+k*0.14,0,6.283);
+      ctx.strokeStyle="rgba(232,217,160,"+(0.5-k*0.14)+")"; ctx.lineWidth=(2.6-k*0.7)*u; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,R*0.66,0,6.283); ctx.fillStyle="#06090B"; ctx.fill();
+    ctx.strokeStyle="rgba(232,217,160,0.55)"; ctx.lineWidth=1.4*u; ctx.stroke();
+    ctx.fillStyle="#E8D9A0"; ctx.font="600 "+(11*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("جامعتي",cx,cy);
+    return;
+  }
+  if(cfg.sun==="corona"){
+    var rayRot=t*0.22;
+    for(var i=0;i<12;i++){
+      var a=rayRot+i*Math.PI/6;
+      var L=R*(1.75+0.15*Math.sin(t*1.3+i));
+      var x1=cx+Math.cos(a)*R*1.02, y1=cy+Math.sin(a)*R*1.02;
+      var x2=cx+Math.cos(a)*L, y2=cy+Math.sin(a)*L;
+      var g2=ctx.createLinearGradient(x1,y1,x2,y2);
+      g2.addColorStop(0,"rgba(232,217,160,0.20)"); g2.addColorStop(1,"rgba(232,217,160,0)");
+      ctx.strokeStyle=g2; ctx.lineWidth=5*u; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    }
+    var g3=ctx.createRadialGradient(cx,cy,R*0.5,cx,cy,R*1.9);
+    g3.addColorStop(0,"rgba(232,217,160,0.20)"); g3.addColorStop(1,"rgba(232,217,160,0)");
+    ctx.fillStyle=g3; ctx.beginPath(); ctx.arc(cx,cy,R*1.9,0,6.283); ctx.fill();
+  }
+  var scale=1;
+  if(cfg.sun==="pulse") scale=1+0.05*Math.sin(t*1.8);
+  R*=scale;
+  var g=ctx.createRadialGradient(cx-R*0.25,cy-R*0.25,R*0.1,cx,cy,R);
+  g.addColorStop(0,"#E8D9A0"); g.addColorStop(0.55,"#C79A4B"); g.addColorStop(1,"#7A5B2E");
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,6.283); ctx.fillStyle=g; ctx.fill();
+  ctx.fillStyle="#2A2210"; ctx.font="700 "+(12.5*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("جامعتي",cx,cy);
+}
+
+function drawSunSparkles(ctx,cv,t){
+  var cx=cv.w/2, cy=cv.h/2-12*cv.u, u=cv.u;
+  for(var k=0;k<5;k++){
+    var a=t*(0.8+k*0.13)+k*2.2;
+    var rr=(54+6*Math.sin(t*0.9+k*1.7))*u;
+    var x=cx+Math.cos(a)*rr, y=cy+Math.sin(a)*rr*0.8;
+    var al=0.35+0.55*Math.abs(Math.sin(t*1.4+k*2));
+    ctx.fillStyle="rgba(232,217,160,"+al+")";
+    ctx.beginPath(); ctx.arc(x,y,1.6*u,0,6.283); ctx.fill();
+    ctx.strokeStyle="rgba(232,217,160,"+(al*0.5)+")"; ctx.lineWidth=0.8*u;
+    ctx.beginPath(); ctx.moveTo(x-4*u,y); ctx.lineTo(x+4*u,y); ctx.moveTo(x,y-4*u); ctx.lineTo(x,y+4*u); ctx.stroke();
+  }
+}
+
+function computePlanets(item,t){
+  var cv=item.cv, cfg=item.cfg, st=item.st;
+  var w=cv.w,h=cv.h,u=cv.u;
+  var cx=w/2, cy=h/2-12*u;
+  var maxR=Math.max(36*u, Math.min(w,h)/2-52*u);
+  var fr=[0.34,0.66,1];
+  var rotBase=t*(360/150)+(st.extra||0);
+  var focActive=(cfg.interaction==="focus" && st.focus>=0);
+  var focK=focActive?easeOut(Math.min(1,(t-st.focusT)/0.4)):0;
+  var arr=[],i;
+  for(i=0;i<FOLDERS.length;i++){
+    var f=FOLDERS[i], ring=i%3, frac=fr[ring];
+    var dir=cfg.dirs==="alt"?(ring===1?-1:1):(cfg.dirs==="rev"?-1:1);
+    var sp=cfg.speed==="kepler"?1/(Math.pow(frac,1.25)*2.2):1/(ring+1);
+    var pulse=cfg.orbitPulse?(1+0.05*Math.sin(t*0.9+ring*1.8)):1;
+    var R=maxR*frac*pulse;
+    var ang=(i*137.5+rotBase*sp*dir)*Math.PI/180;
+    var entry=1;
+    if(cfg.spiral){
+      var L=t%9, d=0.2+i*0.3;
+      var p=Math.min(1,Math.max(0,(L-d)/1.5)); entry=1-Math.pow(1-p,3);
+      ang+=(1-entry)*4.2;
+    }
+    var rr=R*entry;
+    var x=cx+rr*Math.cos(ang), y=cy+rr*0.72*Math.sin(ang);
+    var pr=(30+Math.min(f.f*2,18))/2*u;
+    var scale=1, alpha=Math.min(1,entry*1.4);
+    if(cfg.depth){ var z=(Math.sin(ang)+1)/2; scale=0.72+0.42*z; alpha*=(0.72+0.28*z); }
+    if(cfg.spiral && entry<=0) alpha=0;
+    arr.push({x:x,y:y,r:pr*scale,color:f.c,f:f,ring:ring,ang:ang,R:R,dir:dir,alpha:alpha,scale:scale,i:i});
+  }
+  if(cfg.fx==="supernova"){
+    for(i=0;i<arr.length;i++){ arr[i].nx=arr[i].x; arr[i].ny=arr[i].y; }
+    var T=7, ph=(t%T)/T;
+    if(ph<0.2){ var k1=easeInOut(ph/0.2);
+      for(i=0;i<arr.length;i++){ arr[i].x=arr[i].nx+(cx-arr[i].nx)*k1; arr[i].y=arr[i].ny+(cy-arr[i].ny)*k1; }
+      item._sn=1; item._snPh=ph/0.2;
+    } else if(ph<0.34){ for(i=0;i<arr.length;i++) arr[i].alpha=0; item._sn=2; item._snPh=(ph-0.2)/0.14;
+    } else if(ph<0.56){ for(i=0;i<arr.length;i++) arr[i].alpha=0; item._sn=3; item._snPh=(ph-0.34)/0.22;
+    } else if(ph<0.82){ var k2=easeInOut((ph-0.56)/0.26);
+      for(i=0;i<arr.length;i++){ arr[i].x=cx+(arr[i].nx-cx)*k2; arr[i].y=cy+(arr[i].ny-cy)*k2; arr[i].alpha=k2; }
+      item._sn=4; item._snPh=0;
+    } else { item._sn=0; item._snPh=0; }
+  }
+  if(focActive){
+    for(i=0;i<arr.length;i++){
+      if(arr[i].i===st.focus){ arr[i].scale*=1+0.5*focK; arr[i].r*=1+0.5*focK; }
+      else { arr[i].alpha*=1-0.65*focK; }
+    }
+  }
+  if(cfg.interaction==="wobble"){
+    var cyc=Math.floor(t/3.5), wt=t%3.5;
+    if(wt<0.9){ var idx=cyc%6, fade=Math.sin(Math.PI*wt/0.9), pw=arr[idx];
+      pw.x+=Math.sin(t*26)*2.2*u*fade; pw.scale*=1-0.05*fade; pw.r*=1-0.05*fade; }
+  }
+  if(cfg.interaction==="ripple" && st.lastRipIdx>=0){
+    var dt2=t-st.lastRip;
+    if(dt2<0.6){ var pb=arr[st.lastRipIdx], bump=1+0.2*Math.exp(-5*dt2); pb.scale*=bump; pb.r*=bump; }
+  }
+  if(cfg.depth) arr.sort(function(a,b){ return a.scale-b.scale; });
+  return arr;
+}
+
+function blobPath(ctx,x,y,r,t,i){
+  ctx.beginPath();
+  for(var k=0;k<=26;k++){
+    var a=k/26*6.283;
+    var rr=r*(1+0.10*Math.sin(3*a+t*1.4+i)+0.06*Math.sin(5*a-t*1.1));
+    var px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
+    if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+
+function ringHalf(ctx,x,y,r,u,front){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(-0.3);
+  ctx.beginPath(); ctx.ellipse(0,0,r*1.75,r*0.55,0,front?0:Math.PI,front?Math.PI:Math.PI*2);
+  ctx.strokeStyle="rgba(232,217,160,0.75)"; ctx.lineWidth=2.2*u; ctx.stroke();
+  ctx.restore();
+}
+
+function progressArc(ctx,x,y,r,files,u){
+  var R2=r+4.5*u;
+  ctx.beginPath(); ctx.arc(x,y,R2,0,6.283);
+  ctx.strokeStyle="rgba(255,255,255,0.12)"; ctx.lineWidth=2.6*u; ctx.stroke();
+  var ratio=Math.min(1,files/15);
+  ctx.beginPath(); ctx.arc(x,y,R2,-Math.PI/2,-Math.PI/2+6.283*ratio);
+  ctx.strokeStyle="#A3CDBB"; ctx.lineWidth=2.6*u; ctx.lineCap="round"; ctx.stroke(); ctx.lineCap="butt";
+}
+
+function drawTail(ctx,p,cv){
+  var cx=cv.w/2, cy=cv.h/2-12*cv.u, N=12;
+  for(var k=1;k<=N;k++){
+    var ak=p.ang-p.dir*k*0.05*(p.ring===0?1.6:(p.ring===1?1.2:1));
+    var x=cx+p.R*Math.cos(ak), y=cy+p.R*0.72*Math.sin(ak);
+    var fade=1-k/N;
+    ctx.globalAlpha=fade*0.25*p.alpha;
+    ctx.beginPath(); ctx.arc(x,y,Math.max(0.5,p.r*0.75*fade),0,6.283);
+    ctx.fillStyle=p.color; ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawPlanetBody(ctx,p,cfg,t,u,i){
+  if(p.alpha<=0.01) return;
+  var x=p.x,y=p.y,r=p.r;
+  ctx.save(); ctx.globalAlpha=p.alpha;
+  var gr=r+6*u, ga=0.25;
+  if(cfg.planet==="glowPulse"){ gr=r+6*u+Math.sin(t*2.2+i*1.1)*3.2*u; ga=0.20+0.08*Math.sin(t*2.2+i*1.1); }
+  ctx.beginPath(); ctx.arc(x,y,Math.max(1,gr),0,6.283); ctx.fillStyle=hexA(p.color,Math.max(0.05,ga)); ctx.fill();
+  if(cfg.planet==="ringed" && p.f.f>=8) ringHalf(ctx,x,y,r,u,false);
+  var g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.15,x,y,Math.max(1,r));
+  g.addColorStop(0,hexA(p.color,0.95)); g.addColorStop(1,hexA(p.color,0.6));
+  ctx.beginPath();
+  if(cfg.planet==="blob") blobPath(ctx,x,y,r,t,i); else ctx.arc(x,y,r,0,6.283);
+  ctx.fillStyle=g; ctx.fill();
+  if(cfg.planet==="striped"){
+    ctx.save(); ctx.beginPath(); ctx.arc(x,y,r,0,6.283); ctx.clip();
+    ctx.strokeStyle="rgba(20,26,23,0.35)";
+    var offs=[-0.5,-0.1,0.35];
+    for(var s2=0;s2<3;s2++){
+      ctx.lineWidth=r*0.2;
+      ctx.beginPath(); ctx.ellipse(x,y+offs[s2]*r,r*1.05,r*0.32,-0.18,0,6.283); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if(cfg.planet==="ringed" && p.f.f>=8) ringHalf(ctx,x,y,r,u,true);
+  if(cfg.planet==="progress") progressArc(ctx,x,y,r,p.f.f,u);
+  if(cfg.moons && p.f.f===15){
+    var ma=t*(6.283/6)+1;
+    var mx=x+Math.cos(ma)*r*1.9, my=y+Math.sin(ma)*r*1.9*0.6;
+    ctx.beginPath(); ctx.arc(mx,my,r*0.24,0,6.283); ctx.fillStyle="#CDB894"; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawLabels(ctx,p,u){
+  if(p.alpha<=0.02) return;
+  ctx.save(); ctx.globalAlpha=p.alpha;
+  ctx.textAlign="center"; ctx.textBaseline="top";
+  ctx.font="600 "+(10*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+  ctx.fillStyle="#E0E5E1";
+  ctx.fillText(p.f.n,p.x,p.y+p.r+4*u);
+  ctx.font=(8.5*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+  ctx.fillStyle="#A9B4AD";
+  ctx.fillText(p.f.f+" ملف",p.x,p.y+p.r+4*u+11*u);
+  ctx.restore();
+}
+
+function drawRipples(ctx,item,t){
+  var u=item.cv.u;
+  item.st.ripples=item.st.ripples.filter(function(rp){ return t-rp.t0<1.1; });
+  item.st.ripples.forEach(function(rp){
+    var age=t-rp.t0, k=age/1.1;
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,(6+age*46)*u,0,6.283);
+    ctx.strokeStyle="rgba(163,205,187,"+(0.55*(1-k))+")";
+    ctx.lineWidth=1.8*u*(1-k*0.5); ctx.stroke();
+  });
+}
+
+function drawConstellation(ctx,planets,u){
+  ctx.save(); ctx.strokeStyle="rgba(163,205,187,0.30)"; ctx.lineWidth=1*u;
+  ctx.beginPath(); var started=false;
+  planets.forEach(function(p){ if(p.alpha<0.1) return; if(!started){ ctx.moveTo(p.x,p.y); started=true; } else ctx.lineTo(p.x,p.y); });
+  if(started){ ctx.stroke(); }
+  planets.forEach(function(p){ if(p.alpha<0.1) return; ctx.beginPath(); ctx.arc(p.x,p.y,2.2*u,0,6.283); ctx.fillStyle="rgba(163,205,187,0.5)"; ctx.fill(); });
+  ctx.restore();
+}
+
+function supernovaOverlay(ctx,item,cv){
+  var sn=item._sn, ph=item._snPh;
+  if(sn!==2 && sn!==3) return;
+  var cx=cv.w/2, cy=cv.h/2-12*cv.u, u=cv.u;
+  var maxR=Math.max(36*u, Math.min(cv.w,cv.h)/2-52*u);
+  var i;
+  if(sn===2){
+    var r=maxR*(0.25+ph*0.95);
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0,"rgba(255,244,214,"+(0.95*(1-ph*0.4))+")");
+    g.addColorStop(0.5,"rgba(232,217,160,"+(0.45*(1-ph*0.5))+")");
+    g.addColorStop(1,"rgba(232,217,160,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,6.283); ctx.fill();
+  } else {
+    for(i=0;i<16;i++){
+      var a=i/16*6.283+0.25;
+      var d0=ph*maxR*1.2, len=maxR*0.32*(1-ph*0.6);
+      var x1=cx+Math.cos(a)*d0, y1=cy+Math.sin(a)*d0*0.72;
+      var x2=cx+Math.cos(a)*(d0+len), y2=cy+Math.sin(a)*(d0+len)*0.72;
+      var g2=ctx.createLinearGradient(x1,y1,x2,y2);
+      g2.addColorStop(0,"rgba(232,217,160,"+(0.75*(1-ph))+")"); g2.addColorStop(1,"rgba(232,217,160,0)");
+      ctx.strokeStyle=g2; ctx.lineWidth=2*u; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.lineCap="butt";
+    }
+  }
+}
+
+function drawSky(ctx,cv,t){
+  var w=cv.w,h=cv.h,u=cv.u,cx=w/2,i;
+  var lg=ctx.createLinearGradient(0,0,0,h);
+  lg.addColorStop(0,"rgba(163,205,187,0)"); lg.addColorStop(0.5,"rgba(163,205,187,0.35)"); lg.addColorStop(1,"rgba(163,205,187,0)");
+  ctx.strokeStyle=lg; ctx.lineWidth=1.2*u;
+  ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,h); ctx.stroke();
+  var N=FOLDERS.length, spacing=Math.max(86*u,h/(N-0.4)), total=N*spacing;
+  var scroll=(t*15*u)%total;
+  for(i=0;i<N;i++){
+    var y=(((i*spacing+spacing*0.5-scroll)%total)+total)%total-spacing*0.4;
+    if(y<-40*u||y>h+40*u) continue;
+    y+=Math.sin(t*1.2+i)*3*u;
+    var side=(i%2===0?1:-1), px=cx+side*46*u;
+    var f=FOLDERS[i], pr=(30+Math.min(f.f*2,18))/2*u;
+    ctx.strokeStyle="rgba(224,229,225,0.16)"; ctx.lineWidth=1*u;
+    ctx.beginPath(); ctx.moveTo(cx,y); ctx.lineTo(px,y); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,y,2.4*u,0,6.283); ctx.fillStyle="#A3CDBB"; ctx.fill();
+    ctx.beginPath(); ctx.arc(px,y,pr+5*u,0,6.283); ctx.fillStyle=hexA(f.c,0.22); ctx.fill();
+    var g=ctx.createRadialGradient(px-pr*0.3,y-pr*0.3,pr*0.15,px,y,pr);
+    g.addColorStop(0,hexA(f.c,0.95)); g.addColorStop(1,hexA(f.c,0.6));
+    ctx.beginPath(); ctx.arc(px,y,pr,0,6.283); ctx.fillStyle=g; ctx.fill();
+    ctx.textBaseline="middle";
+    ctx.textAlign=side===1?"left":"right";
+    ctx.font="600 "+(10*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+    ctx.fillStyle="#E0E5E1"; ctx.fillText(f.n,px+side*(pr+10*u),y-6*u);
+    ctx.font=(8*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+    ctx.fillStyle="#A9B4AD"; ctx.fillText(f.f+" ملف",px+side*(pr+10*u),y+8*u);
+  }
+}
+
+function hexPath(ctx,x,y,R){
+  ctx.beginPath();
+  for(var k=0;k<6;k++){
+    var a=(60*k+30)*Math.PI/180;
+    var px=x+Math.cos(a)*R, py=y+Math.sin(a)*R;
+    if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+}
+
+function drawHexGrid(ctx,cv,t){
+  var w=cv.w,h=cv.h,u=cv.u,cx=w/2,cy=h/2-6*u;
+  var pos=[[-70,-66],[0,-66],[70,-66],[-35,2],[35,2],[0,70]];
+  for(var i=0;i<6;i++){
+    var hx=cx+pos[i][0]*u, hy=cy+pos[i][1]*u;
+    var breath=1+0.05*Math.sin(t*1.6+i*1.1);
+    hexPath(ctx,hx,hy,40*u);
+    ctx.fillStyle="rgba(27,33,30,0.92)"; ctx.fill();
+    ctx.strokeStyle="rgba(163,205,187,"+(0.14+0.12*Math.max(0,Math.sin(t*1.6+i*1.1)))+")";
+    ctx.lineWidth=1.3*u; ctx.stroke();
+    var f=FOLDERS[i], pr=15*u*breath;
+    ctx.beginPath(); ctx.arc(hx,hy-8*u,pr+4*u,0,6.283); ctx.fillStyle=hexA(f.c,0.2); ctx.fill();
+    var g=ctx.createRadialGradient(hx-pr*0.3,hy-8*u-pr*0.3,pr*0.15,hx,hy-8*u,pr);
+    g.addColorStop(0,hexA(f.c,0.95)); g.addColorStop(1,hexA(f.c,0.6));
+    ctx.beginPath(); ctx.arc(hx,hy-8*u,pr,0,6.283); ctx.fillStyle=g; ctx.fill();
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    ctx.font="600 "+(8.5*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+    ctx.fillStyle="#E0E5E1"; ctx.fillText(f.n,hx,hy+13*u);
+    ctx.font=(7.5*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+    ctx.fillStyle="#A9B4AD"; ctx.fillText(f.f+" ملف",hx,hy+24*u);
+  }
+}
+
+function drawDial(ctx,cv,t){
+  var w=cv.w,h=cv.h,u=cv.u,cx=w/2,cy=h/2+2*u;
+  var R=Math.min(w,h)/2-42*u,i;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,6.283);
+  ctx.strokeStyle="rgba(255,255,255,0.10)"; ctx.lineWidth=1.2*u; ctx.stroke();
+  var pa=(t*(360/40))*Math.PI/180-Math.PI/2;
+  for(i=0;i<12;i++){
+    var a=i*Math.PI/6-Math.PI/2;
+    var diff=Math.abs(((a-pa)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI);
+    var near=Math.max(0,1-diff/0.44);
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);
+    ctx.lineTo(cx+Math.cos(a)*(R-9*u),cy+Math.sin(a)*(R-9*u));
+    ctx.strokeStyle="rgba(232,217,160,"+(0.25+0.6*near)+")"; ctx.lineWidth=(1.2+1.4*near)*u; ctx.stroke();
+  }
+  var pg=ctx.createLinearGradient(cx,cy,cx+Math.cos(pa)*R,cy+Math.sin(pa)*R);
+  pg.addColorStop(0,"rgba(163,205,187,0.1)"); pg.addColorStop(1,"rgba(163,205,187,0.9)");
+  ctx.strokeStyle=pg; ctx.lineWidth=1.6*u;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(pa)*(R-8*u),cy+Math.sin(pa)*(R-8*u)); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx+Math.cos(pa)*(R-8*u),cy+Math.sin(pa)*(R-8*u),2.6*u,0,6.283);
+  ctx.fillStyle="#A3CDBB"; ctx.fill();
+  for(i=0;i<6;i++){
+    var a2=i*Math.PI/3-Math.PI/2;
+    var diff2=Math.abs(((a2-pa)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI);
+    var near2=Math.max(0,1-diff2/0.44);
+    var px=cx+Math.cos(a2)*(R-30*u), py=cy+Math.sin(a2)*(R-30*u);
+    var f=FOLDERS[i], pr=(11+Math.min(f.f,9)*0.5)*u*(1+0.12*near2);
+    ctx.beginPath(); ctx.arc(px,py,pr+(4+4*near2)*u,0,6.283); ctx.fillStyle=hexA(f.c,0.18+0.2*near2); ctx.fill();
+    var g=ctx.createRadialGradient(px-pr*0.3,py-pr*0.3,pr*0.15,px,py,pr);
+    g.addColorStop(0,hexA(f.c,0.95)); g.addColorStop(1,hexA(f.c,0.6));
+    ctx.beginPath(); ctx.arc(px,py,pr,0,6.283); ctx.fillStyle=g; ctx.fill();
+  }
+  var sg=ctx.createRadialGradient(cx-5*u,cy-5*u,2*u,cx,cy,17*u);
+  sg.addColorStop(0,"#E8D9A0"); sg.addColorStop(0.55,"#C79A4B"); sg.addColorStop(1,"#7A5B2E");
+  ctx.beginPath(); ctx.arc(cx,cy,17*u,0,6.283); ctx.fillStyle=sg; ctx.fill();
+  ctx.fillStyle="#2A2210"; ctx.font="700 "+(7*u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("جامعتي",cx,cy);
+}
+
+function drawHint(ctx,cv,text){
+  if(!text) return;
+  ctx.font=(9.5*cv.u)+"px Roboto, 'Noto Sans Arabic', sans-serif";
+  ctx.fillStyle="#A9B4AD"; ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+  ctx.fillText(text,cv.w/2,cv.h-13*cv.u);
+}
+
+function renderScene(item,t){
+  var ctx=item.ctx, cv=item.cv, cfg=item.cfg;
+  var w=cv.w,h=cv.h,u=cv.u;
+  var g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,"#101614"); g.addColorStop(0.5,"#182220"); g.addColorStop(1,"#101614");
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  if(cfg.bg==="nebula") drawNebula(ctx,cv,t);
+  if(cfg.bg==="aurora") drawAurora(ctx,cv,t);
+  drawStars(ctx,cv,t,cfg);
+  if(cfg.layout==="sky"){ drawSky(ctx,cv,t); drawHint(ctx,cv,cfg.hint); return; }
+  if(cfg.layout==="hex"){ drawHexGrid(ctx,cv,t); drawHint(ctx,cv,"شبكة خلايا النحل — كل خلية مادة"); return; }
+  if(cfg.layout==="dial"){ drawDial(ctx,cv,t); drawHint(ctx,cv,"قرص الساعات — المؤشر يضيء المواد"); return; }
+  drawOrbits(ctx,cv,t,cfg);
+  item.planets=computePlanets(item,t);
+  if(cfg.comet){ for(var i=0;i<item.planets.length;i++) drawTail(ctx,item.planets[i],cv); }
+  drawSun(ctx,cv,t,cfg);
+  if(cfg.sunSparkles) drawSunSparkles(ctx,cv,t);
+  for(var j=0;j<item.planets.length;j++) drawPlanetBody(ctx,item.planets[j],cfg,t,u,j);
+  for(var q=0;q<item.planets.length;q++) drawLabels(ctx,item.planets[q],u);
+  if(cfg.bg==="constellation") drawConstellation(ctx,item.planets,u);
+  if(item.st.ripples.length) drawRipples(ctx,item,t);
+  if(cfg.fx==="supernova") supernovaOverlay(ctx,item,cv);
+  drawHint(ctx,cv,"اضغط أي كوكب لفتح مجلده");
+}
+
+/* ============================================================
+   الحلقة الرئيسية + العرض المرئي فقط (ترشيداً للأداء)
+   ============================================================ */
+var t0=performance.now();
+var live=[]; var modalItem=null, modalOpen=false, modalOpt=null;
+function nowT(){ return (performance.now()-t0)/1000; }
+function autoDemo(item,t){
+  var cfg=item.cfg, st=item.st;
+  if(cfg.interaction==="ripple" && t-st.lastRip>3.2 && !st.drag){
+    st.lastRip=t; var idx=Math.floor(t*1.7)%6; st.lastRipIdx=idx;
+    var p=null; for(var i=0;i<item.planets.length;i++){ if(item.planets[i].i===idx){ p=item.planets[i]; break; } }
+    if(p) st.ripples.push({x:p.x,y:p.y,t0:t});
+  }
+  if(cfg.interaction==="focus" && t-st.lastFoc>4){ st.lastFoc=t; st.focus=(st.focus+1)%6; st.focusT=t; }
+  if(cfg.interaction==="drag" && t-st.lastFlick>4.6 && !st.drag){ st.lastFlick=t; st.vel+=300+Math.random()*180; }
+}
+function tick(now){
+  requestAnimationFrame(tick);
+  var t=(now-t0)/1000;
+  var items=live.slice(); if(modalOpen && modalItem) items.push(modalItem);
+  for(var n=0;n<items.length;n++){
+    var it=items[n];
+    if(!it.visible) continue;
+    var minInt=it.kind==="modal"?15:33;
+    if(now-it.last<minInt) continue;
+    var dt=Math.min(0.06,(now-it.last)/1000); if(dt<=0) dt=0.016;
+    it.last=now;
+    if(it.cfg.interaction==="drag"){
+      it.st.extra+=it.st.vel*dt; it.st.vel*=Math.exp(-1.25*dt);
+      if(Math.abs(it.st.vel)<0.5) it.st.vel=0;
+    }
+    autoDemo(it,t);
+    renderScene(it,t);
+  }
+}
+
+var io=new IntersectionObserver(function(entries){
+  entries.forEach(function(en){ if(en.target._item) en.target._item.visible=en.isIntersecting; });
+},{rootMargin:"90px"});
+
+/* ============================================================
+   الواجهة: الشبكة، الشرائح، الاختيار، النافذة، التصدير
+   ============================================================ */
+var sel=new Set();
+try{ JSON.parse(localStorage.getItem("unihub-galaxy-sel")||"[]").forEach(function(id){ sel.add(id); }); }catch(e){}
+var activeCat="الكل";
+function saveSel(){
+  try{ localStorage.setItem("unihub-galaxy-sel",JSON.stringify(Array.from(sel))); }catch(e){}
+  updateCounters();
+}
+function updateCounters(){
+  document.getElementById("countBadge").textContent=sel.size+" مختار";
+  document.getElementById("fabCount").textContent=sel.size;
+}
+var snackTimer=null;
+function snack(msg){
+  var s=document.getElementById("snack"); s.textContent=msg; s.classList.add("show");
+  clearTimeout(snackTimer); snackTimer=setTimeout(function(){ s.classList.remove("show"); },2200);
+}
+function toggle(id){
+  if(sel.has(id)){ sel.delete(id); snack("أُزيل الخيار "+pad(id)); }
+  else { sel.add(id); snack("أُضيف الخيار "+pad(id)+" ✓"); }
+  saveSel();
+  var card=document.querySelector('.card[data-id="'+id+'"]');
+  if(card) card.classList.toggle("selected",sel.has(id));
+  if(modalOpt && modalOpt.id===id) updateMSel();
+}
+function stripHtml(s){ var d=document.createElement("div"); d.innerHTML=s; return d.textContent||""; }
+
+function buildChips(){
+  var box=document.getElementById("chips"); box.innerHTML="";
+  ["الكل"].concat(CATS).forEach(function(c){
+    var b=document.createElement("button");
+    b.className="chip"+(c===activeCat?" active":"");
+    b.textContent=c;
+    b.onclick=function(){ activeCat=c; buildChips(); buildGrid(); };
+    box.appendChild(b);
+  });
+}
+
+function buildGrid(){
+  var grid=document.getElementById("grid"); grid.innerHTML="";
+  live.forEach(function(it){ io.unobserve(it.canvas); });
+  live=[];
+  OPTIONS.filter(function(o){ return activeCat==="الكل"||o.cat===activeCat; }).forEach(function(opt){
+    var el=document.createElement("article");
+    el.className="card"+(sel.has(opt.id)?" selected":"");
+    el.dataset.id=opt.id;
+    el.innerHTML=
+      '<div class="cardHead"><span class="num">'+pad(opt.id)+'</span><h3>'+opt.title+'</h3>'+
+      '<button class="selBtn" aria-label="اختيار">✓</button></div>'+
+      '<div class="ph"><div class="phFrame"><span class="catTag">'+opt.cat+'</span><canvas></canvas></div></div>'+
+      '<p class="desc">'+opt.desc+'</p>';
+    grid.appendChild(el);
+    var frame=el.querySelector(".phFrame");
+    var canvas=el.querySelector("canvas");
+    var it=makeItem(canvas,frame.clientWidth,frame.clientHeight,opt.cfg,"card");
+    live.push(it);
+    canvas._item=it; io.observe(canvas);
+    el.addEventListener("click",function(e){ if(e.target.closest(".selBtn")) return; openModal(opt); });
+    el.querySelector(".selBtn").addEventListener("click",function(e){ e.stopPropagation(); toggle(opt.id); });
+  });
+}
+
+function cvPos(canvas,e){
+  var r=canvas.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(canvas._cssW/r.width), y:(e.clientY-r.top)*(canvas._cssH/r.height) };
+}
+function bindModalPointer(canvas){
+  canvas.onpointerdown=function(e){
+    if(!modalItem) return;
+    var pos=cvPos(canvas,e), t=nowT(), cfg=modalItem.cfg, i;
+    if(cfg.interaction==="drag"){
+      modalItem.st.drag=true; modalItem.st.lastX=pos.x;
+      try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+      return;
+    }
+    var best=-1, bd=1e9;
+    for(i=0;i<modalItem.planets.length;i++){
+      var p=modalItem.planets[i];
+      var d=Math.hypot(p.x-pos.x,p.y-pos.y);
+      if(d<bd){ bd=d; best=p.i; }
+    }
+    if(best>=0 && bd<60*modalItem.cv.u){
+      var pb=null;
+      for(i=0;i<modalItem.planets.length;i++){ if(modalItem.planets[i].i===best){ pb=modalItem.planets[i]; break; } }
+      if(cfg.interaction==="ripple" && pb){
+        modalItem.st.ripples.push({x:pb.x,y:pb.y,t0:t});
+        modalItem.st.lastRip=t; modalItem.st.lastRipIdx=best;
+      }
+      if(cfg.interaction==="focus"){
+        modalItem.st.focus=best; modalItem.st.focusT=t; modalItem.st.lastFoc=t+2.5;
+      }
+    }
+  };
+  canvas.onpointermove=function(e){
+    if(!modalItem||!modalItem.st.drag) return;
+    var pos=cvPos(canvas,e), dx=pos.x-modalItem.st.lastX;
+    modalItem.st.lastX=pos.x;
+    modalItem.st.extra+=dx*0.5; modalItem.st.vel=dx*22;
+  };
+  canvas.onpointerup=function(){ if(modalItem) modalItem.st.drag=false; };
+  canvas.onpointercancel=function(){ if(modalItem) modalItem.st.drag=false; };
+}
+
+function updateMSel(){
+  var b=document.getElementById("mSelBtn");
+  if(sel.has(modalOpt.id)){ b.textContent="إزالة من اختياراتي ✕"; b.classList.remove("primary"); }
+  else { b.textContent="إضافة إلى اختياراتي ✓"; b.classList.add("primary"); }
+}
+function openModal(opt){
+  modalOpt=opt; modalOpen=true;
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("mCat").textContent=opt.cat+" • خيار "+pad(opt.id);
+  document.getElementById("mTitle").textContent=pad(opt.id)+") "+opt.title;
+  document.getElementById("mDesc").textContent=opt.desc;
+  document.getElementById("mCompose").innerHTML=opt.compose;
+  updateMSel();
+  var ph=document.querySelector(".dialog .phone");
+  var canvas=document.getElementById("mCanvas");
+  modalItem=makeItem(canvas,ph.clientWidth,ph.clientHeight,opt.cfg,"modal");
+  bindModalPointer(canvas);
+}
+function closeModal(){
+  modalOpen=false; modalItem=null; modalOpt=null;
+  document.getElementById("modal").classList.add("hidden");
+}
+
+function exportMd(){
+  if(sel.size===0){ snack("اختر خياراً واحداً على الأقل أولاً"); return; }
+  var chosen=OPTIONS.filter(function(o){ return sel.has(o.id); }).sort(function(a,b){ return a.id-b.id; });
+  var rest=OPTIONS.filter(function(o){ return !sel.has(o.id); });
+  var now=new Date();
+  var L=[];
+  L.push("# 🌌 اختياراتي — مقترحات واجهة المجرة (UniHub)");
+  L.push("");
+  L.push("> مُصدَّر من معرض المقترحات التفاعلي `galaxy-proposals.html`");
+  L.push("> التاريخ: "+now.toLocaleString("ar-EG"));
+  L.push("> عدد الاختيارات: **"+chosen.length+"** من "+OPTIONS.length);
+  L.push("");
+  L.push("---");
+  L.push("");
+  L.push("## ✅ الخيارات المختارة");
+  chosen.forEach(function(o,i){
+    L.push("");
+    L.push("### "+(i+1)+") "+o.title);
+    L.push("");
+    L.push("- **رقم الخيار:** "+pad(o.id));
+    L.push("- **الفئة:** "+o.cat);
+    L.push("- **الوصف:** "+o.desc);
+    L.push("- **التنفيذ في Jetpack Compose:** "+stripHtml(o.compose));
+    L.push("");
+  });
+  L.push("---");
+  L.push("");
+  L.push("## 📋 بقية الخيارات (غير مختارة)");
+  L.push("");
+  L.push("| # | العنوان | الفئة |");
+  L.push("|---|---------|-------|");
+  rest.forEach(function(o){ L.push("| "+pad(o.id)+" | "+o.title+" | "+o.cat+" |"); });
+  L.push("");
+  L.push("---");
+  L.push("");
+  L.push("_أُنشئ هذا الملف آلياً بواسطة معرض مقترحات المجرة — جاهز للتنفيذ في `GalaxyScreen.kt`._");
+  var md=L.join("\n");
+  var blob=new Blob(["\uFEFF"+md],{type:"text/markdown;charset=utf-8"});
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="اختيارات.md";
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },900);
+  snack("تم تصدير اختيارات.md ✓ ("+chosen.length+" خيارات)");
+}
+
+document.getElementById("closeBtn").onclick=closeModal;
+document.getElementById("mCloseBtn2").onclick=closeModal;
+document.getElementById("modal").addEventListener("click",function(e){ if(e.target===this) closeModal(); });
+document.addEventListener("keydown",function(e){ if(e.key==="Escape" && modalOpen) closeModal(); });
+document.getElementById("mSelBtn").onclick=function(){ if(modalOpt) toggle(modalOpt.id); };
+document.getElementById("fab").onclick=exportMd;
+document.getElementById("exportTopBtn").onclick=exportMd;
+document.getElementById("resetBtn").onclick=function(){
+  sel.clear(); saveSel();
+  document.querySelectorAll(".card.selected").forEach(function(c){ c.classList.remove("selected"); });
+  if(modalOpt) updateMSel();
+  snack("تم مسح جميع الاختيارات");
+};
+
+var resizeTimer=null;
+window.addEventListener("resize",function(){
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(function(){ buildGrid(); if(modalOpen && modalOpt){ var o=modalOpt; closeModal(); openModal(o); } },260);
+});
+
+buildChips();
+buildGrid();
+updateCounters();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
