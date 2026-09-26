@@ -236,7 +236,10 @@ private fun GalaxySystem(folders: List<FolderWithFileCount>, onOpenFolder: (Long
 
             Column(
                 modifier = Modifier
-                    .offset(x = x - planetSize / 2 - 24.dp, y = y - planetSize / 2 - 8.dp)
+                    // محاذاة دقيقة: عرض العمود 112dp، فنزيحه بنصف عرضه ليصبح مركز
+                    // الكوكب على نقطة المدار تماماً مهما اختلف حجمه (كان الحساب السابق
+                    // يعتمد على حجم الكوكب فينزاح 8-17dp حسب عدد الملفات).
+                    .offset(x = x - 56.dp, y = y - planetSize / 2 - 8.dp)
                     .width(112.dp)
                     .clickable { onOpenFolder(folder.folderId) },
                 horizontalAlignment = Alignment.CenterHorizontally
