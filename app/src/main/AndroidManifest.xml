@@ -71,6 +71,23 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- التهيئة عند الطلب (On-Demand Initialization) لـ WorkManager:
+             التطبيق ينفّذ Configuration.Provider ليسلّم مصنع عمال Hilt، لذا يجب
+             إزالة المهيّئ الافتراضي WorkManagerInitializer الذي تدمجه مكتبة
+             work-runtime تلقائياً عبر androidx.startup — لولا الإزالة لتهيّأ
+             WorkManager بالإعدادات الافتراضية قبل التطبيق وضاع HiltWorkerFactory،
+             فتفشل عمال @HiltWorker (النسخ الاحتياطي التلقائي) وقت التشغيل. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>

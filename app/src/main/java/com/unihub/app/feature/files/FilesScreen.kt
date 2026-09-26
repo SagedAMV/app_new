@@ -650,7 +650,9 @@ private fun FadeInIfHighlighted(highlight: Boolean, content: @Composable () -> U
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.94f, animationSpec = tween(800)),
-            content = content
+            // AnimatedVisibility يتوقع لامدا بمستقبل AnimatedVisibilityScope،
+            // فغلّفنا محتوى الدالة (Function0) بلامدا مستقبِلة تتوافق مع التوقيع.
+            content = { content() }
         )
     } else {
         content()

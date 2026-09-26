@@ -32,9 +32,14 @@ class UniHubApplication : Application(), Configuration.Provider {
      * يسلّم WorkManager مصنع عمال Hilt — بدونه لا يستطيع إنشاء عمال
      * @HiltWorker المعتمدة على مستودعات محقونة. المهيّئ الافتراضي لـ
      * WorkManager يكتشف هذه الواجهة تلقائياً ويستخدمها.
+     *
+     * مُنفَّذة كخاصية Kotlin (لا كدالة getWorkManagerConfiguration) لأن نسخة
+     * work-runtime المحلولة على الـ classpath تعرّف Configuration.Provider
+     * بخاصية val — وصيغة الخاصية تتوافق مع التعريفين القديم (Java getter)
+     * والحديث (Kotlin val) معاً، فلا ينكسر البناء عند تغيّر الإصدار.
      */
-    override fun getWorkManagerConfiguration(): Configuration =
-        Configuration.Builder()
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
 }
