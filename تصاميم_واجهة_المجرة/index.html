@@ -187,7 +187,7 @@ var PAL = {
   bg1:"#101614", bg2:"#182220", surface:"#1B211E",
   text:"#E0E5E1", muted:"#A9B4AD",
   gold:"#C79A4B", goldLight:"#E8D9A0", goldDark:"#7A5B2E",
-  sage:"#3E6B5E", mint:"#A3CDBB"
+  sage:"#3E6B5E", mint:"#A3CDBB", sand:"#CDB894"
 };
 
 /* ---------- بيانات تجريبية = مجلدات حقيقية بألوان لوحة التطبيق ---------- */
@@ -217,11 +217,11 @@ function rgba(hex, a){
 }
 
 /* ---------- أدوات رسم مشتركة ---------- */
-function bg(ctx, rnd){
+function bg(ctx){
   var g = ctx.createLinearGradient(0,0,0,H);
   g.addColorStop(0, PAL.bg1); g.addColorStop(.5, PAL.bg2); g.addColorStop(1, PAL.bg1);
   ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  if(!rnd){ rnd = mulberry32(42); ctx._stars = null; }
+  /* النجوم تُحسب مرة واحدة لكل بطاقة وتُخزَّن على سياق الرسم (لا إعادة توليد كل إطار) */
   if(!ctx._stars){
     ctx._stars = [];
     var r = mulberry32(7);
@@ -1258,15 +1258,28 @@ cards.forEach(function(c){ io.observe(c.el); });
 
 var start = performance.now();
 var rafId = null;
+var lastDraw = 0;
+var brokenGens = {};
 function frame(now){
+  rafId = requestAnimationFrame(frame); /* الجدولة أولاً: الحلقة لا تموت مهما حدث */
+  if(now - lastDraw < 33) return; /* سقف 30 إطاراً/ثانية: الحركة بطيئة أصلاً وهذا يخفف الحمل */
+  lastDraw = now;
   var t = (now - start) / 1000;
   for(var i=0;i<canvasList.length;i++){
     var c = canvasList[i];
-    if(!c.visible) continue;
-    c.ctx._stars = null; /* إعادة استخدام بذرة النجوم لكل بطاقة */
-    c.gen(c.ctx, t);
+    if(!c.visible || brokenGens[c.idx]) continue;
+    try {
+      c.gen(c.ctx, t);
+    } catch(err) {
+      /* عزل الأعطال: خطأ في بطاقة واحدة لا يجمّد بقية المعاينات أبداً */
+      brokenGens[c.idx] = true;
+      var cx = c.ctx;
+      cx.fillStyle = PAL.bg1; cx.fillRect(0,0,W,H);
+      cx.fillStyle = "#C25E52"; cx.textAlign = "center"; cx.direction = "rtl";
+      cx.font = "500 12px 'IBM Plex Sans Arabic', Tahoma";
+      cx.fillText("تعذّر عرض هذه المعاينة ("+err.message+")", W/2, H/2);
+    }
   }
-  rafId = requestAnimationFrame(frame);
 }
 function startLoop(){ if(!rafId) rafId = requestAnimationFrame(frame); }
 function stopLoop(){ if(rafId){ cancelAnimationFrame(rafId); rafId = null; } }
