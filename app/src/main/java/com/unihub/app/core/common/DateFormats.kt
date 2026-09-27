@@ -10,11 +10,46 @@ import java.time.temporal.ChronoUnit
  * أدوات التاريخ والوقت الموحّدة للتطبيق كله.
  * كل التواريخ تُخزَّن بصيغة ISO (yyyy-MM-dd) وكل الأوقات بصيغة (HH:mm)
  * حتى لا تتوزع منطق التحليل في عدة أماكن كما في التطبيق المرجعي.
+ *
+ * فصل التخزين عن العرض: صيغة التخزين تبقى (HH:mm) دائماً — وهي التي تتعامل
+ * معها المصادقات والتعارضات والنسخ الاحتياطي — بينما كل العرض على المستخدم
+ * يمر عبر [formatTime12] بالنظام 12-ساعي مع ص/م الذي اعتاده المستخدم.
  */
 object DateFormats {
 
     val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+    /**
+     * تنسيق وقت مخزّن (HH:mm) للعرض بالنظام 12-ساعي: «9:30 ص»، «12:00 م»، «11:59 م».
+     * القيمة الفارغة أو غير الصالحة تعيد [blankLabel] بدل رمي استثناء أو عرض نص خام.
+     */
+    fun formatTime12(timeIso: String?, blankLabel: String = "—"): String {
+        val time = parseTimeOrNull(timeIso) ?: return blankLabel
+        return formatLocalTime12(time)
+    }
+
+    /** النواة: [LocalTime] إلى نص 12-ساعي مع الدقائق دائماً («7:05 ص» لا «7:5 ص») */
+    fun formatLocalTime12(time: LocalTime): String {
+        val suffix = if (time.hour < 12) "ص" else "م"
+        val hour12 = if (time.hour % 12 == 0) 12 else time.hour % 12
+        return "$hour12:${"%02d".format(time.minute)} $suffix"
+    }
+
+    /**
+     * تسمية محور الجدول الزمني من دقائق منذ منتصف الليل: «7 ص»، «12 م»، «9:30 ص».
+     * تحذف «:00» عند الدقيقة صفر لتسميات محور أقصر — بعكس [formatTime12] التي
+     * تعرض الدقائق دائماً. الصيغة كانت مكررة محلياً في الشبكة الأسبوعية فنُقلت هنا
+     * لتكون المرجع الوحيد للعرض 12-الساعي في التطبيق كله.
+     */
+    fun formatMinutesOfDay12(totalMinutes: Int): String {
+        val hour24 = (totalMinutes / 60) % 24
+        val minute = totalMinutes % 60
+        val suffix = if (hour24 < 12) "ص" else "م"
+        val hour12 = if (hour24 % 12 == 0) 12 else hour24 % 12
+        return if (minute == 0) "$hour12 $suffix"
+        else "$hour12:${"%02d".format(minute)} $suffix"
+    }
 
     /** تاريخ اليوم بصيغة ISO */
     fun todayIso(): String = LocalDate.now().format(DATE)

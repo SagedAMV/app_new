@@ -513,7 +513,7 @@ private fun LecturesHalf(
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = lecture.timeFrom,
+                            text = DateFormats.formatTime12(lecture.timeFrom),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = onPrimary.copy(alpha = 0.9f)
@@ -679,14 +679,16 @@ private fun DeadlinesHalf(
     }
 }
 
-/** سطر الحالة الحي للمحاضرة الأقرب داخل نصف المحاضرات */
+/** سطر الحالة الحي للمحاضرة الأقرب داخل نصف المحاضرات — الأوقات 12-ساعية بصيغة ص/م */
 private fun lectureStatusLabel(next: NextLecture): String = when {
     next.status == NextLecture.Status.ONGOING && next.lecture.timeFrom.isNotBlank() ->
-        "جارية الآن · بدأت ${next.lecture.timeFrom}"
+        "جارية الآن · بدأت ${DateFormats.formatTime12(next.lecture.timeFrom)}"
     next.status == NextLecture.Status.ONGOING -> "جارية الآن"
     next.dayOffset == 0 ->
-        "اليوم ${next.lecture.timeFrom} · ${NextLectureResolver.formatCountdown(next)}"
-    else -> "${NextLectureResolver.dayLabel(next.dayOffset)} · تبدأ ${next.lecture.timeFrom}"
+        "اليوم ${DateFormats.formatTime12(next.lecture.timeFrom)} · " +
+            NextLectureResolver.formatCountdown(next)
+    else -> "${NextLectureResolver.dayLabel(next.dayOffset)} · " +
+        "تبدأ ${DateFormats.formatTime12(next.lecture.timeFrom)}"
 }
 
 /** تسمية الأيام النسبية للامتحان: اليوم / غداً / بعد يومين / بعد N أيام */
@@ -707,14 +709,14 @@ private fun TodayLectureRow(lecture: LectureEntity) {
         ) {
             Column(Modifier.width(64.dp)) {
                 Text(
-                    text = lecture.timeFrom,
+                    text = DateFormats.formatTime12(lecture.timeFrom),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 if (lecture.timeTo.isNotBlank()) {
                     Text(
-                        text = lecture.timeTo,
+                        text = DateFormats.formatTime12(lecture.timeTo),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

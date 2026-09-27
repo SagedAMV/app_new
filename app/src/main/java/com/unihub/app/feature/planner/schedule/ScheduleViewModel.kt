@@ -2,6 +2,7 @@ package com.unihub.app.feature.planner.schedule
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidator
@@ -62,7 +63,8 @@ class ScheduleViewModel @Inject constructor(
             }.getOrNull()
             if (clash != null) {
                 messenger.notifyError(
-                    "تعارض في الجدول: «${clash.subject}» تبدأ ${clash.timeFrom} في نفس اليوم والوقت"
+                    "تعارض في الجدول: «${clash.subject}» تبدأ " +
+                        "${DateFormats.formatTime12(clash.timeFrom)} في نفس اليوم والوقت"
                 )
                 return@launch
             }

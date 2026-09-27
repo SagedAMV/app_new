@@ -197,7 +197,7 @@ private fun ExamRow(
                     )
                     Text(
                         text = DateFormats.format(exam.date) +
-                            if (exam.time.isNotBlank()) " • ${exam.time}" else "",
+                            if (exam.time.isNotBlank()) " • ${DateFormats.formatTime12(exam.time)}" else "",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

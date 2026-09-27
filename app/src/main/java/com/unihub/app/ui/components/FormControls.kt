@@ -185,7 +185,12 @@ fun DateField(
     }
 }
 
-/** حقل وقت يفتح منتقي أوقات النظام ويعيد قيمة HH:mm */
+/**
+ * حقل وقت يفتح منتقي أوقات النظام بالنظام 12-ساعي (ص/م) — بناءً على طلب
+ * المستخدم الذي لا يستخدم نظام 24 ساعة — ويعيد عند التأكيد قيمة تخزين
+ * بصيغة HH:mm كما كانت، فلا يتأثر التخزين أو النسخ الاحتياطي.
+ * النص الظاهر في الحقل نفسه يُنسّق 12-ساعياً عبر [DateFormats.formatTime12].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimeField(
@@ -198,7 +203,7 @@ fun TimeField(
     var showPicker by remember { mutableStateOf(false) }
 
     OutlinedTextField(
-        value = value ?: "",
+        value = if (value.isNullOrBlank()) "" else DateFormats.formatTime12(value),
         onValueChange = {},
         readOnly = true,
         modifier = modifier.fillMaxWidth(),
@@ -219,10 +224,12 @@ fun TimeField(
 
     if (showPicker) {
         val initial = DateFormats.parseTimeOrNull(value)
+        // is24Hour = false → المنتقي يعرض ص/م، بينما state.hour يبقى 0-23
+        // داخلياً، فتظل قيمة التخزين المرسلة إلى onPick بصيغة HH:mm دون تغيير.
         val state = rememberTimePickerState(
             initialHour = initial?.hour ?: 9,
             initialMinute = initial?.minute ?: 0,
-            is24Hour = true
+            is24Hour = false
         )
         AlertDialog(
             onDismissRequest = { showPicker = false },

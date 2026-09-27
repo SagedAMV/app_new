@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.common.Weekdays
 import com.unihub.app.data.local.entity.LectureEntity
 import com.unihub.app.data.local.entity.Weekday
@@ -210,7 +211,7 @@ private fun LectureRow(
         ) {
             Column(Modifier.width(64.dp)) {
                 Text(
-                    text = lecture.timeFrom,
+                    text = DateFormats.formatTime12(lecture.timeFrom),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isToday) MaterialTheme.colorScheme.primary
@@ -218,7 +219,7 @@ private fun LectureRow(
                 )
                 if (lecture.timeTo.isNotBlank()) {
                     Text(
-                        text = lecture.timeTo,
+                        text = DateFormats.formatTime12(lecture.timeTo),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

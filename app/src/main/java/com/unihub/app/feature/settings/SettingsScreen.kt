@@ -270,7 +270,8 @@ fun SettingsScreen(
             }
             val lastAt = autoBackup?.lastBackupAt ?: 0L
             if (lastAt > 0L) {
-                val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+                // عرض طابع آخر محاولة نسخ بالنظام 12-ساعي (ص/م) المعتمد في التطبيق كله
+                val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd h:mm a", Locale.getDefault()) }
                 Text(
                     text = "آخر محاولة: ${dateFormat.format(Date(lastAt))}" +
                         autoBackup?.lastBackupMessage?.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty(),

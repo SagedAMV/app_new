@@ -86,15 +86,8 @@ internal fun segmentWidthDp(startMin: Int, endMin: Int, dpPerMinute: Float): Dp 
     return (minutes * dpPerMinute).coerceAtLeast(MIN_SEGMENT_DP).dp
 }
 
-/** تنسيق دقيقة إلى تسمية عربية 12-ساعية: «7 ص»، «12 م»، «9:30 ص» */
-internal fun formatHourLabel(totalMinutes: Int): String {
-    val hour24 = (totalMinutes / 60) % 24
-    val minute = totalMinutes % 60
-    val suffix = if (hour24 < 12) "ص" else "م"
-    val hour12 = if (hour24 % 12 == 0) 12 else hour24 % 12
-    return if (minute == 0) "$hour12 $suffix"
-    else "$hour12:${"%02d".format(minute)} $suffix"
-}
+// تسميات المحور الزمني 12-ساعية («7 ص»، «12 م») مصدرها الوحيد الآن
+// DateFormats.formatMinutesOfDay12 — كانت مكررة هنا محلياً قبل جلسة التدقيق.
 
 private const val DP_PER_MINUTE = 1.1f
 private val MIN_SEGMENT_DP = 40f
@@ -186,7 +179,7 @@ fun WeeklyTimetableGrid(
                 Spacer(Modifier.width(DAY_COLUMN_WIDTH))
                 segments.forEachIndexed { index, (a, _) ->
                     Text(
-                        text = formatHourLabel(a),
+                        text = DateFormats.formatMinutesOfDay12(a),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -334,7 +327,8 @@ private fun LectureBlock(
                 )
                 val meta = listOfNotNull(
                     lecture.room.takeIf { it.isNotBlank() }?.let { "قاعة $it" },
-                    "${lecture.timeFrom}–${lecture.timeTo.ifBlank { "…" }}"
+                    "${DateFormats.formatTime12(lecture.timeFrom)}–" +
+                        DateFormats.formatTime12(lecture.timeTo, blankLabel = "…")
                 ).joinToString(" • ")
                 Text(
                     text = meta,
