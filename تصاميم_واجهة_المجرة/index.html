@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>استوديو تصاميم واجهة المجرّة — UniHub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#141816; --bg2:#182220; --surface:#1B211E; --surface2:#2A312D;
+    --text:#E0E5E1; --muted:#A9B4AD; --outline:#747F78;
+    --sage:#3E6B5E; --mint:#A3CDBB; --gold:#C79A4B; --gold-light:#E8D9A0;
+    --sand:#CDB894; --slate:#B4BDD3;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;}
+  body{min-height:100vh;
+    background:linear-gradient(180deg,#101614 0%, #141816 40%, #182220 100%);}
+
+  /* ===== الشريط العلوي (محاكاة TopAppBar من Material 3) ===== */
+  .topbar{position:sticky; top:0; z-index:50;
+    background:rgba(20,24,22,.92); backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(116,127,120,.25);}
+  .topbar-inner{max-width:1280px; margin:0 auto; padding:14px 20px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:12px;}
+  .topbar h1{font-size:1.05rem; font-weight:700; letter-spacing:.2px}
+  .topbar .sub{font-size:.78rem; color:var(--muted); font-weight:300}
+  .spacer{flex:1}
+  .count-chip{background:var(--surface2); color:var(--mint);
+    border:1px solid rgba(163,205,187,.35); border-radius:999px;
+    padding:6px 14px; font-size:.8rem; font-weight:500}
+  .btn{border:none; cursor:pointer; font-family:inherit; font-size:.82rem;
+    border-radius:999px; padding:9px 18px; font-weight:500;
+    transition:transform .15s ease, box-shadow .2s ease, background .2s;}
+  .btn:active{transform:scale(.97)}
+  .btn-filled{background:var(--mint); color:#123A2E}
+  .btn-filled:hover{box-shadow:0 2px 14px rgba(163,205,187,.35)}
+  .btn-tonal{background:var(--surface2); color:var(--text)}
+  .btn-tonal:hover{background:#333B36}
+  .btn-text{background:transparent; color:var(--muted); border:1px solid rgba(116,127,120,.4)}
+  .btn-text:hover{color:var(--text)}
+  .search{background:var(--surface); border:1px solid rgba(116,127,120,.4);
+    color:var(--text); border-radius:999px; padding:8px 16px; font-family:inherit;
+    font-size:.82rem; width:200px; outline:none; transition:border .2s}
+  .search:focus{border-color:var(--mint)}
+
+  .intro{max-width:820px; margin:26px auto 6px; padding:0 20px; text-align:center}
+  .intro h2{font-size:1.35rem; font-weight:700; margin-bottom:10px}
+  .intro p{color:var(--muted); font-size:.86rem; line-height:1.9; font-weight:300}
+  .intro .note{margin-top:10px; display:inline-block; background:rgba(199,154,75,.12);
+    border:1px solid rgba(199,154,75,.35); color:var(--gold-light);
+    border-radius:14px; padding:8px 16px; font-size:.75rem}
+
+  /* ===== شبكة البطاقات ===== */
+  .grid{max-width:1280px; margin:22px auto 60px; padding:0 20px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:22px;}
+
+  /* بطاقة المقترح — بطاقة M3 مرتفعة */
+  .card{background:var(--surface); border-radius:28px; overflow:hidden;
+    border:2px solid transparent; cursor:pointer; position:relative;
+    transition:border-color .25s ease, box-shadow .25s ease, transform .25s ease;}
+  .card:hover{transform:translateY(-3px); box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .card.selected{border-color:var(--mint);
+    box-shadow:0 6px 28px rgba(163,205,187,.18)}
+  .card.hidden{display:none}
+
+  .card-head{display:flex; align-items:center; gap:10px; padding:14px 18px 10px}
+  .num{background:var(--surface2); color:var(--gold-light); font-size:.72rem;
+    border-radius:999px; padding:4px 11px; font-weight:500}
+  .card-head h3{font-size:.98rem; font-weight:700; flex:1}
+  .check{width:26px; height:26px; border-radius:50%;
+    border:2px solid var(--outline); display:grid; place-items:center;
+    transition:all .2s ease; flex-shrink:0}
+  .card.selected .check{background:var(--mint); border-color:var(--mint)}
+  .check svg{opacity:0; transition:opacity .2s}
+  .card.selected .check svg{opacity:1}
+
+  /* إطار الهاتف */
+  .phone{margin:0 18px; border-radius:22px; overflow:hidden; position:relative;
+    background:#101614; border:1px solid rgba(116,127,120,.35);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+  .statusbar{display:flex; justify-content:space-between; align-items:center;
+    padding:7px 16px 3px; font-size:.62rem; color:var(--muted)}
+  .phone canvas{display:block; width:100%; height:auto}
+  /* شريط التنقل السفلي — محاكاة NavigationBar */
+  .navbar{display:flex; justify-content:space-around; align-items:center;
+    background:#1B211E; border-top:1px solid rgba(116,127,120,.25); padding:6px 4px 8px}
+  .nav-item{display:flex; flex-direction:column; align-items:center; gap:2px;
+    font-size:.58rem; color:var(--muted); width:64px}
+  .nav-item .pill{width:44px; height:24px; border-radius:999px;
+    display:grid; place-items:center; font-size:.8rem}
+  .nav-item.active{color:var(--mint)}
+  .nav-item.active .pill{background:rgba(163,205,187,.22)}
+
+  .card-body{padding:14px 18px 16px}
+  .card-body .concept{font-size:.8rem; color:var(--text); line-height:1.85; font-weight:300}
+  .tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+  .tag{font-size:.68rem; border-radius:999px; padding:3px 10px;
+    background:var(--surface2); color:var(--muted); border:1px solid rgba(116,127,120,.3)}
+  .tag.gold{color:var(--gold-light); border-color:rgba(199,154,75,.35)}
+  details{margin-top:12px}
+  summary{font-size:.75rem; color:var(--mint); cursor:pointer; font-weight:500;
+    list-style:none}
+  summary::-webkit-details-marker{display:none}
+  details .compose-notes{margin-top:8px; font-size:.73rem; color:var(--muted);
+    line-height:1.9; background:rgba(42,49,45,.5); border-radius:14px; padding:10px 14px;
+    border-inline-start:3px solid var(--sage)}
+  details .compose-notes code{color:var(--gold-light); font-size:.7rem}
+
+  .empty-msg{grid-column:1/-1; text-align:center; color:var(--muted);
+    padding:40px 0; font-size:.9rem}
+
+  /* شريط عائم أسفل الشاشة عند وجود تحديد */
+  .fab-bar{position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    z-index:60; display:flex; gap:10px; align-items:center;
+    background:rgba(27,33,30,.95); border:1px solid rgba(163,205,187,.35);
+    border-radius:999px; padding:10px 16px; box-shadow:0 8px 32px rgba(0,0,0,.5);
+    opacity:0; pointer-events:none; transition:opacity .3s, transform .3s;}
+  .fab-bar.show{opacity:1; pointer-events:auto}
+  .fab-bar .cnt{font-size:.8rem; color:var(--mint); font-weight:500}
+
+  .toast{position:fixed; bottom:84px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#2A312D; color:var(--text); border:1px solid rgba(116,127,120,.4);
+    padding:10px 22px; border-radius:14px; font-size:.8rem; opacity:0;
+    transition:all .3s ease; z-index:70; pointer-events:none}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  footer{max-width:820px; margin:0 auto 40px; padding:0 20px; text-align:center;
+    color:var(--muted); font-size:.72rem; line-height:2}
+  @media (max-width:480px){ .grid{grid-template-columns:1fr} .search{width:100%} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <h1>🌌 استوديو تصاميم واجهة المجرّة</h1>
+      <div class="sub">UniHub — 30 مقترح أنميشن مختلفاً لواجهة «المجرّة» بمحاكاة Jetpack Compose</div>
+    </div>
+    <div class="spacer"></div>
+    <input class="search" id="search" type="text" placeholder="ابحث في المقترحات…">
+    <span class="count-chip" id="countChip">المحدَّد: 0</span>
+    <button class="btn btn-tonal" id="selectAll">تحديد الكل</button>
+    <button class="btn btn-text" id="clearAll">مسح التحديد</button>
+    <button class="btn btn-filled" id="exportBtn">⬇ تصدير اختيارات.MD</button>
+  </div>
+</div>
+
+<div class="intro">
+  <h2>اضغط على البطاقة التي تعجبك لتحديدها</h2>
+  <p>
+    كل بطاقة معاينة حيّة لأنميشن مختلف تماماً لواجهة «المجرّة» — تعرض مجلداتك
+    (رياضيات، فيزياء، برمجة…) بألوانها الحقيقية من لوحة التطبيق الهادئة.
+    عندما تنتهي من الاختيار اضغط «تصدير اختيارات.MD» وأرفق الملف الناتج في المستودع.
+  </p>
+  <span class="note">⚠️ جميع الحركات بطيئة ومريحة للعين وفق فلسفة سمة التطبيق (لا ألوان مشبعة، لا ومضات سريعة)</span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="fab-bar" id="fabBar">
+  <span class="cnt" id="fabCnt"></span>
+  <button class="btn btn-filled" id="exportBtn2">تصدير اختيارات.MD</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<footer>
+  ملف شخصي خاص بمشروع UniHub — تم إنشاؤه ضمن جلسة تصميم واجهة المجرّة.<br>
+  التصدير يُنشئ ملف <b>اختيارات.MD</b> — ضعه في جذر المستودع ليُنفَّذ في جلسة قادمة.
+</footer>
+
+<script>
+"use strict";
+/* ======================================================================
+   استوديو تصاميم واجهة المجرّة
+   محرك معاينة خفيف: كل مقترح = دالة رسم (ctx, t) على Canvas بدقة مخفّضة.
+   الأداء: رسم البطاقات المرئية فقط (IntersectionObserver) + إيقاف عند
+   إخفاء التبويب — لمحاكاة حركة بطيئة مريحة بلا استهلاك عالٍ.
+====================================================================== */
+
+/* ---------- لوحة ألوان التطبيق الأصلية (من ui/theme/Color.kt) ---------- */
+var PAL = {
+  bg1:"#101614", bg2:"#182220", surface:"#1B211E",
+  text:"#E0E5E1", muted:"#A9B4AD",
+  gold:"#C79A4B", goldLight:"#E8D9A0", goldDark:"#7A5B2E",
+  sage:"#3E6B5E", mint:"#A3CDBB"
+};
+
+/* ---------- بيانات تجريبية = مجلدات حقيقية بألوان لوحة التطبيق ---------- */
+var FOLDERS = [
+  {name:"رياضيات",  color:"#4E7D6E", count:12},
+  {name:"فيزياء",   color:"#5B6478", count:8},
+  {name:"برمجة",    color:"#5E7A8A", count:15},
+  {name:"إنجليزي",  color:"#7D5A7A", count:6},
+  {name:"تاريخ",    color:"#7A6A4F", count:9},
+  {name:"أحياء",    color:"#6E7A4E", count:4}
+];
+
+var W = 360, H = 520; /* الأبعاد المنطقية لشاشة الهاتف في المعاينة */
+
+/* ---------- مولّد عشوائي ببذرة ثابتة (حتى لا تتغير المعاينة بين الزيارات) ---------- */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    var x = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x;
+    return ((x ^ x >>> 14) >>> 0) / 4294967296;
+  };
+}
+function rgba(hex, a){
+  var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return "rgba("+r+","+g+","+b+","+a+")";
+}
+
+/* ---------- أدوات رسم مشتركة ---------- */
+function bg(ctx, rnd){
+  var g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, PAL.bg1); g.addColorStop(.5, PAL.bg2); g.addColorStop(1, PAL.bg1);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  if(!rnd){ rnd = mulberry32(42); ctx._stars = null; }
+  if(!ctx._stars){
+    ctx._stars = [];
+    var r = mulberry32(7);
+    for(var i=0;i<46;i++) ctx._stars.push({x:r()*W, y:r()*H, p:r()});
+  }
+  return ctx._stars;
+}
+function drawStars(ctx, t, stars){
+  for(var i=0;i<stars.length;i++){
+    var s = stars[i];
+    var a = 0.18 + 0.4*Math.abs(Math.sin(t*0.5 + s.p*6.28));
+    ctx.fillStyle = "rgba(224,229,225,"+a+")";
+    ctx.beginPath(); ctx.arc(s.x, s.y, 0.8+s.p*1.1, 0, 6.283); ctx.fill();
+  }
+}
+function glowDot(ctx, x, y, r, color, alpha, halo){
+  var g = ctx.createRadialGradient(x,y,0,x,y,r*(halo||2.6));
+  g.addColorStop(0, rgba(color, alpha));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r*(halo||2.6),0,6.283); ctx.fill();
+  ctx.fillStyle = rgba(color, Math.min(1, alpha+0.25));
+  ctx.beginPath(); ctx.arc(x,y,r,0,6.283); ctx.fill();
+}
+function label(ctx, x, y, name, sub, alpha){
+  ctx.textAlign = "center"; ctx.direction = "rtl";
+  ctx.fillStyle = rgba(PAL.text, alpha==null?0.92:alpha);
+  ctx.font = "600 11px 'IBM Plex Sans Arabic', Tahoma";
+  ctx.fillText(name, x, y);
+  if(sub){
+    ctx.fillStyle = rgba(PAL.muted, alpha==null?0.8:alpha);
+    ctx.font = "300 9px 'IBM Plex Sans Arabic', Tahoma";
+    ctx.fillText(sub, x, y+12);
+  }
+}
+function chip(ctx, x, y, text, color){
+  ctx.font = "500 10px 'IBM Plex Sans Arabic', Tahoma";
+  var w = ctx.measureText(text).width + 22, h = 22, r = 11;
+  var x0 = x - w/2, y0 = y - h/2;
+  ctx.fillStyle = rgba(color, 0.28);
+  ctx.strokeStyle = rgba(color, 0.75); ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0+r,y0); ctx.arcTo(x0+w,y0,x0+w,y0+h,r); ctx.arcTo(x0+w,y0+h,x0,y0+h,r);
+  ctx.arcTo(x0,y0+h,x0,y0,r); ctx.arcTo(x0,y0,x0+w,y0,r); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = PAL.text; ctx.textAlign = "center"; ctx.direction = "rtl";
+  ctx.fillText(text, x, y+3.5);
+}
+function softRing(ctx, cx, cy, rx, ry, color, alpha, lw){
+  ctx.strokeStyle = rgba(color, alpha); ctx.lineWidth = lw||1;
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.283); ctx.stroke();
+}
+function rr(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+/* ======================================================================
+   مولّدات الحركة — كل دالة ترسم إطاراً واحداً عند الزمن t (ثوانٍ)
+====================================================================== */
+var GEN = {};
+
+/* 1 — سديم البطاقات */
+GEN.nebulaCards = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(100+i);
+    var bx = 60 + rnd()*(W-120), by = 90 + rnd()*(H-220);
+    var x = bx + Math.sin(t*0.22 + i*1.7)*14, y = by + Math.cos(t*0.17 + i*2.3)*10;
+    var a = 0.75 + 0.25*Math.sin(t*0.35 + i);
+    glowDot(ctx, x, y-8, 26+ f.count*0.7, f.color, 0.10*a, 2.4);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = rgba(PAL.surface, 0.92);
+    ctx.strokeStyle = rgba(f.color, 0.65); ctx.lineWidth = 1.2;
+    rr(ctx, x-46, y-26, 92, 52, 16); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = rgba(f.color, 0.9);
+    ctx.beginPath(); ctx.arc(x-30, y-8, 7, 0, 6.283); ctx.fill();
+    label(ctx, x+8, y-6, f.name, null, a);
+    ctx.fillStyle = rgba(PAL.muted, 0.85*a); ctx.font = "300 9px 'IBM Plex Sans Arabic'";
+    ctx.fillText(f.count+" ملف", x+8, y+10);
+    ctx.globalAlpha = 1;
+  }
+};
+
+/* 2 — أبراج المجلدات (كوكبات) */
+GEN.constellation = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var pts = [];
+  for(var i=0;i<FOLDERS.length;i++){
+    var rnd = mulberry32(300+i);
+    pts.push({x:50+rnd()*(W-100), y:80+rnd()*(H-190), f:FOLDERS[i]});
+  }
+  ctx.strokeStyle = rgba(PAL.mint, 0.16); ctx.lineWidth = 1;
+  for(i=0;i<pts.length;i++){
+    for(var j=i+1;j<pts.length;j++){
+      var d = Math.hypot(pts[i].x-pts[j].x, pts[i].y-pts[j].y);
+      if(d<170){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+    }
+  }
+  for(i=0;i<pts.length;i++){
+    var p = pts[i], tw = 0.6 + 0.4*Math.sin(t*0.55 + i*1.9);
+    glowDot(ctx, p.x, p.y, 4+p.f.count*0.28, p.f.color, 0.5*tw, 3.2);
+    label(ctx, p.x, p.y+26, p.f.name, p.f.count+" ملف", 0.65+0.35*tw);
+  }
+};
+
+/* 3 — النواة المتنفسة */
+GEN.breatheCore = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 14;
+  var br = 0.5 + 0.5*Math.sin(t*0.45); /* شهيق/زفير بطيء */
+  glowDot(ctx, cx, cy, 20+10*br, PAL.gold, 0.30+0.15*br, 3.4);
+  ctx.fillStyle = rgba(PAL.goldLight, 0.85);
+  ctx.beginPath(); ctx.arc(cx, cy, 5+2.5*br, 0, 6.283); ctx.fill();
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var rad = 70 + i*22, ang = t*(0.10 - i*0.008) + i*1.05;
+    var x = cx + Math.cos(ang)*rad, y = cy + Math.sin(ang)*rad*0.86;
+    glowDot(ctx, x, y, 3.6+f.count*0.22, f.color, 0.6, 2.8);
+    label(ctx, x, y+22, f.name, null, 0.85);
+  }
+};
+
+/* 4 — نهر النجوم المتدفق */
+GEN.starRiver = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var rows = [140, 230, 320];
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], row = rows[i%3];
+    var speed = 12 + (i%3)*6;
+    var x = ((t*speed + i*140) % (W+160)) - 80;
+    var y = row + Math.sin(t*0.4 + i*2)*8;
+    ctx.strokeStyle = rgba(f.color, 0.20);
+    ctx.beginPath(); ctx.moveTo(x-46,y); ctx.lineTo(x-14,y); ctx.lineWidth=2; ctx.stroke();
+    glowDot(ctx, x, y, 5+f.count*0.3, f.color, 0.7, 2.6);
+    label(ctx, x, y+24, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 5 — اللولب الذهبي */
+GEN.goldenSpiral = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 10, rot = t*0.05;
+  ctx.strokeStyle = rgba(PAL.muted, 0.14); ctx.lineWidth = 1; ctx.beginPath();
+  for(var a=0;a<9.4;a+=0.08){
+    var r = 8*Math.exp(0.16*a);
+    var x = cx + Math.cos(a+rot)*r, y = cy + Math.sin(a+rot)*r*0.9;
+    if(a===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  for(var i=0;i<FOLDERS.length;i++){
+    var aa = 1.6 + i*1.45, rr2 = 8*Math.exp(0.16*aa);
+    var px = cx + Math.cos(aa+rot)*rr2, py = cy + Math.sin(aa+rot)*rr2*0.9;
+    glowDot(ctx, px, py, 4+FOLDERS[i].count*0.25, FOLDERS[i].color, 0.7, 2.8);
+    label(ctx, px, py+22, FOLDERS[i].name, null, 0.88);
+  }
+};
+
+/* 6 — الرادار الكوني */
+GEN.radar = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 8;
+  for(var k=1;k<=3;k++) softRing(ctx, cx, cy, k*62, k*62, PAL.muted, 0.16, 1);
+  var sweep = (t*0.35) % 6.283;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(sweep);
+  var grad = ctx.createLinearGradient(0,0,180,0);
+  grad.addColorStop(0, rgba(PAL.mint,0.30)); grad.addColorStop(1, rgba(PAL.mint,0));
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,180,-0.35,0.05); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(500+i);
+    var rad = 55 + rnd()*130, ang = rnd()*6.283;
+    var x = cx + Math.cos(ang)*rad, y = cy + Math.sin(ang)*rad;
+    var diff = Math.abs(((sweep - ang) % 6.283 + 6.283) % 6.283);
+    var lit = diff < 0.7 ? (1 - diff/0.7) : 0;
+    glowDot(ctx, x, y, 3.5+f.count*0.25, f.color, 0.35+0.6*lit, 2.6+lit*1.6);
+    label(ctx, x, y+22, f.name, null, 0.55+0.45*lit);
+  }
+};
+
+/* 7 — عناقيد الجسيمات */
+GEN.particleFlow = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(700+i);
+    var cx = 60+rnd()*(W-120), cy = 90+rnd()*(H-200);
+    cx += Math.sin(t*0.13+i)*18; cy += Math.cos(t*0.11+i*2)*12;
+    for(var p=0;p<10;p++){
+      var a2 = t*0.3 + p*0.628 + i, rad = 8 + (p%4)*5 + Math.sin(t*0.5+p)*2;
+      glowDot(ctx, cx+Math.cos(a2)*rad, cy+Math.sin(a2)*rad*0.8, 1.6, f.color, 0.5, 2);
+    }
+    glowDot(ctx, cx, cy, 3, f.color, 0.85, 2.4);
+    label(ctx, cx, cy+32, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 8 — مذنّبات الملفات */
+GEN.comets = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 6;
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var rx = 60+i*24, ry = rx*0.62;
+    var ang = t*(0.16 - i*0.014) + i*1.1;
+    var x = cx + Math.cos(ang)*rx, y = cy + Math.sin(ang)*ry;
+    for(var k=1;k<=9;k++){
+      var a2 = ang - k*0.07;
+      var tx = cx + Math.cos(a2)*rx, ty = cy + Math.sin(a2)*ry;
+      ctx.fillStyle = rgba(f.color, 0.30*(1-k/10));
+      ctx.beginPath(); ctx.arc(tx,ty,3.2*(1-k/12),0,6.283); ctx.fill();
+    }
+    glowDot(ctx, x, y, 4.5+f.count*0.2, f.color, 0.85, 2.4);
+    var showLabel = Math.sin(ang) > 0.25;
+    if(showLabel) label(ctx, x, y+24, f.name, null, 0.9);
+  }
+};
+
+/* 9 — شجرة المعرفة الكونية */
+GEN.cosmicTree = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var bx = W/2, by = H-70;
+  ctx.strokeStyle = rgba(PAL.sand, 0.55); ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx+6, by-70, bx, by-110); ctx.stroke();
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var dir = i%2===0 ? 1 : -1;
+    var y0 = by - 95 - Math.floor(i/2)*52;
+    var sway = Math.sin(t*0.3 + i)*4;
+    var ex = bx + dir*(58+ (i%3)*22) + sway, ey = y0 - 26;
+    ctx.strokeStyle = rgba(PAL.sand, 0.35); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(bx, y0); ctx.quadraticCurveTo(bx+dir*30, y0-8, ex, ey); ctx.stroke();
+    glowDot(ctx, ex, ey, 5+f.count*0.3, f.color, 0.75, 2.6);
+    var nLeaves = Math.min(f.count, 7);
+    for(var l=0;l<nLeaves;l++){
+      var la = l*1.3 + t*0.1 + i;
+      ctx.fillStyle = rgba(f.color, 0.4);
+      ctx.beginPath(); ctx.arc(ex+Math.cos(la)*14, ey+Math.sin(la)*10, 1.6, 0, 6.283); ctx.fill();
+    }
+    label(ctx, ex, ey+26, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 10 — حلقات مائلة ثلاثية الأبعاد */
+GEN.tiltedRings = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 8;
+  var tilt = 0.35 + 0.1*Math.sin(t*0.1);
+  var spin = t*0.12;
+  for(var k=0;k<3;k++){
+    softRing(ctx, cx, cy, 60+k*44, (60+k*44)*tilt, PAL.muted, 0.15, 1);
+  }
+  var items = [];
+  for(var i=0;i<FOLDERS.length;i++){
+    var ring = i%3, ang = spin*(1.4-ring*0.35) + i*2.1;
+    var rad = 60+ring*44;
+    items.push({x:cx+Math.cos(ang)*rad, y:cy+Math.sin(ang)*rad*tilt,
+      depth:Math.sin(ang), f:FOLDERS[i]});
+  }
+  items.sort(function(a,b){return a.depth-b.depth;});
+  for(i=0;i<items.length;i++){
+    var it = items[i], s = 0.75 + 0.35*(it.depth+1)/2;
+    glowDot(ctx, it.x, it.y, (3.5+it.f.count*0.2)*s, it.f.color, 0.4+0.4*(it.depth+1)/2, 2.4);
+    if(it.depth > -0.2) label(ctx, it.x, it.y+20*s, it.f.name, null, 0.55+0.45*(it.depth+1)/2);
+  }
+};
+
+/* 11 — موجات النبض */
+GEN.pulseWave = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 8;
+  for(var w=0; w<3; w++){
+    var ph = ((t*26 + w*72) % 216);
+    softRing(ctx, cx, cy, ph, ph, PAL.mint, Math.max(0, 0.28*(1-ph/216)), 1.4);
+  }
+  glowDot(ctx, cx, cy, 6, PAL.gold, 0.7, 2.8);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(900+i);
+    var rad = 45+rnd()*150, ang = rnd()*6.283;
+    var x = cx+Math.cos(ang)*rad, y = cy+Math.sin(ang)*rad;
+    var hit = 0;
+    for(w=0; w<3; w++){
+      var r2 = ((t*26 + w*72) % 216);
+      if(Math.abs(r2-rad)<14) hit = 1 - Math.abs(r2-rad)/14;
+    }
+    glowDot(ctx, x, y, 3.5+f.count*0.24, f.color, 0.35+0.6*hit, 2.4+hit*1.4);
+    label(ctx, x, y+22, f.name, null, 0.55+0.45*hit);
+  }
+};
+
+/* 12 — شبكة النجوم المتنفسة */
+GEN.breathGrid = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cols = 2, cw = (W-70)/cols, chh = 108;
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var col = i%cols, row = Math.floor(i/cols);
+    var x0 = 35+col*cw, y0 = 96+row*(chh+14);
+    var br = 0.5+0.5*Math.sin(t*0.4 + (row+col)*1.1);
+    ctx.fillStyle = rgba(PAL.surface, 0.85);
+    ctx.strokeStyle = rgba(f.color, 0.25+0.45*br); ctx.lineWidth = 1.4;
+    rr(ctx, x0, y0, cw-14, chh, 20); ctx.fill(); ctx.stroke();
+    glowDot(ctx, x0+(cw-14)/2, y0+38, 7+f.count*0.35, f.color, 0.35+0.4*br, 2.6);
+    label(ctx, x0+(cw-14)/2, y0+72, f.name, f.count+" ملف", 0.7+0.3*br);
+  }
+};
+
+/* 13 — الشفق القطبي */
+GEN.aurora = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var b=0;b<3;b++){
+    var col = [PAL.mint, PAL.sage, PAL.goldLight][b];
+    ctx.beginPath();
+    var yBase = 130 + b*60;
+    ctx.moveTo(-20, yBase);
+    for(var x=0; x<=W+20; x+=16){
+      var y = yBase + Math.sin(x*0.014 + t*0.25 + b*2)*34 + Math.sin(x*0.03 - t*0.15)*12;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W+20, H); ctx.lineTo(-20, H); ctx.closePath();
+    var g = ctx.createLinearGradient(0, yBase-60, 0, yBase+140);
+    g.addColorStop(0, rgba(col, 0.0)); g.addColorStop(0.5, rgba(col, 0.10)); g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g; ctx.fill();
+  }
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(1100+i);
+    var x = 40+rnd()*(W-80) + Math.sin(t*0.08+i)*6;
+    var y = 300+rnd()*140;
+    glowDot(ctx, x, y, 4+f.count*0.26, f.color, 0.75, 2.8);
+    label(ctx, x, y+24, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 14 — بندول النجوم */
+GEN.pendulum = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var px = W/2, py = 56;
+  var L = 210, ang = Math.sin(t*0.4)*0.75;
+  var bx2 = px + Math.sin(ang)*L, by2 = py + Math.cos(ang)*L;
+  ctx.strokeStyle = rgba(PAL.muted, 0.35); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx2,by2); ctx.stroke();
+  ctx.strokeStyle = rgba(PAL.goldLight, 0.12);
+  ctx.beginPath(); ctx.arc(px, py, L, Math.PI/2-0.8, Math.PI/2+0.8); ctx.stroke();
+  glowDot(ctx, bx2, by2, 9, PAL.gold, 0.8, 3);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var a = -0.7 + i*(1.4/(FOLDERS.length-1)) + Math.PI/2;
+    var x = px + Math.cos(a)*L, y = py + Math.sin(a)*L;
+    var near = Math.abs(ang - (a - Math.PI/2)) < 0.28 ? 1 : 0;
+    glowDot(ctx, x, y+18, 3.5+f.count*0.22, f.color, near?0.95:0.4, near?3:2.2);
+    label(ctx, x, y+40, f.name, null, near?1:0.6);
+  }
+};
+
+/* 15 — حلقة الوقت */
+GEN.clockRing = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 6, R = 148;
+  softRing(ctx, cx, cy, R, R, PAL.muted, 0.25, 1.2);
+  for(var k=0;k<12;k++){
+    var a = k*Math.PI/6;
+    ctx.strokeStyle = rgba(PAL.muted, 0.35); ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*(R-7), cy+Math.sin(a)*(R-7));
+    ctx.lineTo(cx+Math.cos(a)*(R-1), cy+Math.sin(a)*(R-1));
+    ctx.stroke();
+  }
+  var rot = t*0.06;
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], fa = rot + i*(6.283/FOLDERS.length);
+    var x = cx+Math.cos(fa)*R, y = cy+Math.sin(fa)*R;
+    glowDot(ctx, x, y, 5+f.count*0.28, f.color, 0.8, 2.6);
+    var lx = cx+Math.cos(fa)*(R-34), ly = cy+Math.sin(fa)*(R-34);
+    label(ctx, lx, ly, f.name, f.count+" ملف", 0.9);
+  }
+  ctx.strokeStyle = rgba(PAL.goldLight, 0.8); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, cy);
+  ctx.lineTo(cx+Math.cos(-Math.PI/2)*(R-26), cy+Math.sin(-Math.PI/2)*(R-26)); ctx.stroke();
+  glowDot(ctx, cx, cy, 4, PAL.gold, 0.9, 2.2);
+};
+
+/* 16 — خيوط الضوء */
+GEN.lightWeb = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var pts = [];
+  for(var i=0;i<FOLDERS.length;i++){
+    var rnd = mulberry32(1300+i);
+    pts.push({x:46+rnd()*(W-92), y:84+rnd()*(H-200), f:FOLDERS[i]});
+  }
+  for(i=0;i<pts.length;i++){
+    for(var j=i+1;j<pts.length;j++){
+      ctx.strokeStyle = rgba(PAL.muted, 0.12); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke();
+      var p = (t*0.12 + (i+j)*0.37) % 1; /* نبض يسافر على الخيط */
+      var x = pts[i].x + (pts[j].x-pts[i].x)*p, y = pts[i].y + (pts[j].y-pts[i].y)*p;
+      ctx.fillStyle = rgba(PAL.mint, 0.5*(1-Math.abs(p-0.5)*2)+0.1);
+      ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 6.283); ctx.fill();
+    }
+  }
+  for(i=0;i<pts.length;i++){
+    var tw = 0.7+0.3*Math.sin(t*0.5+i*1.4);
+    glowDot(ctx, pts[i].x, pts[i].y, 4.5+pts[i].f.count*0.26, pts[i].f.color, 0.6*tw+0.25, 2.6);
+    label(ctx, pts[i].x, pts[i].y+24, pts[i].f.name, pts[i].f.count+" ملف", 0.6+0.35*tw);
+  }
+};
+
+/* 17 — زخات الشهب الهادئة */
+GEN.meteors = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var m=0;m<3;m++){
+    var period = 9 + m*4;
+    var ph = ((t + m*3.7) % period) / period;
+    var mx = 40 + ((m*137 + ph*340) % (W-60));
+    var my = -20 + ph*(H*0.7);
+    var alpha = ph < 0.12 ? ph/0.12 : (ph > 0.75 ? (1-ph)/0.25 : 1);
+    ctx.strokeStyle = rgba(PAL.goldLight, 0.35*alpha);
+    ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.moveTo(mx, my); ctx.lineTo(mx-26, my-30); ctx.stroke();
+    ctx.fillStyle = rgba(PAL.goldLight, 0.75*alpha);
+    ctx.beginPath(); ctx.arc(mx, my, 2.2, 0, 6.283); ctx.fill();
+  }
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(1500+i);
+    var x = 46+rnd()*(W-92), y = 250+rnd()*(H-330);
+    softRing(ctx, x, y, 16+f.count*0.5, 16+f.count*0.5, f.color, 0.3, 1);
+    glowDot(ctx, x, y, 4+f.count*0.24, f.color, 0.8, 2.4);
+    label(ctx, x, y+30, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 18 — الفقاعات الكونية */
+GEN.bubbles = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var speed = 9 + (i%3)*3;
+    var y = H + 30 - ((t*speed + i*150) % (H+120));
+    var x = 60 + i*((W-120)/(FOLDERS.length-1)) + Math.sin(t*0.5+i*2)*10;
+    var r = 20 + f.count*1.1;
+    var g = ctx.createRadialGradient(x-r*0.3, y-r*0.3, 0, x, y, r);
+    g.addColorStop(0, rgba(f.color, 0.30)); g.addColorStop(1, rgba(f.color, 0.08));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = rgba(f.color, 0.5); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke();
+    label(ctx, x, y-2, f.name, f.count+" ملف", 0.95);
+  }
+};
+
+/* 19 — الدوائر المتنفسة */
+GEN.concentricBreath = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 6;
+  for(var k=0;k<4;k++){
+    var br = Math.sin(t*0.35 + k*0.8);
+    var rad = 40 + k*40 + br*8;
+    softRing(ctx, cx, cy, rad, rad, k%2? PAL.mint : PAL.goldLight, 0.10+0.06*(br+1)/2, 1.2);
+  }
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var ringR = 60 + (i%3)*40;
+    var a = t*0.07*(i%2? 1:-1) + i*1.3;
+    var x = cx+Math.cos(a)*ringR, y = cy+Math.sin(a)*ringR;
+    glowDot(ctx, x, y, 4+f.count*0.26, f.color, 0.8, 2.5);
+    label(ctx, x, y+22, f.name, null, 0.88);
+  }
+};
+
+/* 20 — مدار الرقائق (Chips) */
+GEN.chipsOrbit = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 4;
+  softRing(ctx, cx, cy, 128, 46, PAL.muted, 0.18, 1);
+  glowDot(ctx, cx, cy, 10, PAL.gold, 0.5, 3);
+  label(ctx, cx, cy+4, "ملفاتي", null, 0.9);
+  var items = [];
+  for(var i=0;i<FOLDERS.length;i++){
+    var a = t*0.14 + i*(6.283/FOLDERS.length);
+    items.push({a:a, f:FOLDERS[i]});
+  }
+  items.sort(function(p,q){ return Math.sin(p.a)-Math.sin(q.a); });
+  for(i=0;i<items.length;i++){
+    var it = items[i];
+    var x = cx + Math.cos(it.a)*128, y = cy + Math.sin(it.a)*46;
+    var s = 0.7 + 0.4*((Math.sin(it.a)+1)/2);
+    ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+    chip(ctx, 0, 0, it.f.name+" · "+it.f.count, it.f.color);
+    ctx.restore();
+  }
+};
+
+/* 21 — أقمار وأجرام */
+GEN.moonsPlanets = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var col = i%2, row = Math.floor(i/2);
+    var cx = 100 + col*160, cy = 120 + row*125;
+    var pr = 10 + f.count*0.35;
+    glowDot(ctx, cx, cy, pr, f.color, 0.55, 2.2);
+    var ma = t*(0.5 - row*0.08) + i;
+    var mr = pr + 16;
+    softRing(ctx, cx, cy, mr, mr*0.8, f.color, 0.22, 1);
+    var mx = cx + Math.cos(ma)*mr, my = cy + Math.sin(ma)*mr*0.8;
+    ctx.fillStyle = rgba(PAL.goldLight, 0.9);
+    ctx.beginPath(); ctx.arc(mx, my, 3, 0, 6.283); ctx.fill();
+    label(ctx, cx, cy+pr+22, f.name, f.count+" ملف", 0.92);
+  }
+};
+
+/* 22 — ركّاب الموجة */
+GEN.sineRide = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  ctx.strokeStyle = rgba(PAL.mint, 0.18); ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for(var x=0;x<=W;x+=8){
+    var y = H/2 + Math.sin(x*0.02 + t*0.35)*46;
+    if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var px = ((t*18 + i*(W/FOLDERS.length)) % (W+80)) - 40;
+    var py = H/2 + Math.sin(px*0.02 + t*0.35)*46;
+    glowDot(ctx, px, py, 4.5+f.count*0.26, f.color, 0.85, 2.6);
+    label(ctx, px, py-16, f.name, f.count+" ملف", 0.92);
+  }
+};
+
+/* 23 — المكعب النجمي */
+GEN.starCube = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 20, s = 92;
+  var a = t*0.25;
+  var cos = Math.cos(a), sin = Math.sin(a);
+  var verts = [];
+  for(var i=0;i<8;i++){
+    var x = (i&1?1:-1)*s*0.5, y = (i&2?1:-1)*s*0.5, z = (i&4?1:-1)*s*0.5;
+    var rx = x*cos - z*sin, rz = x*sin + z*cos;
+    var tilt = 0.42;
+    var ry = y*Math.cos(tilt) - rz*Math.sin(tilt);
+    rz = y*Math.sin(tilt) + rz*Math.cos(tilt);
+    var per = 300/(300+rz);
+    verts.push({x: cx + rx*per, y: cy + ry*per, z: rz});
+  }
+  var edges = [[0,1],[1,3],[3,2],[2,0],[4,5],[5,7],[7,6],[6,4],[0,4],[1,5],[2,6],[3,7]];
+  ctx.strokeStyle = rgba(PAL.mint, 0.30); ctx.lineWidth = 1.2;
+  for(i=0;i<edges.length;i++){
+    ctx.beginPath();
+    ctx.moveTo(verts[edges[i][0]].x, verts[edges[i][0]].y);
+    ctx.lineTo(verts[edges[i][1]].x, verts[edges[i][1]].y);
+    ctx.stroke();
+  }
+  for(i=0;i<FOLDERS.length;i++){
+    var v = verts[i%8], f = FOLDERS[i];
+    var depth = (v.z + s) / (2*s);
+    glowDot(ctx, v.x, v.y, 3.5+f.count*0.22, f.color, 0.35+0.55*depth, 2.4);
+    if(depth > 0.45) label(ctx, v.x, v.y+20, f.name, null, 0.5+0.5*depth);
+  }
+};
+
+/* 24 — هالة المسافر */
+GEN.haloTraveler = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 8, R = 130;
+  softRing(ctx, cx, cy, R, R, PAL.muted, 0.2, 1.4);
+  var ta = t*0.22;
+  ctx.strokeStyle = rgba(PAL.goldLight, 0.85); ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(cx, cy, R, ta, ta+0.85); ctx.stroke();
+  glowDot(ctx, cx+Math.cos(ta+0.85)*R, cy+Math.sin(ta+0.85)*R, 5, PAL.goldLight, 0.9, 3);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], a = i*(6.283/FOLDERS.length) - Math.PI/2;
+    var x = cx+Math.cos(a)*R, y = cy+Math.sin(a)*R;
+    var diff = Math.abs(((ta+0.85 - a) % 6.283 + 6.283) % 6.283);
+    var lit = diff < 0.5 ? 1-diff/0.5 : 0;
+    glowDot(ctx, x, y, 4+f.count*0.24, f.color, 0.4+0.55*lit, 2.4+lit*1.4);
+    var lx = cx+Math.cos(a)*(R-38), ly = cy+Math.sin(a)*(R-38);
+    label(ctx, lx, ly, f.name, f.count+" ملف", 0.55+0.45*lit);
+  }
+};
+
+/* 25 — سُدُم المجلدات */
+GEN.nebulaMulti = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(1700+i);
+    var cx = 55+rnd()*(W-110), cy = 90+rnd()*(H-210);
+    var br = 0.5+0.5*Math.sin(t*0.3+i*1.2);
+    var r = 26+f.count*1.2+br*10;
+    var g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0, rgba(f.color, 0.30+0.14*br));
+    g.addColorStop(0.6, rgba(f.color, 0.12));
+    g.addColorStop(1, rgba(f.color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.283); ctx.fill();
+    for(var k=0;k<5;k++){
+      var a = k*1.26 + t*0.06*(i%2?1:-1);
+      ctx.fillStyle = rgba(f.color, 0.35);
+      ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r*0.55, cy+Math.sin(a)*r*0.4, 1.8, 0, 6.283); ctx.fill();
+    }
+    label(ctx, cx, cy+r*0.5+14, f.name, f.count+" ملف", 0.9);
+  }
+};
+
+/* 26 — المصعد الكوني */
+GEN.cosmicLift = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var c=0;c<2;c++){
+    var x = 110 + c*140;
+    ctx.strokeStyle = rgba(PAL.muted, 0.12); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 60); ctx.lineTo(x, H-60); ctx.stroke();
+  }
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var col = i%2;
+    var x = 110 + col*140 + Math.sin(t*0.4+i)*6;
+    var y = H - 40 - ((t*(11+i%3*3) + i*130) % (H-60));
+    var fade = y < 110 ? Math.max(0,(y-60)/50) : 1;
+    glowDot(ctx, x, y, 4.5+f.count*0.3, f.color, 0.8*fade, 2.5);
+    ctx.globalAlpha = fade;
+    label(ctx, x, y+24, f.name, f.count+" ملف", 0.92);
+    ctx.globalAlpha = 1;
+  }
+};
+
+/* 27 — المنارة الكونية */
+GEN.lighthouse = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var lx = W/2, ly = H-64;
+  ctx.save(); ctx.translate(lx, ly);
+  var ba = -Math.PI/2 + Math.sin(t*0.28)*0.9;
+  ctx.rotate(ba);
+  var g = ctx.createLinearGradient(0,0,H,0);
+  g.addColorStop(0, rgba(PAL.goldLight, 0.30)); g.addColorStop(1, rgba(PAL.goldLight, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(H, -60); ctx.lineTo(H, 60); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  glowDot(ctx, lx, ly, 8, PAL.gold, 0.85, 2.6);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var a = Math.PI + 0.35 + i*(Math.PI-0.7)/(FOLDERS.length-1);
+    var rad = 150 + (i%2)*46;
+    var x = lx + Math.cos(a)*rad, y = ly + Math.sin(a)*rad;
+    var diff = Math.abs(ba - a); diff = Math.min(diff, 6.283-diff);
+    var lit = diff < 0.35 ? 1-diff/0.35 : 0;
+    glowDot(ctx, x, y, 4+f.count*0.26, f.color, 0.35+0.6*lit, 2.4+lit*1.5);
+    label(ctx, x, y+24, f.name, f.count+" ملف", 0.5+0.5*lit);
+  }
+};
+
+/* 28 — حبر في ماء */
+GEN.inkWater = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(1900+i);
+    var cx = 60+rnd()*(W-120), cy = 100+rnd()*(H-230);
+    var ph = (Math.sin(t*0.22+i*1.7)+1)/2;
+    for(var k=0;k<3;k++){
+      var rr3 = (14+k*12)*(0.7+ph*0.5) + f.count*0.4;
+      var ox = Math.sin(t*0.1+k*2+i)*8, oy = Math.cos(t*0.12+k+i)*6;
+      ctx.fillStyle = rgba(f.color, 0.16-k*0.045);
+      ctx.beginPath(); ctx.arc(cx+ox, cy+oy, rr3, 0, 6.283); ctx.fill();
+    }
+    label(ctx, cx, cy+4, f.name, f.count+" ملف", 0.95);
+  }
+};
+
+/* 29 — مدارات تتنفس (قطع ناقص متحوّل) */
+GEN.breathingOrbits = function(ctx, t){
+  var stars = bg(ctx); drawStars(ctx, t, stars);
+  var cx = W/2, cy = H/2 - 6;
+  glowDot(ctx, cx, cy, 7, PAL.goldLight, 0.7, 3);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i];
+    var base = 46 + i*24;
+    var ecc = 0.55 + 0.35*Math.sin(t*0.18 + i*0.9); /* الاستدارة نفسها تتنفس */
+    var rx = base, ry = base*ecc;
+    softRing(ctx, cx, cy, rx, ry, f.color, 0.16, 1);
+    var a = t*(0.28 - i*0.03)*(i%2?1:-1) + i*1.4;
+    var x = cx+Math.cos(a)*rx, y = cy+Math.sin(a)*ry;
+    glowDot(ctx, x, y, 3.6+f.count*0.24, f.color, 0.8, 2.5);
+    if(Math.sin(a) > 0.3) label(ctx, x, y+20, f.name, null, 0.85);
+  }
+};
+
+/* 30 — خريطة النجوم المؤطّرة (Ken Burns) */
+GEN.starMap = function(ctx, t){
+  var stars = bg(ctx);
+  var zoom = 1 + 0.05*Math.sin(t*0.07);
+  var panX = Math.sin(t*0.05)*10, panY = Math.cos(t*0.04)*8;
+  ctx.save();
+  ctx.translate(W/2+panX, H/2+panY); ctx.scale(zoom, zoom); ctx.translate(-W/2, -H/2);
+  drawStars(ctx, t, stars);
+  for(var i=0;i<FOLDERS.length;i++){
+    var f = FOLDERS[i], rnd = mulberry32(2100+i);
+    var x = 55+rnd()*(W-110), y = 90+rnd()*(H-215);
+    var wob = Math.sin(t*0.25+i)*2.5;
+    ctx.save();
+    ctx.translate(x, y+wob); ctx.rotate((rnd()-0.5)*0.18);
+    ctx.fillStyle = rgba(PAL.surface, 0.95);
+    ctx.strokeStyle = rgba(f.color, 0.7); ctx.lineWidth = 1.4;
+    rr(ctx, -34, -40, 68, 80, 8); ctx.fill(); ctx.stroke();
+    glowDot(ctx, 0, -12, 8+f.count*0.3, f.color, 0.8, 2.2);
+    ctx.fillStyle = rgba(PAL.text, 0.95); ctx.font = "600 10px 'IBM Plex Sans Arabic'";
+    ctx.textAlign = "center"; ctx.direction = "rtl";
+    ctx.fillText(f.name, 0, 18);
+    ctx.fillStyle = rgba(PAL.muted, 0.85); ctx.font = "300 8px 'IBM Plex Sans Arabic'";
+    ctx.fillText(f.count+" ملف", 0, 30);
+    ctx.restore();
+  }
+  ctx.restore();
+};
+
+/* ======================================================================
+   قائمة المقترحات الثلاثين — كل مقترح: الاسم، الفكرة، الحركة، عرض البيانات،
+   ملاحظات التنفيذ في Compose، مولّد الحركة.
+====================================================================== */
+var PROPOSALS = [
+  {name:"سديم البطاقات", gen:"nebulaCards", tempo:"بطيئة جداً",
+   concept:"كل مجلد بطاقة Material 3 عائمة ببطء داخل سديم هادئ، تتوهج بلون المجلد وتتحرك انجرافاً ناعماً كأنها تسبح في فضاء عميق.",
+   motion:"انجراف جيبي بطيء + توهج متنفس حول كل بطاقة",
+   data:"بطاقة لكل مجلد تعرض الاسم وعدد الملفات ونقطة بلون المجلد",
+   compose:"بطاقات <code>Surface</code> مع <code>graphicsLayer</code>، حركة بـ <code>rememberInfiniteTransition</code> وقناة <code>animateFloat</code> لكل محور."},
+  {name:"أبراج المجلدات", gen:"constellation", tempo:"هادئة",
+   concept:"المجلدات نجوم لامعة تشكّل كوكبة، تصل بينها خيوط خفيفة مثل خرائط النجوم القديمة. كل نجمة تتلألأ بلون مجلدها.",
+   motion:"تلألؤ تدريجي بطيء للنجام مع ثبات المواضع (لا دوران إطلاقاً)",
+   data:"حجم النجمة = عدد الملفات، والاسم والعدد تحتها",
+   compose:"رسم واحد على <code>Canvas</code> للخيوط والنجوم، والتلألؤ عبر <code>infiniteRepeatable(tween)</code> بإزاحة طور لكل مجلد."},
+  {name:"النواة المتنفسة", gen:"breatheCore", tempo:"تنفس بطيء",
+   concept:"نجمة ذهبية مركزية «تتنفس» شهيقاً وزفيراً، وحولها تدور المجلدات على مسافات متفاوتة بهدوء شديد — بديل ناعم عن الثقب الأسود.",
+   motion:"نبض نصف قطر النواة المركزية + دوران مداري أبطأ كلما ابتعد المجلد",
+   data:"نقطة ملونة لكل مجلد بحجم يتناسب مع ملفاته واسمه أسفله",
+   compose:"<code>animateFloat</code> للنَفَس ودوران مشترك، مع <code>drawCircle</code> بتدرج شعاعي على <code>Canvas</code>."},
+  {name:"نهر النجوم", gen:"starRiver", tempo:"تدفق بطيء",
+   concept:"المجلدات تنساب في ثلاثة تيارات أفقية مثل نهر نجمي هادئ، كل تيار بسرعة مختلفة قليلاً، مع خط ضوء خلف كل مجلد.",
+   motion:"انسياب أفقي مستمر مع تموّج عمودي خفيف",
+   data:"جرم ملون + اسم + عدد الملفات أثناء العبور",
+   compose:"حساب الموضع <code>(t × سرعة) % عرض</code> لكل عنصر، مع <code>offset</code> في <code>Box</code> أو رسم مباشر على <code>Canvas</code>."},
+  {name:"اللولب الذهبي", gen:"goldenSpiral", tempo:"دوران شديد البطء",
+   concept:"المجلدات موزعة على ذراع حلزون ذهبي (متتالية فيبوناتشي) يدور ببطء مهيب — إحساس بالنمو الطبيعي والتراكم المعرفي.",
+   motion:"دوران الحلزون كله حول المركز بسرعة واحدة ثابتة",
+   data:"المجلدات على نقاط الحلزون بأحجام حسب عدد الملفات",
+   compose:"مواضع محسوبة بمعادلة الحلزون <code>r = a·e^(bθ)</code>، والرسم على <code>Canvas</code> بمسار <code>Path</code>."},
+  {name:"الرادار الكوني", gen:"radar", tempo:"مسح منتظم",
+   concept:"شاشة رادار مدارية تمسح الفضاء بحزمة ضوء خضراء؛ عندما تمر الحزمة فوق مجلد يسطع ويظهر اسمه — إحساس بالاكتشاف.",
+   motion:"مسح دوراني بطيء + إضاءة المجلدات لحظة المرور",
+   data:"نقاط المجلدات على حلقات الرادار بأحجام حسب الملفات",
+   compose:"قطّاع متدرج يوضع عبر <code>withTransform(rotate)</code> في <code>Canvas</code>، والإضاءة بدالة من فرق الزوايا."},
+  {name:"عناقيد الجسيمات", gen:"particleFlow", tempo:"سرب هادئ",
+   concept:"كل مجلد عنقود من جسيمات دقيقة بلونه تدور حول نواته وتسبح ببطء عبر الشاشة — إحساس عضوي حي.",
+   motion:"دوران الجسيمات حول مراكزها + انجراف العنقود كله",
+   data:"عدد جسيمات العنقود يعكس عدد الملفات مع الاسم أسفله",
+   compose:"جسيمات تُرسم على <code>Canvas</code> واحد، ومواضع المراكز عبر قنوات <code>animateFloat</code> منفصلة."},
+  {name:"مذنّبات الملفات", gen:"comets", tempo:"مرور دوري",
+   concept:"كل مجلد مذنّب بذيل ضوئي طويل بلونه يمر في مدار بيضاوي، ويظهر اسمه عندما يقترب من مركز الرؤية.",
+   motion:"مرور مذنبات متزامن على مدارات متداخلة",
+   data:"الذيل الطويل + نقطة الرأس + الاسم عند الاقتراب",
+   compose:"الذيل سلسلة أقواس أو دوائر متلاشية على <code>Canvas</code>؛ الزاوية من <code>infiniteRepeatable</code> لكل مدار."},
+  {name:"شجرة المعرفة", gen:"cosmicTree", tempo:"تمايل نسيم",
+   concept:"شجرة كونية تنمو من أسفل الشاشة؛ كل غصن مجلد، وأوراقه المتلألئة هي ملفاته. تتمايل الأغصان تمايل نسيم خفيف.",
+   motion:"تمايل جيبي بطيء للأغصان + لمعان الأوراق",
+   data:"غصن لكل مجلد وعدد الأوراق = عدد الملفات",
+   compose:"مسارات <code>Path</code> ثابتة مع إزاحة <code>translate</code> متحركة للتمايل داخل <code>DrawScope</code>."},
+  {name:"حلقات مائلة", gen:"tiltedRings", tempo:"دوران عميق",
+   concept:"ثلاث حلقات مائلة كأنها نظام حلقات زحل، والمجلدات تتحرك عليها مع تأثير عمق حقيقي: تكبير أماماً وتضاؤل خلفاً.",
+   motion:"دوران على حلقات مائلة مع تدرج عمق (حجم وشفافية)",
+   data:"أجرام بلون المجلد + الاسم عند المرور الأمامي",
+   compose:"حساب الإسقاط اليدوي (x, y·tilt) و<code>zIndex</code> حسب الجيب — نفس أسلوب العمق في الواجهة الحالية."},
+  {name:"موجات النبض", gen:"pulseWave", tempo:"نبض متمدد",
+   concept:"نبضات ضوئية دائرية تنبثق من النواة المركزية وتتمدد؛ كل مجلد يضيء لحظة وصول الموجة إليه — مثل صدى السونار.",
+   motion:"تمدد حلقات النبض + إضاءة مؤقتة لكل مجلد",
+   data:"نقاط ثابتة للمجلدات تسطع مع الموجة وتعرض الاسم",
+   compose:"حلقات بقطر متحرك <code>animateFloat</code> مع أطوار مزاحة، وإضاءة بدالة المسافة عن جبهة الموجة."},
+  {name:"شبكة النجوم المتنفسة", gen:"breathGrid", tempo:"موجة تنفس",
+   concept:"شبكة بطاقات ناعمة (2×3)، كل خلية تتنفس توهجاً بطوراً متعاقبة كموجة هادئة — الأنسب لقراءة البيانات مباشرة.",
+   motion:"موجة تنفس متعاقبة بين الخلايا (لا حركة مواضع)",
+   data:"بطاقة كاملة لكل مجلد: الاسم والعدد ونقطة اللون",
+   compose:"<code>LazyVerticalGrid</code> مع <code>graphicsLayer(alpha)</code> متحرك لكل خلية عبر <code>Animatable</code>."},
+  {name:"الشفق القطبي", gen:"aurora", tempo:"انسياب شفق",
+   concept:"ستارة شفق بألوان السمة الهادئة تنساب في الخلفية، والمجلدات نجوم ثابتة بأسفلها مع تموّج خفيف — الأكثر راحة للعين.",
+   motion:"انسياب موجات الشفق + تموّج بسيط جداً للنجوم",
+   data:"نجوم المجلدات مع الاسم والعدد تحت كل واحدة",
+   compose:"طبقات <code>Path</code> بمنحنيات متحركة وتدرجات خطية شفافة على <code>Canvas</code> خلف عناصر ثابتة."},
+  {name:"بندول النجوم", gen:"pendulum", tempo:"تأرجح منتظم",
+   concept:"بندول ذهبي يتأرجح فوق قوس من المجلدات؛ عندما يقترب من مجلد يضيئه — حركة ساعة كونية مهيبة ومطمئنة.",
+   motion:"تأرجح بندولي جيبي + إضاءة المجلد القريب من الثقل",
+   data:"المجلدات على قوس أسفل البندول بأحجام ملفاتها",
+   compose:"زاوية البندول <code>animateFloat</code> بدالة جيبية، والخيط والوزن رسم <code>Canvas</code>."},
+  {name:"حلقة الوقت", gen:"clockRing", tempo:"دوران عقارب",
+   concept:"المجلدات موضوعة على حلقة ساعة عملاقة تدور ببطء؛ مؤشر ذهبي ثابت يشير إلى «مجلد اللحظة» — إحساس بالزمن والتنظيم.",
+   motion:"دوران الحلقة كلها + مؤشر ثابت",
+   data:"المجلدات على الحلقات والأسماء للداخل مع العدد",
+   compose:"مواضع دائرية محسوبة + <code>rotate</code> جماعي عبر <code>graphicsLayer</code> أو رسم <code>Canvas</code> كامل."},
+  {name:"خيوط الضوء", gen:"lightWeb", tempo:"نبض مسافر",
+   concept:"شبكة من الخيوط الرفيعة تصل المجلدات ببعضها، ونبضات ضوء صغيرة تسافر على الخيوط — إحساس بالترابط والشبكة العصبية.",
+   motion:"نبضات تسافر على الأضلاع + تلألؤ العقد",
+   data:"عقد الشبكة هي المجلدات بأحجام ملفاتها وأسمائها",
+   compose:"خطوط على <code>Canvas</code> والنبضات بموضع مُستوفى <code>lerp</code> من طور زمني."},
+  {name:"زخات الشهب", gen:"meteors", tempo:"شهب متباعدة",
+   concept:"شهب ذهبية بطيئة ومتباعدة تعبر السماء خلف المجلدات المحمية كلٌّ داخل حلقة مدارية حارسة — مشهد حي دون تشتيت.",
+   motion:"شهب دورية بطيئة في الخلفية فقط (المجلدات ثابتة)",
+   data:"مجلدات ثابتة داخل حلقات مع الاسم والعدد",
+   compose:"طبقتان: <code>Canvas</code> خلفية للشهب، وعناصر <code>Column</code> ثابتة للمجلدات فوقها."},
+  {name:"الفقاعات الكونية", gen:"bubbles", tempo:"صعود ناعم",
+   concept:"المجلدات فقاعات شفافة بألوانها تصعد ببطء من الأعماق، وحجم الفقاعة يعكس عدد الملفات — حركة مائية مطمئنة.",
+   motion:"صعود عمودي بطيء مع تمايل جانبي خفيف",
+   data:"الاسم والعدد داخل الفقاعة نفسها",
+   compose:"<code>offset(y)</code> متحرك لكل عنصر مع <code>clip(CircleShape)</code> وخلفية <code>Brush.radialGradient</code>."},
+  {name:"الدوائر المتنفسة", gen:"concentricBreath", tempo:"تنفس متعاقب",
+   concept:"أربع حلقات متحدة المركز تتوسع وتنقبض متعاقبة كأن الكون يتنفس، والمجلدات تسبح بين الحلقات ببطء.",
+   motion:"نبض نصف قطر الحلقات + دوران مداري هادئ للمجلدات",
+   data:"أجرام المجلدات على الحلقات مع الأسماء",
+   compose:"أقطار متحركة بأطوار مزاحة عبر <code>rememberInfiniteTransition</code>، والرسم على <code>Canvas</code>."},
+  {name:"مدار الرقائق", gen:"chipsOrbit", tempo:"أرجوحة بيضاوية",
+   concept:"المجلدات رقائق Material 3 (Chips) تدور على مدار بيضاوي حول نواة «ملفاتي»، مع عمق: الأمامية أكبر والخلفية أصغر.",
+   motion:"دوران بيضاوي مع تحجيم حسب العمق",
+   data:"الرقاقة تعرض اسم المجلد وعدد ملفاته مباشرة",
+   compose:"مكونات <code>AssistChip</code> حقيقية مع <code>graphicsLayer(scale, alpha)</code> و<code>zIndex</code> حسب الجيب."},
+  {name:"أقمار وأجرام", gen:"moonsPlanets", tempo:"أقمار سريعة نسبياً",
+   concept:"كل مجلد جرم سماوي له قمر ذهبي صغير يدور حوله — ترتيب شبكي ثابت مع حركة محلية فقط، مريح ومنظم.",
+   motion:"دوران الأقمار حول أجرامها فقط (لا حركة عامة)",
+   data:"حجم الجرم = عدد الملفات، والاسم والعدد أسفله",
+   compose:"لكل عنصر <code>Box</code> مع قمر موضعه من زاوية متحركة — ست قنوات <code>animateFloat</code> مستقلة."},
+  {name:"ركّاب الموجة", gen:"sineRide", tempo:"عبور موجي",
+   concept:"موجة جيبية ناعمة تمتد عبر الشاشة، والمجلدات تركبها متقدمة ببطء من طرف لآخر — حركة انسيابية ممتعة.",
+   motion:"تقدم أفقي بطيء فوق موجة ثابتة التموج",
+   data:"جرم المجلد فوق الموجة مع الاسم والعدد",
+   compose:"منحنى على <code>Canvas</code> + عناصر بموضع <code>y = sin(x)</code> محسوب من زمن مشترك."},
+  {name:"المكعب النجمي", gen:"starCube", tempo:"دوران مجسم",
+   concept:"مكعب سلكي شفاف يدور في الفضاء وعلى رؤوسه تتوضع المجلدات مع عمق ثلاثي الأبعاد — لمسة تقنية أنيقة.",
+   motion:"دوران مكعب ثلاثي الأبعاد بإسقاط منظور بسيط",
+   data:"المجلدات على الرؤوس بأحجام حسب العمق",
+   compose:"إسقاط يدوي بسيط (بدون OpenGL): دوران حول محورين وحساب <code>perspective = d/(d+z)</code> داخل <code>Canvas</code>."},
+  {name:"هالة المسافر", gen:"haloTraveler", tempo:"قوس متنقل",
+   concept:"حلقة كبيرة ثابتة عليها المجلدات، وقوس ذهبي لامع يسافر حولها؛ حيث يمر يوقد المجلد ويكشف بياناته.",
+   motion:"قوس ضوئي يدور حول حلقة ثابتة",
+   data:"المجلدات على الحلقة والأسماء للداخل تُضاء بالمرور",
+   compose:"<code>drawArc</code> بزاوية بداية متحركة على <code>Canvas</code> + عناصر ثابتة فوقه."},
+  {name:"سُدُم المجلدات", gen:"nebulaMulti", tempo:"انتشار وتقلص",
+   concept:"كل مجلد سديمتُه الصغيرة الخاصة بلونه، تتوسع وتتقلص ببطء كغيحة حية — المعرض كله لوحة سُدُم متعددة.",
+   motion:"تنفس نصف قطر كل سديم بطور مختلف",
+   data:"السديم نفسه يحمل اسم المجلد وعدد ملفاته",
+   compose:"تدرجات شعاعية <code>Brush.radialGradient</code> بنصف قطر متحرك لكل عنصر."},
+  {name:"المصعد الكوني", gen:"cosmicLift", tempo:"صعود مستمر",
+   concept:"المجلدات تصعد ببطء في مسارين عموديين مثل مصاعد ضوئية هادئة، تتلاشى عند القمة وتعود من الأسفل.",
+   motion:"صعود عمودي مع تلاشي شفاف عند الأطراف",
+   data:"جرم + اسم + عدد أثناء الصعود",
+   compose:"<code>offset(y)</code> بباقي القسمة على الارتفاع + <code>alpha</code> متدرجة عند الحواف."},
+  {name:"المنارة الكونية", gen:"lighthouse", tempo:"مسح متأرجح",
+   concept:"منارة ذهبية أسفل الشاشة ترسل حزمة ضوء تتأرجح؛ محطات المجلدات موزعة على قوس علوي وتضيء عند مرور الحزمة.",
+   motion:"تأرجح الحزمة + إضاءة المحطات",
+   data:"محطات المجلدات على القوس بأحجام ملفاتها",
+   compose:"قطّاع ضوئي <code>Path</code> بزاوية جيبية متحركة داخل <code>withTransform</code>."},
+  {name:"حبر في ماء", gen:"inkWater", tempo:"انتشار سائل",
+   concept:"ألوان المجلدات تنتشر كقطرات حبر في ماء ساكن — هالات متداخلة تتوسع وتتقلص بحركة سائلة ساحرة.",
+   motion:"طبقات هالات تنبض وتنجرف ببطء شديد",
+   data:"الاسم والعدد في قلب كل بقعة حبر",
+   compose:"دوائر متراكبة بشفافية متدرجة وأقطار متحركة — فعال جداً على <code>Canvas</code> واحد."},
+  {name:"مدارات تتنفس", gen:"breathingOrbits", tempo:"تحول مداري",
+   concept:"تطوير جذري لفكرة المدارات: الاستدارة نفسها تتنفس — المدارات البيضاوية تتقلص وتستدير باستمرار، والمجلدات عليها. مختلف كلياً عن الثقب الأسود لأنه بلا مركز حاجب وبحركة شكل مستمرة.",
+   motion:"تحول معامل الاستدارة + دوران باتجاهات متعاكسة",
+   data:"أجرام المجلدات على المدارات بأسمائها",
+   compose:"معاملان متحركان لكل مدار (زاوية + استدارة) عبر قناتين في <code>rememberInfiniteTransition</code>."},
+  {name:"خريطة النجوم المؤطّرة", gen:"starMap", tempo:"تقرّب بطيء",
+   concept:"خريطة نجوم معلّقة كصور «بولارويد» صغيرة، كل صورة مجلد بنجمته وبياناته، والمشهد كله يتقرّب ويزحف ببطء سينمائي (Ken Burns).",
+   motion:"تقرّب وإزاحة بطيئة جداً للمشهد كله",
+   data:"بطاقة لكل مجلد: نجمة ملونة + الاسم + العدد",
+   compose:"<code>graphicsLayer(scaleX, translationX)</code> على الحاوية الأم بحركة بطيئة جداً (120 ثانية+)."}
+];
+
+/* ======================================================================
+   بناء الواجهة: بطاقات + هاتف + اختيار + تصدير
+====================================================================== */
+var grid = document.getElementById("grid");
+var selected = {};
+try { selected = JSON.parse(localStorage.getItem("galaxySelection") || "{}"); } catch(e){ selected = {}; }
+var cards = [];
+var canvasList = [];
+
+var NAVBAR_HTML =
+  '<div class="navbar">' +
+  '<div class="nav-item"><div class="pill">🏠</div>الرئيسية</div>' +
+  '<div class="nav-item"><div class="pill">📁</div>الملفات</div>' +
+  '<div class="nav-item"><div class="pill">📋</div>المخطط</div>' +
+  '<div class="nav-item active"><div class="pill">✨</div>المجرّة</div>' +
+  '</div>';
+
+PROPOSALS.forEach(function(p, idx){
+  var num = String(idx+1).padStart ? String(idx+1).padStart(2,"0") : ("0"+(idx+1));
+  var el = document.createElement("div");
+  el.className = "card" + (selected[idx] ? " selected" : "");
+  el.innerHTML =
+    '<div class="card-head">' +
+      '<span class="num">مقترح ' + num + '</span>' +
+      '<h3>' + p.name + '</h3>' +
+      '<span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none">' +
+      '<path d="M5 13l4 4L19 7" stroke="#123A2E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+    '</div>' +
+    '<div class="phone">' +
+      '<div class="statusbar"><span>12:30</span><span>UniHub · المجرّة</span><span>▮▮▮ 🔋</span></div>' +
+      '<canvas width="360" height="520"></canvas>' +
+      NAVBAR_HTML +
+    '</div>' +
+    '<div class="card-body">' +
+      '<div class="concept">' + p.concept + '</div>' +
+      '<div class="tags">' +
+        '<span class="tag gold">⏱ ' + p.tempo + '</span>' +
+        '<span class="tag">🎬 ' + p.motion + '</span>' +
+      '</div>' +
+      '<details><summary>🛠 كيف يُنفَّذ في Jetpack Compose؟</summary>' +
+        '<div class="compose-notes"><b>الحركة:</b> ' + p.motion +
+        '<br><b>عرض البيانات:</b> ' + p.data +
+        '<br><b>التنفيذ:</b> ' + p.compose + '</div>' +
+      '</details>' +
+    '</div>';
+  grid.appendChild(el);
+
+  var cv = el.querySelector("canvas");
+  var ctx2 = cv.getContext("2d");
+  ctx2.direction = "rtl";
+  var item = {el:el, canvas:cv, ctx:ctx2, gen:GEN[p.gen], visible:false, idx:idx, p:p};
+  cards.push(item);
+  canvasList.push(item);
+
+  el.addEventListener("click", function(ev){
+    if(ev.target.closest("details") || ev.target.closest("summary")) return;
+    toggleSelect(idx);
+  });
+});
+
+function toggleSelect(idx){
+  if(selected[idx]) delete selected[idx]; else selected[idx] = true;
+  cards[idx].el.classList.toggle("selected", !!selected[idx]);
+  try { localStorage.setItem("galaxySelection", JSON.stringify(selected)); } catch(e){}
+  updateCount();
+}
+function updateCount(){
+  var n = Object.keys(selected).length;
+  document.getElementById("countChip").textContent = "المحدَّد: " + n;
+  document.getElementById("fabCnt").textContent = n + " مقترح محدَّد";
+  document.getElementById("fabBar").classList.toggle("show", n>0);
+}
+document.getElementById("selectAll").addEventListener("click", function(){
+  PROPOSALS.forEach(function(_, i){ selected[i] = true; cards[i].el.classList.add("selected"); });
+  try { localStorage.setItem("galaxySelection", JSON.stringify(selected)); } catch(e){}
+  updateCount();
+});
+document.getElementById("clearAll").addEventListener("click", function(){
+  selected = {};
+  cards.forEach(function(c){ c.el.classList.remove("selected"); });
+  try { localStorage.setItem("galaxySelection", JSON.stringify(selected)); } catch(e){}
+  updateCount();
+});
+
+/* البحث */
+document.getElementById("search").addEventListener("input", function(){
+  var q = this.value.trim();
+  var anyVisible = false;
+  cards.forEach(function(c, i){
+    var hit = !q || PROPOSALS[i].name.indexOf(q) !== -1 || PROPOSALS[i].concept.indexOf(q) !== -1;
+    c.el.classList.toggle("hidden", !hit);
+    if(hit) anyVisible = true;
+  });
+  var em = document.querySelector(".empty-msg");
+  if(!anyVisible && !em){
+    em = document.createElement("div"); em.className = "empty-msg";
+    em.textContent = "لا توجد مقترحات مطابقة لبحثك."; grid.appendChild(em);
+  } else if(anyVisible && em){ em.remove(); }
+});
+
+/* ---------- التصدير إلى اختيارات.MD ---------- */
+function exportMD(){
+  var n = Object.keys(selected).length;
+  if(n === 0){ showToast("لم تحدد أي مقترح بعد — اضغط على البطاقات التي تعجبك أولاً"); return; }
+  var d = new Date();
+  var dateStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  var lines = [];
+  lines.push("# اختيارات تصاميم واجهة المجرّة 🌌");
+  lines.push("");
+  lines.push("> هذا الملف أُنشئ تلقائياً من «استوديو تصاميم واجهة المجرّة» بتاريخ " + dateStr + ".");
+  lines.push("> إلى الوكيل في الجلسة القادمة: اقرأ هذا الملف ونفّذ الاختيارات أدناه على شاشة المجرّة");
+  lines.push("> في `app/src/main/java/com/unihub/app/feature/galaxy/GalaxyScreen.kt`");
+  lines.push("> مع الالتزام بفلسفة سمة التطبيق (ألوان هادئة، حركة بطيئة مريحة للعين، عرض المجلدات وعدد ملفاتها).");
+  lines.push("");
+  lines.push("## المقترحات المحدَّدة (" + n + " من " + PROPOSALS.length + ")");
+  lines.push("");
+  Object.keys(selected).map(Number).sort(function(a,b){return a-b;}).forEach(function(i){
+    var p = PROPOSALS[i];
+    var num = String(i+1).padStart ? String(i+1).padStart(2,"0") : ("0"+(i+1));
+    lines.push("### " + num + " — " + p.name);
+    lines.push("");
+    lines.push("- **الفكرة:** " + p.concept);
+    lines.push("- **الحركة:** " + p.motion + " (إيقاع: " + p.tempo + ")");
+    lines.push("- **عرض البيانات:** " + p.data);
+    lines.push("- **التنفيذ في Compose:** " + p.compose.replace(/<code>/g,"`").replace(/<\/code>/g,"`"));
+    lines.push("");
+  });
+  lines.push("---");
+  lines.push("");
+  lines.push("### ملاحظات الالتزام");
+  lines.push("- الألوان من لوحة التطبيق فقط (انظر `ui/theme/Color.kt` و`FolderPalette`).");
+  lines.push("- الحركة بطيئة ومريحة: لا ومضات أسرع من ثانيتين، ولا استهلاك بطارية عالٍ.");
+  lines.push("- يجب أن تبقى المجلدات قابلة للنقر لفتحها، مع حالة «المجرّة فارغة» كما هي.");
+  lines.push("");
+  var blob = new Blob(["\ufeff" + lines.join("\n")], {type:"text/markdown;charset=utf-8"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = "اختيارات.MD";
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 800);
+  showToast("تم تنزيل اختيارات.MD — أرفقه في جذر المستودع ✔");
+}
+document.getElementById("exportBtn").addEventListener("click", exportMD);
+document.getElementById("exportBtn2").addEventListener("click", exportMD);
+
+function showToast(msg){
+  var t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2800);
+}
+updateCount();
+
+/* ======================================================================
+   حلقة الرسم — تُرسم فقط البطاقات المرئية، وتتوقف عند إخفاء التبويب
+====================================================================== */
+var io = new IntersectionObserver(function(entries){
+  entries.forEach(function(en){
+    var item = canvasList.filter(function(c){ return c.el === en.target; })[0];
+    if(item) item.visible = en.isIntersecting;
+  });
+}, {rootMargin:"120px"});
+cards.forEach(function(c){ io.observe(c.el); });
+
+var start = performance.now();
+var rafId = null;
+function frame(now){
+  var t = (now - start) / 1000;
+  for(var i=0;i<canvasList.length;i++){
+    var c = canvasList[i];
+    if(!c.visible) continue;
+    c.ctx._stars = null; /* إعادة استخدام بذرة النجوم لكل بطاقة */
+    c.gen(c.ctx, t);
+  }
+  rafId = requestAnimationFrame(frame);
+}
+function startLoop(){ if(!rafId) rafId = requestAnimationFrame(frame); }
+function stopLoop(){ if(rafId){ cancelAnimationFrame(rafId); rafId = null; } }
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden) stopLoop(); else startLoop();
+});
+startLoop();
+
+window.addEventListener("error", function(e){
+  var em = document.createElement("div");
+  em.className = "empty-msg";
+  em.textContent = "حدث خطأ في المعاينة: " + e.message;
+  grid.prepend(em);
+});
+</script>
+</body>
+</html>
