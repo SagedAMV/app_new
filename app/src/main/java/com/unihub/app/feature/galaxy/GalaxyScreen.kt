@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -334,8 +335,11 @@ private fun BlackHole(modifier: Modifier = Modifier) {
             center = c
         )
 
-        // قرص التراكم: بيضاوي مائل بتدرج ذهبي يمر خلف النواة
-        rotate(-18f) {
+        // قرص التراكم: بيضاوي مائل بتدرج ذهبي يمر خلف النواة.
+        // ملاحظة: تُستخدم withTransform بدل rotate المجردة لأن هذه الأخيرة امتداد
+        // على CanvasDrawScope بينما مستقبل Canvas الساكن DrawScope فلا تُحل —
+        // و withTransform عضو في DrawScope نفسه وتدور حول مركز مساحة الرسم (c هنا).
+        withTransform({ rotate(-18f) }) {
             drawOval(
                 brush = Brush.linearGradient(
                     colors = listOf(
