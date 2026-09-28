@@ -462,9 +462,15 @@ private fun FolderClusterView(
                     planetSize = childSize,
                     color = child.color.toComposeColor(fallback = Color(0xFF4E7D6E)),
                     onOpenFolder = onOpenFolder,
+                    // عرض العمود مشتق من ثابت الهندسة نفسه (مصدر حقيقة واحد —
+                    // نصف العرض 39 والعرض 78) حتى لا يظهر انحراف صامت إن تغيّر
+                    // الثابت هناك يوماً
                     modifier = Modifier
-                        .offset(x = posX - 39.dp, y = posY - childSize / 2)
-                        .width(78.dp)
+                        .offset(
+                            x = posX - GalaxyGeometry.CHILD_COLUMN_HALF_WIDTH_DP.dp,
+                            y = posY - childSize / 2
+                        )
+                        .width((GalaxyGeometry.CHILD_COLUMN_HALF_WIDTH_DP * 2f).dp)
                 )
             }
         }
