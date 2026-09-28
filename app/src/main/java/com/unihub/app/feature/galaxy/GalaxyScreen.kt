@@ -86,7 +86,9 @@ import kotlin.random.Random
  * 4) التنقل داخل المجرّة (جديد هذه الجلسة): قرص للتكبير/التصغير وسحب للتحرك،
  *    بتكبير مثبّت على مركز القرصة نفسه (لا قفزات لأماكن غريبة)، ونقرة مزدوجة
  *    لإعادة الملاءمة. أدنى تكبير مسموح = ملاءمة المحتوى كله للشاشة، فلا يضيع
- *    أي مجلد مهما كثرت البيانات.
+ *    أي مجلد مهما كثرت البيانات. وإن فاق المحتوى الشاشة (بيانات كثيرة) تبدأ
+ *    المجرة بملاءمة تلقائية مصغَّرة تظهر فيها كل العناقيد، ثم يقرّب المستخدم
+ *    بإصبعيه ما يشاء — صغرٌ تلقائي يتناسب مع العدد كما طلبت تعليمات.md.
  *
  * كل الألوان من لوحة الشاشة/السمة الحالية — لا لون جديداً واحداً.
  */
@@ -335,12 +337,18 @@ private fun GalaxyClusters(
 
         // تمركز أولي (وإعادة تمركز عند تغيّر بنية المحتوى) ما لم يكن المستخدم
         // قد حرّك المجرة بنفسه — حتى لا يقفز العرض تحت يده بعد كل تعديل.
+        // الملاءمة التلقائية الأولية (طلب تعليمات.md — «اذا بيانات اصبحت كثيرة
+        // التطبيق سيقوم بتصغيرها تلقائيا حتى تتناسب مع الشاشة»): إن فاق المحتوى
+        // الشاشة يُبدَأ بمعامل ملاءمة الكل فيظهر كل مجلد مصغّراً، ومن هناك
+        // يقرّب المستخدم بالقرص ما يشاء. وإن كان المحتوى يسع الشاشة فمقياس 1.
         LaunchedEffect(contentWidthPx, contentHeightPx) {
             if (!userAdjusted) {
-                scale = 1f
+                val fits = contentWidthPx <= viewportWidthPx &&
+                    contentHeightPx <= viewportHeightPx
+                scale = if (fits) 1f else layout.fitAllScale
                 translation = Offset(
-                    x = ((viewportWidthPx - contentWidthPx) / 2f).coerceAtLeast(0f),
-                    y = ((viewportHeightPx - contentHeightPx) / 2f).coerceAtLeast(0f)
+                    x = ((viewportWidthPx - contentWidthPx * scale) / 2f).coerceAtLeast(0f),
+                    y = ((viewportHeightPx - contentHeightPx * scale) / 2f).coerceAtLeast(0f)
                 )
             }
         }
