@@ -84,7 +84,14 @@ import kotlin.random.Random
  *    يُشتقان من المساحة المتاحة، فتكبر العناقيد عندما يقلّ عددها وتصغر عندما
  *    يكثر — وكل عنقود يُحجَّم بمعامل موحّد يحفظ النسب بين بنية الأم والأبناء.
  *
- * 4) التنقل داخل المجرّة (جديد هذه الجلسة): قرص للتكبير/التصغير وسحب للتحرك،
+ * 4أ) إصلاح جلسة اليوم (تعليمات.md — «إذا كثرت مجلدات الأبناء تظهر ملفات
+ *    خارج الدائرة»): حسابات الأنصاف كلها أصبحت في مصدر واحد
+ *    [GalaxyGeometry]. الدائرة الحاضنة كانت تحسب قرص الكوكب فقط بينما
+ *    العمود يمتد تحت الكوكب بتسميته (~36) فكان النص يخترق الدائرة كلما
+ *    كثر الأبناء؛ أصبحت الدائرة تحصر العمود كاملاً بحدّ رياضي مضمون لأي
+ *    زاوية، والمدار صار يضمن تباعد الكواكب المتجاورة مهما كثر العدد.
+ *
+ * 4) التنقل داخل المجرّة: قرص للتكبير/التصغير وسحب للتحرك،
  *    بتكبير مثبّت على مركز القرصة نفسه (لا قفزات لأماكن غريبة)، ونقرة مزدوجة
  *    لإعادة الملاءمة. أدنى تكبير مسموح = ملاءمة المحتوى كله للشاشة، فلا يضيع
  *    أي مجلد مهما كثرت البيانات. وإن فاق المحتوى الشاشة (بيانات كثيرة) تبدأ
@@ -439,22 +446,26 @@ private fun GalaxyClusters(
     }
 }
 
-/** بصمة عنقود واحد بوحدات dp المستقلة: قطر الحلقات + هامش التسمية. */
+/**
+ * بصمة عنقود واحد بوحدات dp المستقلة — تفويض كامل إلى [GalaxyGeometry]
+ * حتى تبقى حسابات التحجيم هنا ورسم الدوائر في [FolderClusterView] على
+ * مصدر حقيقة واحد (إصلاح جلسة اليوم: ازدواج الصيغة كان جذر انزياح
+ * الدائرة الحاضنة عن محتواها).
+ */
 private fun clusterFootprint(cluster: GalaxyCluster): Float {
-    return if (cluster.children.isEmpty()) {
-        val planetSize = 30f + min(cluster.parent.fileCount * 2f, 18f)
-        planetSize + 28f + 26f // قطر الكوكب + الحلقة الواقية + هامش التسمية
-    } else {
-        val orbit = 50f + min(cluster.children.size, 8) * 6f
-        val maxChildSize = cluster.children.maxOf { 20f + min(it.fileCount * 2f, 10f) }
-        (orbit + maxChildSize / 2f + 8f) * 2f + 26f
-    }
+    return GalaxyGeometry.footprintDp(
+        childCount = cluster.children.size,
+        maxChildFileCount = cluster.children.maxOfOrNull { it.fileCount } ?: 0,
+        parentFileCount = cluster.parent.fileCount
+    )
 }
 
 /**
  * عنقود واحد: كوكب الأم في مركز عنقوده، وحوله مجلداته الفرعية على مدار
  * بزوايا متساوية (المسافة بين الأبناء مضمونة هندسياً)، خيوط تربطهم بالأم،
- * ودائرة حاضنة بلون الأم تحصر العائلة. وإن لم يكن له أبناء فحلقة حارسة فقط.
+ * ودائرة حاضنة بلون الأم تحصر العائلة كاملة — الكوكب وتسميته المتدلية معاً
+ * مهما كثر عدد الأبناء (الحدّ الرياضي في [GalaxyGeometry.confinementRadiusDp]).
+ * وإن لم يكن له أبناء فحلقة حارسة فقط.
  *
  * [sizeDp] هي بصمة العنقود الطبيعية — كل الحسابات الداخلية نسبة إليها،
  * والتحجيم الفعلي على الشاشة يجري في طبقة التحويل الخارجية بمعامل موحّد.
@@ -467,7 +478,7 @@ private fun FolderClusterView(
     modifier: Modifier = Modifier
 ) {
     val parentColor = cluster.parent.color.toComposeColor(fallback = Color(0xFF4E7D6E))
-    val parentSize = (30 + min(cluster.parent.fileCount * 2, 18)).dp
+    val parentSize = GalaxyGeometry.parentPlanetSizeDp(cluster.parent.fileCount).dp
 
     Box(modifier = modifier.size(sizeDp)) {
         if (cluster.children.isEmpty()) {
@@ -475,7 +486,9 @@ private fun FolderClusterView(
             Canvas(Modifier.matchParentSize()) {
                 drawCircle(
                     color = parentColor.copy(alpha = 0.32f),
-                    radius = parentSize.toPx() / 2f + 14.dp.toPx(),
+                    radius = GalaxyGeometry
+                        .guardianRingRadiusDp(cluster.parent.fileCount)
+                        .dp.toPx(),
                     center = center,
                     style = Stroke(width = 1.4.dp.toPx())
                 )
@@ -491,10 +504,16 @@ private fun FolderClusterView(
             )
         } else {
             val count = cluster.children.size
-            // نصف قطر المدار يتسع مع عدد الأبناء بحد أعلى: مسافة بسيطة لا بعيدة
-            val orbitRadius = (50 + min(count, 8) * 6).dp
-            val maxChildSize = cluster.children.maxOf { (20 + min(it.fileCount * 2, 10)).dp }
-            val confinementRadius = orbitRadius + maxChildSize / 2 + 8.dp
+            val maxChildFileCount = cluster.children.maxOf { it.fileCount }
+            // المدار: يتسع مع العدد وبحدّ يضمن تباعد الكواكب المتجاورة
+            // (انظر GalaxyGeometry.orbitRadiusDp)
+            val orbitRadius = GalaxyGeometry.orbitRadiusDp(count).dp
+            // الدائرة الحاضنة — جوهر إصلاح جلسة اليوم: كانت تحسب قرص الكوكب
+            // فقط فيتدلى نص الأبناء خارجها؛ الآن تحصر العمود كاملاً (كوكب +
+            // تسمية) لأي زاوية على المدار (انظر GalaxyGeometry)
+            val confinementRadius = GalaxyGeometry
+                .confinementRadiusDp(count, maxChildFileCount)
+                .dp
 
             Canvas(Modifier.matchParentSize()) {
                 val c = center
@@ -540,10 +559,11 @@ private fun FolderClusterView(
                     .width(112.dp)
             )
 
-            // كواكب الأبناء: زوايا متساوية تماماً — لا تداخل مهما كثر العدد
+            // كواكب الأبناء: زوايا متساوية تماماً على المدار، والمدار نفسه
+            // يضمن تباعد المتجاورين (GalaxyGeometry.orbitRadiusDp)
             cluster.children.forEachIndexed { index, child ->
                 val angle = -PI / 2 + index * (2.0 * PI / count)
-                val childSize = (20 + min(child.fileCount * 2, 10)).dp
+                val childSize = GalaxyGeometry.childPlanetSizeDp(child.fileCount).dp
                 val posX = sizeDp / 2 + orbitRadius * cos(angle).toFloat()
                 val posY = sizeDp / 2 + orbitRadius * sin(angle).toFloat()
                 PlanetColumn(
