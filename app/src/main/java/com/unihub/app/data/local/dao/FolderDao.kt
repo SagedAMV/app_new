@@ -33,7 +33,7 @@ interface FolderDao {
     /** كل المجلدات مع عدد ملفاتها — استعلام واحد بدل قائمة + استعلام لكل مجلد */
     @Query(
         "SELECT folders.id AS folderId, folders.name AS name, folders.color AS color, " +
-            "COUNT(files.id) AS fileCount " +
+            "COUNT(files.id) AS fileCount, folders.parentId AS parentId " +
             "FROM folders LEFT JOIN files ON files.folderId = folders.id " +
             "GROUP BY folders.id ORDER BY folders.sortOrder ASC, folders.name COLLATE NOCASE ASC"
     )
