@@ -59,7 +59,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.data.local.model.FolderWithFileCount
 import com.unihub.app.ui.theme.toComposeColor
 import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -327,16 +326,24 @@ private fun GalaxyClusters(
                         translationX = translation.x
                         translationY = translation.y
                         transformOrigin = TransformOrigin(0f, 0f)
-                    }
+                    },
+                // نقطة أصل محايدة لاتجاه التخطيط: انحياز المركز صفر فلا
+                // ينقلب في RTL، بعكس TopStart الافتراضية — انظر التعليل في
+                // GalaxyGeometry ودالة gridCellOffsetFromCenterDp.
+                contentAlignment = Alignment.Center
             ) {
                 val cellDp = with(density) { layout.cellPx.toDp() }
                 val gapDp = with(density) { layout.gapPx.toDp() }
+                val stepDp = cellDp + gapDp
                 clusters.forEachIndexed { index, cluster ->
                     val col = index % layout.cols
                     val row = index / layout.cols
                     Box(
                         modifier = Modifier
-                            .absoluteOffset(x = (cellDp + gapDp) * col, y = (cellDp + gapDp) * row)
+                            .absoluteOffset(
+                                x = gridCellOffsetFromCenterDp(col, layout.cols, stepDp.value).dp,
+                                y = gridCellOffsetFromCenterDp(row, layout.rows, stepDp.value).dp
+                            )
                             .size(cellDp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -381,7 +388,16 @@ private fun FolderClusterView(
     val parentColor = cluster.parent.color.toComposeColor(fallback = Color(0xFF4E7D6E))
     val parentSize = GalaxyGeometry.parentPlanetSizeDp(cluster.parent.fileCount).dp
 
-    Box(modifier = modifier.size(sizeDp)) {
+    // عرض عمود الكوكب مشتق من ثابت الهندسة (مصدر حقيقة واحد للأم كما للابن)
+    val parentColumnWidth = (GalaxyGeometry.PARENT_COLUMN_HALF_WIDTH_DP * 2f).dp
+    // الإزاحة الرأسية الثابتة التي تجعل **قرص** الكوكب — لا عموده بتسميته —
+    // هو ما يتمركز على النقطة الهندسية المطلوبة.
+    val discY = GalaxyGeometry.columnOffsetYDp(0f).dp
+
+    // contentAlignment = Center: نقطة أصل انحيازها صفر فلا تنقلب في RTL،
+    // فتتطابق طبقة التخطيط مع إحداثيات Canvas المطلقة على أي جهاز — جوهر
+    // إصلاح «الكواكب ليست في منتصف دائرتها» (التفصيل في GalaxyGeometry).
+    Box(modifier = modifier.size(sizeDp), contentAlignment = Alignment.Center) {
         if (cluster.children.isEmpty()) {
             // مجلد بلا أبناء: كوكب تحرسه حلقة واقية — جوهر مقترح «زخات الشهب»
             Canvas(Modifier.matchParentSize()) {
@@ -400,8 +416,8 @@ private fun FolderClusterView(
                 color = parentColor,
                 onOpenFolder = onOpenFolder,
                 modifier = Modifier
-                    .absoluteOffset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
-                    .width(112.dp)
+                    .absoluteOffset(x = 0.dp, y = discY)
+                    .width(parentColumnWidth)
             )
         } else {
             val count = cluster.children.size
@@ -413,7 +429,7 @@ private fun FolderClusterView(
             // فقط فيتدلى نص الأبناء خارجها؛ الآن تحصر العمود كاملاً (كوكب +
             // تسمية) لأي زاوية على المدار (انظر GalaxyGeometry)
             val confinementRadius = GalaxyGeometry
-                .confinementRadiusDp(count, maxChildFileCount)
+                .confinementRadiusDp(count, maxChildFileCount, cluster.parent.fileCount)
                 .dp
 
             Canvas(Modifier.matchParentSize()) {
@@ -434,10 +450,11 @@ private fun FolderClusterView(
                 )
                 // خيوط تربط كل كوكب ابن بكوكب أمه
                 for (i in cluster.children.indices) {
-                    val angle = -PI / 2 + i * (2.0 * PI / count)
+                    // نفس دوال الهندسة التي يتموضع بها الكوكب نفسه أدناه —
+                    // مصدر حقيقة واحد للزاوية فلا ينفصل الخيط عن كوكبه.
                     val pos = Offset(
-                        x = c.x + orbitRadius.toPx() * cos(angle).toFloat(),
-                        y = c.y + orbitRadius.toPx() * sin(angle).toFloat()
+                        x = c.x + GalaxyGeometry.childCenterDxDp(i, count).dp.toPx(),
+                        y = c.y + GalaxyGeometry.childCenterDyDp(i, count).dp.toPx()
                     )
                     drawLine(
                         color = parentColor.copy(alpha = 0.22f),
@@ -449,25 +466,28 @@ private fun FolderClusterView(
                 }
             }
 
-            // كوكب الأم في مركز العنقود — absoluteOffset يثبّت القرص على مركز
-            // الدائرة الحاضنة بإحداثيات مطلقة لا تتأثر باتجاه التخطيط (RTL/LTR)
+            // كوكب الأم في مركز العنقود تماماً: إزاحة أفقية صفر عن نقطة أصل
+            // متمركزة ⇒ مركز القرص ينطبق على مركز الدائرة الحاضنة المرسومة
+            // على Canvas، في LTR وRTL على حد سواء.
             PlanetColumn(
                 folder = cluster.parent,
                 planetSize = parentSize,
                 color = parentColor,
                 onOpenFolder = onOpenFolder,
                 modifier = Modifier
-                    .absoluteOffset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
-                    .width(112.dp)
+                    .absoluteOffset(x = 0.dp, y = discY)
+                    .width(parentColumnWidth)
             )
 
             // كواكب الأبناء: زوايا متساوية تماماً على المدار، والمدار نفسه
             // يضمن تباعد المتجاورين (GalaxyGeometry.orbitRadiusDp)
             cluster.children.forEachIndexed { index, child ->
-                val angle = -PI / 2 + index * (2.0 * PI / count)
                 val childSize = GalaxyGeometry.childPlanetSizeDp(child.fileCount).dp
-                val posX = sizeDp / 2 + orbitRadius * cos(angle).toFloat()
-                val posY = sizeDp / 2 + orbitRadius * sin(angle).toFloat()
+                // الإحداثيات نسبةً لمركز العنقود — نفس الزوايا التي يرسم بها
+                // Canvas المدار والخيوط (GalaxyGeometry.childAngleRad)، فلا
+                // يمكن أن يفترق الكوكب عن خيطه مهما كان اتجاه الجهاز.
+                val dx = GalaxyGeometry.childCenterDxDp(index, count)
+                val dy = GalaxyGeometry.childCenterDyDp(index, count)
                 PlanetColumn(
                     folder = child,
                     planetSize = childSize,
@@ -478,8 +498,8 @@ private fun FolderClusterView(
                     // الثابت هناك يوماً
                     modifier = Modifier
                         .absoluteOffset(
-                            x = posX - GalaxyGeometry.CHILD_COLUMN_HALF_WIDTH_DP.dp,
-                            y = posY - childSize / 2
+                            x = dx.dp,
+                            y = GalaxyGeometry.columnOffsetYDp(dy).dp
                         )
                         .width((GalaxyGeometry.CHILD_COLUMN_HALF_WIDTH_DP * 2f).dp)
                 )

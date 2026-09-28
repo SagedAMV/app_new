@@ -143,6 +143,19 @@ internal fun computeGalaxyLayout(
  * مصدر حقيقة واحد (إصلاح جلسة اليوم: ازدواج الصيغة كان جذر انزياح
  * الدائرة الحاضنة عن محتواها).
  */
+/**
+ * إزاحة خلية الشبكة عن **مركز** لوح المحتوى على محور واحد.
+ *
+ * (إصلاح هذه الجلسة) كانت الخلايا تُزاح من الزاوية العليا بـ absoluteOffset
+ * فوق نقطة أصل حسّاسة للاتجاه (Alignment.TopStart تنقلب إلى اليمين في RTL)،
+ * فتُدفع كل الأعمدة خارج لوح المحتوى على جهاز عربي بمقدار
+ * (الأعمدة−1)×(خلية+فجوة). الحساب من المركز محايد لأي اتجاه:
+ * الخلية رقم [index] من [count] خليةً تبعد عن المركز بمقدار
+ * `(index − (count−1)/2) × step` — وهي صيغة متماثلة حول المركز تماماً.
+ */
+internal fun gridCellOffsetFromCenterDp(index: Int, count: Int, stepDp: Float): Float =
+    (index - (count - 1) / 2f) * stepDp
+
 internal fun clusterFootprint(cluster: GalaxyCluster): Float {
     return GalaxyGeometry.footprintDp(
         childCount = cluster.children.size,

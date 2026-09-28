@@ -1,6 +1,7 @@
 package com.unihub.app.feature.galaxy
 
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -44,6 +45,17 @@ internal object GalaxyGeometry {
 
     /** نصف عرض عمود الكوكب الابن (العمود 78dp وعرضه مثبّت في واجهة الشاشة) */
     const val CHILD_COLUMN_HALF_WIDTH_DP = 39f
+
+    /**
+     * نصف عرض عمود الكوكب الأم (العمود 112dp).
+     *
+     * (إصلاح هذه الجلسة) كانت القيمتان 56 و112 مكتوبتين رقمين سحريّين داخل
+     * [FolderClusterView] في GalaxyScreen بينما عمود الابن يشتق عرضه من ثابت
+     * هنا — ازدواج مصدر الحقيقة نفسه الذي وثّقت جلسة سابقة أنها عالجته
+     * للأبناء فقط ونسيت الأم. توحيدها هنا يمنع أي انحراف صامت مستقبلاً،
+     * ويجعل حساب بصمة العنقود قادراً على حصر عمود الأم أيضاً.
+     */
+    const val PARENT_COLUMN_HALF_WIDTH_DP = 56f
 
     /** المباعدة بين قرص الكوكب وكتلة التسمية تحته — نفس قيمتها في PlanetColumn */
     const val LABEL_SPACER_DP = 4f
@@ -103,7 +115,11 @@ internal object GalaxyGeometry {
      * العنقود ≤ المدار + هذا النصف القطري — لأي زاوية كان عليها الابن.
      * يضاف هامش الأمان فيُحصر الجميع مهما كثر العدد.
      */
-    fun confinementRadiusDp(childCount: Int, maxChildFileCount: Int): Float {
+    fun confinementRadiusDp(
+        childCount: Int,
+        maxChildFileCount: Int,
+        parentFileCount: Int
+    ): Float {
         if (childCount <= 0) return 0f
         val orbit = orbitRadiusDp(childCount)
         val childSize = childPlanetSizeDp(maxChildFileCount)
@@ -112,8 +128,66 @@ internal object GalaxyGeometry {
             CHILD_COLUMN_HALF_WIDTH_DP * CHILD_COLUMN_HALF_WIDTH_DP +
                 verticalHalf * verticalHalf
         )
-        return orbit + columnHalfDiagonal + CONFINEMENT_PADDING_DP
+        // الأم نفسها عمودٌ أعرض من عمود الابن (112 مقابل 78): لو كان المدار
+        // قصيراً (ابن أو ابنان) فمدى عمود الأم قد يفوق مدى الأبناء، فتخرج
+        // تسمية الأم خارج دائرتها. الحصر يأخذ الأكبر من المدَيَين.
+        return max(orbit + columnHalfDiagonal, parentColumnReachDp(parentFileCount)) +
+            CONFINEMENT_PADDING_DP
     }
+
+    /**
+     * أبعد نقطة في عمود كوكب الأم عن مركز قرصه (نصف القطر القطري للعمود):
+     * أفقياً [PARENT_COLUMN_HALF_WIDTH_DP]، ورأسياً نصف القرص + كتلة التسمية.
+     *
+     * (إصلاح هذه الجلسة) لم تكن هذه المسافة تدخل في أي حساب إطلاقاً، فكانت
+     * بصمة المجلد بلا أبناء تُحسب من الحلقة الواقية وحدها — وهي أصغر من عمود
+     * الأم وتسميته، فتتداخل تسميات المجلدات المتجاورة في الشبكة.
+     */
+    fun parentColumnReachDp(parentFileCount: Int): Float {
+        val verticalHalf = parentPlanetSizeDp(parentFileCount) / 2f + LABEL_BLOCK_DP
+        return sqrt(
+            PARENT_COLUMN_HALF_WIDTH_DP * PARENT_COLUMN_HALF_WIDTH_DP +
+                verticalHalf * verticalHalf
+        )
+    }
+
+    // ───────────────── تموضع محايد لاتجاه التخطيط (RTL/LTR) ─────────────────
+    //
+    // (السبب الجذري الذي تعالجه هذه الدوال) طبقة الرسم (Canvas) تستعمل
+    // إحداثيات مطلقة لا تُعكس أبداً، بينما طبقة التخطيط كانت تخلط لغتين:
+    // نقطة أصل حسّاسة للاتجاه (Alignment.TopStart وهي BiasAlignment(-1,-1)
+    // تنقلب إلى أعلى-اليمين في RTL) مع إزاحة مطلقة (absoluteOffset لا
+    // تنقلب). على جهاز عربي ينزاح الكوكب عن مركز دائرته بمقدار
+    // (بصمة العنقود − عرض العمود) — وهذا هو عطل «الكواكب ليست في منتصف
+    // دائرتها» حرفياً.
+    //
+    // العلاج: تُحسب كل المواضع نسبةً إلى **مركز** الحاوية. المركز
+    // (Alignment.Center) انحيازه صفر، وصفرٌ لا ينقلب بالنفي، فيصير محايداً
+    // رياضياً لأي اتجاه؛ ومعه absoluteOffset تصبح الطبقتان بلغة إحداثية
+    // واحدة. ميزة إضافية: الناتج لا يعتمد على بصمة العنقود إطلاقاً.
+
+    /**
+     * الإزاحة الرأسية لعمود كوكب متمركز، كي يقع **مركز قرصه** (لا مركز
+     * العمود بتسميته) عند الإزاحة [dyFromCenterDp] عن مركز الحاوية.
+     *
+     * الاشتقاق: ارتفاع العمود h = قطر الكوكب + [LABEL_BLOCK_DP]. التمركز
+     * يضع أعلاه عند (H−h)/2 فيقع مركز القرص عند (H−h)/2 + قطر/2؛ والمطلوب
+     * H/2 + dy، والفرق = dy + (h − قطر)/2 = dy + [LABEL_BLOCK_DP]/2.
+     * لاحظ أن قطر الكوكب وارتفاع الحاوية H حُذفا معاً — النتيجة ثابتة.
+     */
+    fun columnOffsetYDp(dyFromCenterDp: Float): Float = dyFromCenterDp + LABEL_BLOCK_DP / 2f
+
+    /** زاوية الابن رقم [index] على المدار — يبدأ من أعلى ثم بزوايا متساوية. */
+    fun childAngleRad(index: Int, childCount: Int): Double =
+        -PI / 2 + index * (2.0 * PI / childCount)
+
+    /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود. */
+    fun childCenterDxDp(index: Int, childCount: Int): Float =
+        orbitRadiusDp(childCount) * cos(childAngleRad(index, childCount)).toFloat()
+
+    /** إزاحة مركز قرص الابن رأسياً عن مركز العنقود. */
+    fun childCenterDyDp(index: Int, childCount: Int): Float =
+        orbitRadiusDp(childCount) * sin(childAngleRad(index, childCount)).toFloat()
 
     /**
      * نصف قطر الحلقة الواقية لعنقود بلا أبناء — بنفس قيم التصميم الأصلي
@@ -133,9 +207,12 @@ internal object GalaxyGeometry {
         parentFileCount: Int
     ): Float {
         val radius = if (childCount <= 0) {
-            guardianRingRadiusDp(parentFileCount)
+            // الحلقة الواقية تبقى كما هي بصرياً (لا تغيير في الرسم)، لكن
+            // البصمة — وهي ما يحجز مساحة الخلية — يجب أن تسع عمود الأم
+            // وتسميته أيضاً، وإلا تداخلت التسميات بين المجلدات المتجاورة.
+            max(guardianRingRadiusDp(parentFileCount), parentColumnReachDp(parentFileCount))
         } else {
-            confinementRadiusDp(childCount, maxChildFileCount)
+            confinementRadiusDp(childCount, maxChildFileCount, parentFileCount)
         }
         return radius * 2f + OUTER_MARGIN_DP
     }
