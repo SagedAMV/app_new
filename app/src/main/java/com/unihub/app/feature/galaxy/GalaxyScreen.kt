@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -99,6 +99,16 @@ import kotlin.random.Random
  *    أي مجلد مهما كثرت البيانات. وإن فاق المحتوى الشاشة (بيانات كثيرة) تبدأ
  *    المجرة بملاءمة تلقائية مصغَّرة تظهر فيها كل العناقيد، ثم يقرّب المستخدم
  *    بإصبعيه ما يشاء — صغرٌ تلقائي يتناسب مع العدد كما طلبت تعليمات.md.
+ *
+ * 5) إصلاح جلسة اليوم (تعليمات.md — «تظهر أشكال المجلدات لكن ليس داخل
+ *    دائرتها المخصصة، منزاحة عن المنتصف»): كل التموضعات الهندسية (خلايا
+ *    الشبكة، كوكب الأم، كواكب الأبناء) كانت عبر Modifier.offset وهو معدِّل
+ *    حساس لاتجاه التخطيط (rtlAware): على جهاز باتجاه RTL يُعكس محور س
+ *    بينما ترسم Canvas الدوائر والخيوط بإحداثيات مطلقة غير حساسة للاتجاه —
+ *    ازدواج لغتين إحداثيتين في نفس المشهد هو الثغرة التي تُزيح الكواكب عن
+ *    دوائرها. الإصلاح: absoluteOffset لكل تموضع هندسي — إحداثيات مطلقة لا
+ *    تُعكس أبداً، فيتطابق طبقة التخطيط مع طبقة الرسم على أي جهاز وبأي لغة،
+ *    وتبقى النصوص داخل التسميات RTL طبيعية دون أي تأثير.
  *
  * كل الألوان من لوحة الشاشة/السمة الحالية — لا لون جديداً واحداً.
  */
@@ -326,7 +336,7 @@ private fun GalaxyClusters(
                     val row = index / layout.cols
                     Box(
                         modifier = Modifier
-                            .offset(x = (cellDp + gapDp) * col, y = (cellDp + gapDp) * row)
+                            .absoluteOffset(x = (cellDp + gapDp) * col, y = (cellDp + gapDp) * row)
                             .size(cellDp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -390,7 +400,7 @@ private fun FolderClusterView(
                 color = parentColor,
                 onOpenFolder = onOpenFolder,
                 modifier = Modifier
-                    .offset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
+                    .absoluteOffset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
                     .width(112.dp)
             )
         } else {
@@ -439,14 +449,15 @@ private fun FolderClusterView(
                 }
             }
 
-            // كوكب الأم في مركز العنقود
+            // كوكب الأم في مركز العنقود — absoluteOffset يثبّت القرص على مركز
+            // الدائرة الحاضنة بإحداثيات مطلقة لا تتأثر باتجاه التخطيط (RTL/LTR)
             PlanetColumn(
                 folder = cluster.parent,
                 planetSize = parentSize,
                 color = parentColor,
                 onOpenFolder = onOpenFolder,
                 modifier = Modifier
-                    .offset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
+                    .absoluteOffset(x = sizeDp / 2 - 56.dp, y = sizeDp / 2 - parentSize / 2)
                     .width(112.dp)
             )
 
@@ -466,7 +477,7 @@ private fun FolderClusterView(
                     // نصف العرض 39 والعرض 78) حتى لا يظهر انحراف صامت إن تغيّر
                     // الثابت هناك يوماً
                     modifier = Modifier
-                        .offset(
+                        .absoluteOffset(
                             x = posX - GalaxyGeometry.CHILD_COLUMN_HALF_WIDTH_DP.dp,
                             y = posY - childSize / 2
                         )
