@@ -48,10 +48,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.data.local.model.FolderWithFileCount
@@ -85,11 +87,15 @@ import kotlin.random.Random
  *    يكثر — وكل عنقود يُحجَّم بمعامل موحّد يحفظ النسب بين بنية الأم والأبناء.
  *
  * 4أ) إصلاح جلسة اليوم (تعليمات.md — «إذا كثرت مجلدات الأبناء تظهر ملفات
- *    خارج الدائرة»): حسابات الأنصاف كلها أصبحت في مصدر واحد
- *    [GalaxyGeometry]. الدائرة الحاضنة كانت تحسب قرص الكوكب فقط بينما
- *    العمود يمتد تحت الكوكب بتسميته (~36) فكان النص يخترق الدائرة كلما
- *    كثر الأبناء؛ أصبحت الدائرة تحصر العمود كاملاً بحدّ رياضي مضمون لأي
- *    زاوية، والمدار صار يضمن تباعد الكواكب المتجاورة مهما كثر العدد.
+ *    خارج الدائرة»): حسابات الأنصاف كلها في مصدر واحد [GalaxyGeometry]،
+ *    والدائرة الحاضنة تحصر العمود كاملاً بحدّ رياضي مضمون لأي زاوية.
+ *    المحاكاة الرقمية في هذه الجلسة كشفت أن الحدّ السابق كان يستند إلى
+ *    افتراض ارتفاع تسمية 36 نقطة فقط (هامش 6 فقط)، بينما النص العربي مع
+ *    حشوة الخط الافتراضية وتكبير حجم الخط يتجاوز ذلك فيخترق النص الدائرة
+ *    — وكلما كثر الأبناء ظهر الخرق أكثر. الإصلاح الجذري: كتلة التسمية في
+ *    [PlanetColumn] صارت صندوقاً بارتفاع ثابت مقصوصاً ([GalaxyGeometry]
+ *    .LABELS_BOX_DP) بنصّين بارتفاع سطر مثبت وبلا حشوة خط، فصار الارتفاع
+ *    حقيقة مضمونة على أي جهاز — والحدّ الرياضي مضموناً فعلاً لا افتراضاً.
  *
  * 4) التنقل داخل المجرّة: قرص للتكبير/التصغير وسحب للتحرك،
  *    بتكبير مثبّت على مركز القرصة نفسه (لا قفزات لأماكن غريبة)، ونقرة مزدوجة
@@ -613,22 +619,46 @@ private fun PlanetColumn(
                     )
                 )
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = folder.name,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFE0E5E1),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            text = "${folder.fileCount} ملف",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFA9B4AD),
-            textAlign = TextAlign.Center
-        )
+        Spacer(Modifier.height(GalaxyGeometry.LABEL_SPACER_DP.dp))
+        // كتلة التسمية المثبّتة — جوهر إصلاح «ملفات خارج الدائرة»: صندوق
+        // بارتفاع ثابت [GalaxyGeometry.LABELS_BOX_DP] مقصوص (clipToBounds)
+        // ومثبّت أعلاه، وبنصّين بارتفاع سطر مثبت (16) وبلا حشوة خط
+        // (includeFontPadding = false). بذلك لا يتجاوز ارتفاع الكتلة الفعلي
+        // قيمة الهندسة على أي جهاز أو خط أو حجم خط في النظام — فيبقى حدّ
+        // الحصر في GalaxyGeometry مضموناً واقعياً مهما كثر الأبناء.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(GalaxyGeometry.LABELS_BOX_DP.dp)
+                .clipToBounds(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    lineHeight = 16.sp,
+                    color = Color(0xFFE0E5E1),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "${folder.fileCount} ملف",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    lineHeight = 16.sp,
+                    color = Color(0xFFA9B4AD),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
