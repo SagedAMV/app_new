@@ -12,9 +12,13 @@ import dagger.assisted.AssistedInject
  * يتطلب مصنع [androidx.hilt.work.HiltWorkerFactory] الممرَّر لـ WorkManager في
  * [com.unihub.app.UniHubApplication].
  *
- * سياسة الفشل: إن لم يكن المجلد محدداً نعيد نجاحاً صامتاً (لا شيء لنفعله،
- * ولا نريد إعادة جدولة عبثية)؛ أما أخطاء الكتابة الفعلية فتعيد فشلاً مع
- * تسجيل السبب في التفضيلات ليظهر في شاشة الإعدادات.
+ * سياسة الفشل (تحصين هذه الجلسة):
+ *  - المجلد غير محدد: نجاح صامت (لا شيء لنفعله، ولا نريد إعادة جدولة عبثية).
+ *  - [BackupAccessException] (فقد إذن الوصول للمجلد): فشل نهائي — إعادة
+ *    المحاولة عبث حتى يعيد المستخدم اختيار المجلد، والسبب مسجّل في
+ *    التفضيلات ويظهر في شاشة الإعدادات برسالة إرشادية.
+ *  - أي خطأ إدخال/إخراج آخر: [Result.retry] — خطأ عابر يستحق محاولة أخرى
+ *    تلقائية بدل إعلان الموت، وهذا أحد جذور مشكلة «لا يعمل أبداً» سابقاً.
  */
 @HiltWorker
 class AutoBackupWorker @AssistedInject constructor(
@@ -29,11 +33,13 @@ class AutoBackupWorker @AssistedInject constructor(
         return result.fold(
             onSuccess = { Result.success() },
             onFailure = { error ->
-                if (error.message?.contains("لم يتم تحديد مجلد") == true) {
+                when {
                     // المجلد غير محدد بعد — لا فائدة من إعادة المحاولة
-                    Result.success()
-                } else {
-                    Result.failure()
+                    error.message?.contains("لم يتم تحديد مجلد") == true -> Result.success()
+                    // إذن الوصول ضائع — فشل نهائي حتى يعيد المستخدم اختيار المجلد
+                    error is BackupAccessException -> Result.failure()
+                    // خطأ عابر (كتابة/فتح ملف) — يستحق إعادة محاولة تلقائية
+                    else -> Result.retry()
                 }
             }
         )

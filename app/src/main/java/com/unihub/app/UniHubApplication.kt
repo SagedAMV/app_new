@@ -4,9 +4,14 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.unihub.app.data.backup.AutoBackupChangeWatcher
+import com.unihub.app.data.backup.AutoBackupExporter
 import com.unihub.app.data.local.DatabaseSelfHeal
 import com.unihub.app.notifications.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -18,6 +23,11 @@ class UniHubApplication : Application(), Configuration.Provider {
     /** مراقب التعديلات: يطلق نسخة احتياطية بعد كل تعديل عند تفعيل الخيار */
     @Inject lateinit var autoBackupChangeWatcher: AutoBackupChangeWatcher
 
+    @Inject lateinit var autoBackupExporter: AutoBackupExporter
+
+    /** نطاق إقلاع خفيف لفحوصات الخلفية غير الحرجة — لا يعطل الإقلاع أبداً */
+    private val bootScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         // قبل أن يلمس أي مكوّن قاعدة البيانات: فحص الملف الموجود وإعادة بنائه
@@ -26,6 +36,12 @@ class UniHubApplication : Application(), Configuration.Provider {
         NotificationChannels.create(this)
         // يبدأ المراقب بالتقاط تغييرات القاعدة (إن كان خيار «نسخ بعد كل تعديل» مفعلاً)
         autoBackupChangeWatcher.start()
+        // تحقق إقلاع للنسخ التلقائي: إن كان المجلد المحدد قد فقد الوصول إليه
+        // تظهر رسالة واضحة في الإعدادات فوراً بدل انتظار أول محاولة لتفشل
+        // (تحصين جلسة إصلاح «النسخ التلقائي لا يعمل» — راجع تعليمات.md)
+        bootScope.launch {
+            runCatching { autoBackupExporter.validateConfiguredFolder() }
+        }
     }
 
     /**

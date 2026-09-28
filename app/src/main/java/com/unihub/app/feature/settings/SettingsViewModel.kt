@@ -3,6 +3,7 @@ package com.unihub.app.feature.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,12 +62,17 @@ class SettingsViewModel @Inject constructor(
      */
     fun onBackupFolderSelected(uri: Uri) {
         viewModelScope.launch {
-            // إذن دائم يبقى بعد إعادة تشغيل الجهاز — بدونه يموت الوصول لاحقاً
-            runCatching {
+            // إذن دائم يبقى بعد إعادة تشغيل الجهاز — بدونه يموت الوصول لاحقاً.
+            // تحصين هذه الجلسة: فشل التثبيت كان يُبتلع بصمت فيموت النسخ
+            // التلقائي بعد كل إعادة تشغيل دون أي أثر تشخيصي؛ الآن يُسجَّل
+            // ويُبلَّغ المستخدم بسبب محتمل واضح.
+            val persisted = runCatching {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, flags)
-            }
+            }.onFailure { error ->
+                Log.w(TAG, "تعذّر تثبيت الإذن الدائم لمجلد النسخ", error)
+            }.isSuccess
 
             val accessible = autoBackupExporter.verifyFolderAccess(uri)
             if (accessible) {
@@ -74,6 +80,17 @@ class SettingsViewModel @Inject constructor(
                 val settings = autoBackupPreferences.snapshot()
                 autoBackupScheduler.applyPeriodic(settings.intervalDays)
                 messenger.notify("تم تحديد مجلد نسخ الاحتياطية ✓")
+                if (!persisted) {
+                    messenger.notifyError(
+                        "تنبيه: النظام رفض تثبيت الإذن الدائم — قد يتوقف النسخ التلقائي " +
+                            "بعد إعادة تشغيل الجهاز. جرّب اختيار مجلد في التخزين الداخلي"
+                    )
+                }
+                // إن كان خيار «نسخة بعد كل تعديل» مفعلاً فنجرب فوراً حتى يرى
+                // المستخدم نتيجة النسخ التلقائي بعينه لا بالافتراض
+                if (settings.backupOnChange) {
+                    autoBackupScheduler.enqueueOnceLatest()
+                }
             } else {
                 autoBackupPreferences.setTreeUri(null)
                 autoBackupScheduler.cancelPeriodic()
@@ -152,5 +169,9 @@ class SettingsViewModel @Inject constructor(
                 .onSuccess { messenger.notify("مُسحت جميع البيانات بنجاح") }
                 .onFailure { messenger.notifyError("فشل مسح البيانات") }
         }
+    }
+
+    private companion object {
+        private const val TAG = "SettingsViewModel"
     }
 }
