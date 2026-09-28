@@ -33,9 +33,20 @@ GRADLE="./gradlew --no-daemon --console=plain"
 
 # --- المرحلة 1: بوابات الجودة (ترجمة + اختبارات وحدة + lint حاسم) -------------
 # إن فشلت أي بوابة هنا يتوقف الغلاف (set -e) قبل لمس التجميع.
+#
+# تحديث جلسة التحقق العميق (2026): كانت البوابات الثلاث تُنفَّذ في استدعاء غرادل
+# واحد، فتكررت على آلة 2GB بلا Swap نفس ظاهرة «Gradle build daemon disappeared
+# unexpectedly» التي شُخِّصت أعلاه: بعد انتهاء الترجمة تبقى أصناف مترجم كوتلن
+# وKSP محتجزة في Metaspace (~512m) فوق الكومة، فإذا دخل lintVital (الذي يحمّل
+# نموذج lint الكامل) في العملية نفسها تجاوز RSS الإجمالي ذاكرة الآلة وقتل
+# القتّالُ الـ Daemon بصمت. الفصل إلى ثلاث عمليات متعاقبة يجعل لكل بوابة JVM
+# نظيفة، وخبيئة غرادل تربطها بلا إعادة عمل — النتيجة على الآلة نفسها: نجاح
+# مستقر (compile ثم test ثم lintVital ثم التجميع، وكل بوابة خضراء).
 echo ""
 echo "=== المرحلة 1/2: الترجمة واختبارات الوحدة وlintVital ==="
-$GRADLE compileReleaseFullKotlin testReleaseFullUnitTest lintVitalReleaseFull
+$GRADLE compileReleaseFullKotlin
+$GRADLE testReleaseFullUnitTest
+$GRADLE lintVitalReleaseFull
 
 # --- المرحلة 2: التجميع والتوقيع (Daemon جديد بذاكرة نظيفة) -------------------
 echo ""
