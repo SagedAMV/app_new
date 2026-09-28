@@ -2,7 +2,6 @@ package com.unihub.app.feature.galaxy
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.unihub.app.data.local.model.FolderWithFileCount
 import com.unihub.app.data.repository.FolderRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -11,14 +10,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
-/**
- * عنقود مجرّي واحد: المجلد الأم + مجلداته الفرعية.
- * المجلدات الفرعية تُعرض كواكب صغيرة مرتبطة بالكوكب الأم داخل دائرة حاضنة.
- */
-data class GalaxyCluster(
-    val parent: FolderWithFileCount,
-    val children: List<FolderWithFileCount>
-)
+// نموذج [GalaxyCluster] يعرَّف الآن في [GalaxyLayoutEngine] بجوار محرك
+// التخطيط النقي الذي يستهلكه — نفس الحزمة، بلا أي تغيير على المستدعين.
 
 @HiltViewModel
 class GalaxyViewModel @Inject constructor(
