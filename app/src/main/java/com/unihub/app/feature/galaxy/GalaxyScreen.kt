@@ -550,9 +550,13 @@ private fun PlanetColumn(
                 .size(planetSize)
                 .drawBehind {
                     // توهج خفيف حول الكوكب
+                    // (فحص يدوي — جلسة إصلاح المجرة): كانت القيمة 6f بكسلاً
+                    // خاماً فتختلف سماكة التوهج من جهاز لآخر باختلاف الكثافة؛
+                    // توحيدها بوحدة dp يجعل التوهج جزءاً ثابتاً من شكل الكوكب
+                    // المتمركز داخل حلقته على أي شاشة.
                     drawCircle(
                         color = color.copy(alpha = 0.25f),
-                        radius = size.minDimension / 2f + 6f
+                        radius = size.minDimension / 2f + 6.dp.toPx()
                     )
                 }
                 .clip(CircleShape)
