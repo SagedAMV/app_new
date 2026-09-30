@@ -65,7 +65,6 @@ import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.LectureEntity
 import com.unihub.app.data.local.entity.TaskEntity
-import com.unihub.app.feature.files.CloudFilesPickerSheet
 import com.unihub.app.feature.files.GlowingCloudTopBarButton
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.SectionHeader
@@ -91,6 +90,7 @@ fun DashboardScreen(
     onOpenPlanner: (PlannerTab) -> Unit,
     onOpenFiles: (Long?) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCloud: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -105,41 +105,14 @@ fun DashboardScreen(
     val upcomingExamCount by viewModel.upcomingExamCount.collectAsStateWithLifecycle()
     val noteCount by viewModel.noteCount.collectAsStateWithLifecycle()
     val fileCount by viewModel.fileCount.collectAsStateWithLifecycle()
-    val allCloudFiles by viewModel.allCloudFiles.collectAsStateWithLifecycle()
-    val localDownloadFolders by viewModel.localDownloadFolders.collectAsStateWithLifecycle()
-    val cloudVerifyingKeys by viewModel.cloudVerifyingKeys.collectAsStateWithLifecycle()
-    val cloudLocalVerification by viewModel.cloudLocalVerification.collectAsStateWithLifecycle()
-    val cloudFolders by viewModel.cloudFolders.collectAsStateWithLifecycle()
-    val cloudScanState by viewModel.cloudScanState.collectAsStateWithLifecycle()
-    val cloudTransfer by viewModel.cloudTransferState.collectAsStateWithLifecycle()
+    // السحابة هنا: عدد الملفات الجديدة لشارة الزر المضيء فقط — التصفح والتنزيل
+    // انتقلا إلى شاشة السحابة المستقلة CloudFilesScreen
     val remoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
-    val downloadingKeys by viewModel.downloadingRemoteKeys.collectAsStateWithLifecycle()
-    val cloudSyncing by viewModel.isCloudSyncing.collectAsStateWithLifecycle()
-    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
-    val cloudProgress by viewModel.cloudDownloadProgress.collectAsStateWithLifecycle()
-    val cloudError by viewModel.cloudScanError.collectAsStateWithLifecycle()
-    val cloudReport by viewModel.cloudDownloadReport.collectAsStateWithLifecycle()
-    var showCloudPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (showCloudPicker) {
-            CloudFilesPickerSheet(
-                remoteFiles = allCloudFiles, localFolders = localDownloadFolders,
-                verifyingKeys = cloudVerifyingKeys, localVerification = cloudLocalVerification,
-                remoteFolders = cloudFolders, scanState = cloudScanState, transferState = cloudTransfer,
-                downloadableKeys = remoteFiles.mapTo(mutableSetOf()) { it.remoteKey },
-                onDownloadFolder = viewModel::downloadCloudFolder, downloadingKeys = downloadingKeys,
-                isSyncing = cloudSyncing, isOnline = isOnline,
-                onRefresh = viewModel::refreshCloudFiles,
-                onDownloadSelected = viewModel::downloadSelectedCloudFiles,
-                onDismiss = { showCloudPicker = false },
-                downloadProgress = cloudProgress, lastScanError = cloudError,
-                downloadReport = cloudReport, onCancelDownloads = viewModel::cancelCloudDownloads
-            )
-        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -169,7 +142,7 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                GlowingCloudTopBarButton(remoteFiles.size) { showCloudPicker = true }
+                GlowingCloudTopBarButton(remoteFiles.size) { onOpenCloud() }
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
                 }

@@ -13,8 +13,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.unihub.app.feature.backup.BackupScreen
 import com.unihub.app.feature.dashboard.DashboardScreen
-import com.unihub.app.feature.files.FilesScreen
+import com.unihub.app.feature.files.CloudFilesScreen
 import com.unihub.app.feature.files.CloudNotificationPickerHost
+import com.unihub.app.feature.files.FilesScreen
 import com.unihub.app.feature.files.capture.CameraCaptureScreen
 import com.unihub.app.feature.galaxy.GalaxyScreen
 import com.unihub.app.feature.planner.PlannerScreen
@@ -26,8 +27,12 @@ import com.unihub.app.feature.settings.SettingsScreen
  */
 @Composable
 fun AppNavHost(cloudPickerRequest: Int = 0) {
-    CloudNotificationPickerHost(cloudPickerRequest)
     val navController = rememberNavController()
+    // إشعار «ملفات جديدة على الخادم» يقود التنقل إلى شاشة السحابة المستقلة
+    // (launchSingleTop يمنع تكديس الشاشة نفسها لو تكرر الطلب وهي مفتوحة)
+    CloudNotificationPickerHost(cloudPickerRequest) {
+        navController.navigate(CloudFilesRoute) { launchSingleTop = true }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
@@ -51,7 +56,8 @@ fun AppNavHost(cloudPickerRequest: Int = 0) {
                 DashboardScreen(
                     onOpenPlanner = { tab -> navController.navigate(PlannerRoute(tab)) },
                     onOpenFiles = { folderId -> navController.navigate(FilesRoute(folderId)) },
-                    onOpenSettings = { navController.navigate(SettingsRoute) }
+                    onOpenSettings = { navController.navigate(SettingsRoute) },
+                    onOpenCloud = { navController.navigate(CloudFilesRoute) }
                 )
             }
 
@@ -61,7 +67,8 @@ fun AppNavHost(cloudPickerRequest: Int = 0) {
                     folderId = route.folderId,
                     onOpenFolder = { id -> navController.navigate(FilesRoute(id)) },
                     onBack = { navController.popBackStack() },
-                    onOpenCamera = { navController.navigate(CameraCaptureRoute(route.folderId)) }
+                    onOpenCamera = { navController.navigate(CameraCaptureRoute(route.folderId)) },
+                    onOpenCloud = { navController.navigate(CloudFilesRoute) }
                 )
             }
 
@@ -92,7 +99,14 @@ fun AppNavHost(cloudPickerRequest: Int = 0) {
             }
 
             composable<BackupRoute> {
-                BackupScreen(onBack = { navController.popBackStack() })
+                BackupScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenCloud = { navController.navigate(CloudFilesRoute) }
+                )
+            }
+
+            composable<CloudFilesRoute> {
+                CloudFilesScreen(onBack = { navController.popBackStack() })
             }
         }
     }

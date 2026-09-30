@@ -1,23 +1,18 @@
 package com.unihub.app.feature.files
 
-import android.net.Uri
 import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
+import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
-import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.core.validation.InputValidationException
+import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.data.cloud.CloudSyncManager
-import com.unihub.app.data.cloud.RemoteCloudFile
-import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudUploadPlan
+import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FolderEntity
 import com.unihub.app.data.repository.FileRepository
@@ -25,6 +20,12 @@ import com.unihub.app.data.repository.FolderRepository
 import com.unihub.app.feature.share.InboxItem
 import com.unihub.app.feature.share.ShareInbox
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.FileNotFoundException
+import java.io.IOException
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,9 +37,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.FileNotFoundException
-import java.io.IOException
-import javax.inject.Inject
+import kotlinx.coroutines.withContext
 
 /**
  * ViewModel شاشة الملفات داخل مجلد معيّن.
@@ -64,30 +63,13 @@ class FilesViewModel @Inject constructor(
 
     val messenger = UiMessenger()
 
-    // ─── مستشعرات السحابة والملفات الجديدة على خادم Cloudflare R2 ─────────
+    // ─── مستشعرات السحابة الباقية لهذه الشاشة فقط ────────────────────────
+    // (شارة الزر المضيء وحالة الرفع) — تصفح السحابة وتنزيلها انتقلا إلى
+    // الشاشة المستقلة CloudFilesScreen وبوابة حالة CloudFilesViewModel.
 
-    val allCloudFiles = cloudSyncManager.allRemoteFiles
-    val localDownloadFolders = cloudSyncManager.localFolders
-    val cloudVerifyingKeys = cloudSyncManager.verifyingKeys
-    val cloudLocalVerification = cloudSyncManager.localVerification
-    val cloudFolders = cloudSyncManager.remoteFolders
-    val cloudScanState = cloudSyncManager.scanState
     val cloudTransferState = cloudSyncManager.transferState
-    fun downloadCloudFolder(key: String, destination: CloudDownloadDestination) {
-        viewModelScope.launch {
-            cloudSyncManager.downloadFolder(key, destination)
-                .onSuccess { report -> messenger.notify(report.message) }
-                .onFailure { error -> messenger.notifyError(error.message ?: "تعذّر تنزيل المجلد") }
-        }
-    }
     val availableRemoteFiles: StateFlow<List<RemoteCloudFile>> = cloudSyncManager.availableRemoteFiles
-    val downloadingRemoteKeys: StateFlow<Set<String>> = cloudSyncManager.downloadingKeys
-    val isCloudSyncing: StateFlow<Boolean> = cloudSyncManager.isSyncing
     val isOnline: StateFlow<Boolean> = cloudSyncManager.isOnline
-
-    val cloudDownloadProgress = cloudSyncManager.downloadProgress
-    val cloudScanError = cloudSyncManager.lastScanError
-    val cloudDownloadReport = cloudSyncManager.lastDownloadReport
     fun cancelCloudDownloads() = cloudSyncManager.cancelDownloads()
 
     private val _uploadPlan = MutableStateFlow<CloudUploadPlan?>(null)
@@ -114,42 +96,6 @@ class FilesViewModel @Inject constructor(
                     clearSelection()
                 }
                 .onFailure { messenger.notifyError(it.message ?: "تعذّر الرفع") }
-        }
-    }
-
-    fun refreshCloudFiles() {
-        viewModelScope.launch {
-            cloudSyncManager.scanRemoteFilesAndSyncMetadata(showNotificationIfNew = false)
-                .onSuccess { list ->
-                    if (list.isEmpty()) {
-                        messenger.notify("لا توجد ملفات سحابية جديدة غير مسحوبة")
-                    } else {
-                        val total = Formatters.fileSize(list.sumOf { it.size })
-                        messenger.notify("توجد ${Formatters.fileCountLabel(list.size)} متاحة للسحب ($total)")
-                    }
-                }
-                .onFailure { err ->
-                    messenger.notifyError(err.message ?: "تعذّر فحص ملفات الخادم")
-                }
-        }
-    }
-
-    fun downloadSelectedCloudFiles(
-        selected: List<RemoteCloudFile>,
-        destination: CloudDownloadDestination = CloudDownloadDestination(),
-        onCompleted: () -> Unit = {}
-    ) {
-        if (selected.isEmpty()) return
-        viewModelScope.launch {
-            cloudSyncManager.downloadSelectedFiles(selected, destination = destination)
-                .onSuccess { report ->
-                    if (report.failedNames.isEmpty()) messenger.notify(report.message)
-                    else messenger.notifyError(report.message)
-                    onCompleted()
-                }
-                .onFailure { err ->
-                    messenger.notifyError(err.message ?: "فشل سحب الملفات المحددة")
-                }
         }
     }
 

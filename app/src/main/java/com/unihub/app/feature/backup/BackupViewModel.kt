@@ -7,15 +7,13 @@ import com.unihub.app.core.prefs.CloudSyncPreferences
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.R2Credentials
-import com.unihub.app.data.cloud.RemoteCloudFile
-import com.unihub.app.data.cloud.CloudDownloadDestination
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class BackupViewModel @Inject constructor(
@@ -29,27 +27,11 @@ class BackupViewModel @Inject constructor(
     val busy = _busy.asStateFlow()
     val isOnline = cloudSyncManager.isOnline
     val isSyncing = cloudSyncManager.isSyncing
-    val allCloudFiles = cloudSyncManager.allRemoteFiles
-    val localDownloadFolders = cloudSyncManager.localFolders
-    val cloudVerifyingKeys = cloudSyncManager.verifyingKeys
-    val cloudLocalVerification = cloudSyncManager.localVerification
-    val cloudFolders = cloudSyncManager.remoteFolders
-    val cloudScanState = cloudSyncManager.scanState
-    val cloudTransferState = cloudSyncManager.transferState
-    fun downloadCloudFolder(key: String, destination: CloudDownloadDestination) {
-        viewModelScope.launch {
-            cloudSyncManager.downloadFolder(key, destination)
-                .onSuccess { report -> _status.value = report.message }
-                .onFailure { error -> _status.value = error.message }
-        }
-    }
+    // السحابة هنا: ما تحتاجه هذه الشاشة (حالة الاتصال/المزامنة وإعدادات الخادم
+    // وعدد الملفات الجديدة للزر والبانر) — التصفح والتنزيل انتقلا إلى الشاشة
+    // المستقلة CloudFilesScreen.
     val availableRemoteFiles = cloudSyncManager.availableRemoteFiles
-    val downloadingRemoteKeys = cloudSyncManager.downloadingKeys
-    val cloudDownloadProgress = cloudSyncManager.downloadProgress
-    val cloudScanError = cloudSyncManager.lastScanError
-    val cloudDownloadReport = cloudSyncManager.lastDownloadReport
     val cloudSettings = cloudSyncPreferences.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-    fun cancelCloudDownloads() = cloudSyncManager.cancelDownloads()
 
     private fun runBusy(action: suspend () -> Unit) {
         if (_busy.value) return
@@ -64,19 +46,6 @@ class BackupViewModel @Inject constructor(
         cloudSyncManager.syncWithServer(true)
             .onSuccess { _status.value = it }
             .onFailure { _status.value = it.message ?: "تعذّرت المزامنة" }
-    }
-
-    fun refreshCloudFiles() = runBusy {
-        cloudSyncManager.scanRemoteFilesAndSyncMetadata(false)
-            .onSuccess { _status.value = "${it.size} ملف متاح للتنزيل الاختياري" }
-            .onFailure { _status.value = it.message ?: "تعذّر فحص الخادم" }
-    }
-
-    fun downloadSelectedCloudFiles(files: List<RemoteCloudFile>, destination: CloudDownloadDestination) = runBusy {
-        _status.value = null
-        cloudSyncManager.downloadSelectedFiles(files, destination = destination)
-            .onSuccess { _status.value = it.message }
-            .onFailure { _status.value = it.message ?: "تعذّر التنزيل" }
     }
 
     fun pushToCloud() = runBusy {

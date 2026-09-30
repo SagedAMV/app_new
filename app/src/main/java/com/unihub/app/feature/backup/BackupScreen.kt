@@ -53,7 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.unihub.app.feature.files.CloudFilesPickerSheet
 import com.unihub.app.feature.files.CloudNewFilesBanner
 import com.unihub.app.feature.files.GlowingCloudTopBarButton
 import com.unihub.app.ui.components.Field
@@ -66,6 +65,7 @@ import java.util.Locale
 @Composable
 fun BackupScreen(
     onBack: () -> Unit,
+    onOpenCloud: () -> Unit,
     viewModel: BackupViewModel = hiltViewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -74,22 +74,12 @@ fun BackupScreen(
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val cloudSettings by viewModel.cloudSettings.collectAsStateWithLifecycle()
-    val allCloudFiles by viewModel.allCloudFiles.collectAsStateWithLifecycle()
-    val localDownloadFolders by viewModel.localDownloadFolders.collectAsStateWithLifecycle()
-    val cloudVerifyingKeys by viewModel.cloudVerifyingKeys.collectAsStateWithLifecycle()
-    val cloudLocalVerification by viewModel.cloudLocalVerification.collectAsStateWithLifecycle()
-    val cloudFolders by viewModel.cloudFolders.collectAsStateWithLifecycle()
-    val cloudScanState by viewModel.cloudScanState.collectAsStateWithLifecycle()
-    val cloudTransfer by viewModel.cloudTransferState.collectAsStateWithLifecycle()
+    // السحابة هنا: ما تحتاجه هذه الشاشة فقط (شارة الزر والبانر وحالة الخادم) —
+    // أما التصفح والتنزيل فانتقلا إلى الشاشة المستقلة CloudFilesScreen
     val availableRemoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
-    val downloadingRemoteKeys by viewModel.downloadingRemoteKeys.collectAsStateWithLifecycle()
-    val cloudProgress by viewModel.cloudDownloadProgress.collectAsStateWithLifecycle()
-    val cloudError by viewModel.cloudScanError.collectAsStateWithLifecycle()
-    val cloudReport by viewModel.cloudDownloadReport.collectAsStateWithLifecycle()
 
     val isWorking = busy || isSyncing
 
-    var showCloudPickerSheet by remember { mutableStateOf(false) }
     var showServerFields by remember { mutableStateOf(false) }
     var accountId by remember { mutableStateOf("") }
     var endpointUrl by remember { mutableStateOf("") }
@@ -129,7 +119,7 @@ fun BackupScreen(
                 actions = {
                     GlowingCloudTopBarButton(
                         newFilesCount = availableRemoteFiles.size,
-                        onClick = { showCloudPickerSheet = true }
+                        onClick = onOpenCloud
                     )
                 }
             )
@@ -146,7 +136,7 @@ fun BackupScreen(
             if (availableRemoteFiles.isNotEmpty()) {
                 CloudNewFilesBanner(
                     remoteFiles = availableRemoteFiles,
-                    onClick = { showCloudPickerSheet = true }
+                    onClick = onOpenCloud
                 )
             }
 
@@ -213,7 +203,7 @@ fun BackupScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { showCloudPickerSheet = true },
+                            onClick = onOpenCloud,
                             enabled = !isWorking
                         ) {
                             Icon(Icons.Outlined.CloudDownload, contentDescription = null)
@@ -399,24 +389,5 @@ fun BackupScreen(
             )
         }
 
-        if (showCloudPickerSheet) {
-            CloudFilesPickerSheet(
-                remoteFiles = allCloudFiles, localFolders = localDownloadFolders,
-                verifyingKeys = cloudVerifyingKeys, localVerification = cloudLocalVerification,
-                remoteFolders = cloudFolders, scanState = cloudScanState, transferState = cloudTransfer,
-                downloadableKeys = availableRemoteFiles.mapTo(mutableSetOf()) { it.remoteKey },
-                onDownloadFolder = viewModel::downloadCloudFolder,
-                downloadingKeys = downloadingRemoteKeys,
-                isSyncing = isSyncing,
-                isOnline = isOnline,
-                onRefresh = viewModel::refreshCloudFiles,
-                downloadProgress = cloudProgress, lastScanError = cloudError,
-                downloadReport = cloudReport, onCancelDownloads = viewModel::cancelCloudDownloads,
-                onDownloadSelected = { selected, destination ->
-                    viewModel.downloadSelectedCloudFiles(selected, destination)
-                },
-                onDismiss = { showCloudPickerSheet = false }
-            )
-        }
     }
 }

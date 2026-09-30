@@ -42,6 +42,14 @@ data object SettingsRoute
 @Serializable
 data object BackupRoute
 
+/**
+ * شاشة السحابة المستقلة — كانت لوحة منبثقة من أسفل الشاشة، وصارت وجهة تنقل
+ * كاملة تُفتح من: زر السحابة في الملفات والرئيسية والنسخ الاحتياطي، ومن إشعار
+ * «ملفات جديدة». لا تظهر في الشريط السفلي لأنها وجهة عمل فوق الشاشة الحالية.
+ */
+@Serializable
+data object CloudFilesRoute
+
 /** الوجهات التي تظهر في شريط التنقل السفلي */
 val bottomBarRoutes = listOf(
     DashboardRoute::class,

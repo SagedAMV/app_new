@@ -11,24 +11,25 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
@@ -42,60 +43,46 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.core.common.Formatters
-import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.CloudDownloadDestination
-import com.unihub.app.data.cloud.CloudLocalVerification
-import com.unihub.app.data.cloud.CloudPresenceMatcher
-import com.unihub.app.data.local.entity.FolderEntity
-import com.unihub.app.data.cloud.CloudDownloadProgress
-import com.unihub.app.data.cloud.CloudDownloadReport
-import com.unihub.app.data.local.entity.FileKind
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TriStateCheckbox
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.state.ToggleableState
-import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.cloud.CloudFolderTree
-import com.unihub.app.data.cloud.CloudScanState
+import com.unihub.app.data.cloud.CloudPresenceMatcher
 import com.unihub.app.data.cloud.CloudScanPhase
 import com.unihub.app.data.cloud.CloudTransferState
-import com.unihub.app.ui.components.AppSheet
+import com.unihub.app.data.cloud.RemoteCloudFile
+import com.unihub.app.data.cloud.RemoteCloudFolder
+import com.unihub.app.data.local.entity.FileKind
 
 /**
  * زر السحابة في الشريط العلوي:
@@ -300,30 +287,43 @@ fun CloudNewFilesBanner(
     }
 }
 
-/** متصفح السحابة: كل المحتويات مع التمييز بين المحفوظ محلياً وما يحتاج التنزيل. */
+/**
+ * شاشة السحابة المستقلة — بديل اللوحة المنبثقة السابقة `CloudFilesPickerSheet`
+ * التي كانت تظهر من أسفل الشاشة. صارت وجهة تنقل كاملة (راوت CloudFilesRoute في مخطط التنقل) بشريط
+ * علوي وزر رجوع، وتقرأ حالتها مباشرةً من [CloudFilesViewModel] بمصدر حقيقة واحد
+ * (نفس مدير المزامنة @Singleton) بدل تمرير نحو عشرين معاملاً من كل شاشة.
+ *
+ * الوظائف محفوظة كما كانت: تصفح المجلدات، الفلترة (غير الموجود في هاتفي/عرض
+ * الجميع)، التحديد الجماعي، تنزيل المجلد كاملًا، الفحص وإعادة المحاولة، إيقاف
+ * النقل، وتقرير آخر تنزيل — مع حوار اختيار الوجهة عند التنزيل.
+ *
+ * تنبيه من جولة التحويل: أُسقطت أربعة معاملات كانت مُعرَّفة في الورقة السابقة
+ * ولم تُستخدم في جسمها إطلاقاً (downloadingKeys, isSyncing, downloadProgress,
+ * lastScanError) — فلا تُنقل إلى الشاشة الجديدة.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CloudFilesPickerSheet(
-    remoteFiles: List<RemoteCloudFile>,
-    downloadingKeys: Set<String>,
-    isSyncing: Boolean,
-    isOnline: Boolean,
-    onRefresh: () -> Unit,
-    onDownloadSelected: (List<RemoteCloudFile>, CloudDownloadDestination) -> Unit,
-    onDismiss: () -> Unit,
-    downloadProgress: Map<String, CloudDownloadProgress> = emptyMap(),
-    lastScanError: String? = null,
-    downloadReport: CloudDownloadReport? = null,
-    onCancelDownloads: () -> Unit = {},
-    remoteFolders: List<RemoteCloudFolder> = emptyList(),
-    downloadableKeys: Set<String> = remoteFiles.mapTo(mutableSetOf()) { it.remoteKey },
-    scanState: CloudScanState = CloudScanState(),
-    transferState: CloudTransferState = CloudTransferState(),
-    onDownloadFolder: (String, CloudDownloadDestination) -> Unit = { _, _ -> },
-    localFolders: List<FolderEntity> = emptyList(),
-    verifyingKeys: Set<String> = emptySet(),
-    localVerification: CloudLocalVerification = CloudLocalVerification()
+fun CloudFilesScreen(
+    onBack: () -> Unit,
+    viewModel: CloudFilesViewModel = hiltViewModel()
 ) {
+    val remoteFiles by viewModel.files.collectAsStateWithLifecycle()
+    val remoteFolders by viewModel.folders.collectAsStateWithLifecycle()
+    val localFolders by viewModel.localFolders.collectAsStateWithLifecycle()
+    val verifyingKeys by viewModel.verifying.collectAsStateWithLifecycle()
+    val localVerification by viewModel.verification.collectAsStateWithLifecycle()
+    val scanState by viewModel.scanState.collectAsStateWithLifecycle()
+    val transferState by viewModel.transfer.collectAsStateWithLifecycle()
+    val isOnline by viewModel.online.collectAsStateWithLifecycle()
+    val downloadReport by viewModel.report.collectAsStateWithLifecycle()
+    val availableFiles by viewModel.available.collectAsStateWithLifecycle()
+    val downloadableKeys = remember(availableFiles) {
+        availableFiles.mapTo(mutableSetOf()) { it.remoteKey }
+    }
+    val onRefresh: () -> Unit = viewModel::refresh
+    val onDownloadSelected: (List<RemoteCloudFile>, CloudDownloadDestination) -> Unit = viewModel::download
+    val onDownloadFolder: (String, CloudDownloadDestination) -> Unit = viewModel::downloadFolder
+    val onCancelDownloads: () -> Unit = viewModel::cancel
     var currentKey by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var missingOnly by rememberSaveable { mutableStateOf(true) }
@@ -352,17 +352,25 @@ fun CloudFilesPickerSheet(
                 requestFiles = null; requestFolder = null
             }, onDismiss = { requestFiles = null; requestFolder = null })
     }
-    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).navigationBarsPadding().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("السحابة — الملفات والمجلدات", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                IconButton(onClick = onRefresh, enabled = scanState.phase != CloudScanPhase.SCANNING) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "فحص السحابة الآن")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("السحابة — الملفات والمجلدات") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onRefresh, enabled = scanState.phase != CloudScanPhase.SCANNING) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "فحص السحابة الآن")
+                    }
                 }
-            }
+            )
+        }
+    ) { innerPadding ->
+        Column(Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -399,7 +407,7 @@ fun CloudFilesPickerSheet(
                 Spacer(Modifier.weight(1f))
                 Text("${selected.size} • ${Formatters.fileSize(selected.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium)
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (children.isEmpty() && visibleFiles.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(if (scanState.phase == CloudScanPhase.ERROR) Icons.Filled.CloudOff else Icons.Filled.CloudQueue,
@@ -467,8 +475,6 @@ fun CloudFilesPickerSheet(
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("إغلاق") }
-                Spacer(Modifier.width(8.dp))
                 Button(onClick = { requestFiles = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) {
                     Icon(Icons.Filled.CloudDownload, contentDescription = null)
                     Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
