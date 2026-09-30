@@ -50,15 +50,8 @@ class FileStorage @Inject constructor(
      * فعلاً — "الاسم (1)"، "الاسم (2)"... بالترتيب. مستخدمة من الاستيراد،
      * الحفظ المحلي (كاميرا/تسجيل)، إعادة التسمية، واستعادة النسخ الاحتياطية.
      */
-    private fun uniqueTarget(safeBase: String, extension: String): File {
-        var target = File(libraryDir, "$safeBase.$extension")
-        var counter = 1
-        while (target.exists()) {
-            target = File(libraryDir, "$safeBase ($counter).$extension")
-            counter++
-        }
-        return target
-    }
+    private fun uniqueTarget(safeBase: String, extension: String): File =
+        reserveUniqueFile(libraryDir, safeBase, extension)
 
     /**
      * استيراد ملف عبر نسخة فعلية إلى تخزين التطبيق.
@@ -94,11 +87,14 @@ class FileStorage @Inject constructor(
             val target = uniqueTarget(safeBase, validExt)
 
             // 4) نسخ التدفق
-            val copied = context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(target).use { output -> input.copyTo(output) }
-                true
-            } ?: false
-            if (!copied) throw java.io.IOException("تعذّر قراءة الملف المحدد")
+            try {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw java.io.IOException("تعذّر قراءة الملف المحدد")
+                input.use { stream -> FileOutputStream(target).use { stream.copyTo(it) } }
+            } catch (error: Exception) {
+                target.delete()
+                throw error
+            }
 
             val mimeType = context.contentResolver.getType(uri) ?: fallbackMimeType
 
@@ -141,7 +137,10 @@ class FileStorage @Inject constructor(
         if (!source.isFile) throw java.io.IOException("الملف المؤقت لم يعد متاحاً")
         val safeBase = InputValidator.sanitizeName(rawBase).ifBlank { "ملف" }
         val target = uniqueTarget(safeBase, extension)
-        source.copyTo(target, overwrite = true)
+        try { source.copyTo(target, overwrite = true) } catch (error: Exception) {
+            target.delete()
+            throw error
+        }
         runCatching { source.delete() }
         return ImportedFile(
             displayName = target.nameWithoutExtension,
@@ -185,7 +184,10 @@ class FileStorage @Inject constructor(
             val moved = source.renameTo(target)
             if (!moved) {
                 // renameTo() قد يفشل نادراً (مثلاً عبر أنظمة ملفات مختلفة) — خطة بديلة: نسخ ثم حذف الأصل
-                source.copyTo(target, overwrite = true)
+                try { source.copyTo(target, overwrite = true) } catch (error: Exception) {
+                    target.delete()
+                    throw error
+                }
                 if (!source.delete()) {
                     // فشل حذف الأصل بعد النسخ لا يجب أن يُفشل إعادة التسمية —
                     // النسخة الجديدة صحيحة، والأصل يُنظَّف لاحقاً بأمان (ملف يتيم لا يشير له أي سجل)
@@ -207,7 +209,33 @@ class FileStorage @Inject constructor(
             // الامتدادات المسموحة بين إصدارين يفقد المستخدم بياناته بلا داعٍ.
             val safeExt = extension.trim('.').ifBlank { "bin" }.filter { it.isLetterOrDigit() }.ifBlank { "bin" }
             val target = uniqueTarget(safeBase, safeExt)
-            target.writeBytes(bytes)
+            try { target.writeBytes(bytes) } catch (error: Exception) {
+                target.delete()
+                throw error
+            }
+            target.absolutePath
+        }
+
+    /**
+     * نقل ملف تم تنزيله من خادم Cloudflare R2 (ملف مؤقت على القرص) إلى مجلد المكتبة
+     * مباشرة دون تحميله في الذاكرة العشوائية (RAM) — مثالي للملفات الضخمة جداً.
+     */
+    suspend fun importTempFile(source: File, displayName: String, extension: String): String =
+        withContext(Dispatchers.IO) {
+            if (!source.isFile) throw java.io.IOException("الملف المسحوب من الخادم غير متاح")
+            val safeBase = InputValidator.sanitizeName(displayName).ifBlank { "ملف" }
+            val safeExt = extension.trim('.').ifBlank { "bin" }.filter { it.isLetterOrDigit() }.ifBlank { "bin" }
+            val target = uniqueTarget(safeBase, safeExt)
+            val moved = source.renameTo(target)
+            if (!moved) {
+                try {
+                    source.copyTo(target, overwrite = true)
+                    source.delete()
+                } catch (error: Exception) {
+                    target.delete()
+                    throw error
+                }
+            }
             target.absolutePath
         }
 
@@ -217,7 +245,7 @@ class FileStorage @Inject constructor(
         runCatching {
             val file = File(absolutePath)
             // أمان: نحذف فقط داخل مجلد المكتبة الخاص بالتطبيق
-            if (file.isFile && file.absolutePath.startsWith(libraryDir.absolutePath)) {
+            if (file.isFile && file.canonicalPath.startsWith(libraryDir.canonicalPath + File.separator)) {
                 file.delete()
             }
         }

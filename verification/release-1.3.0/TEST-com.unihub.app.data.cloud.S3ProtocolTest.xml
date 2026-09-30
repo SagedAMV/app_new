@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.S3ProtocolTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-09-30T10:03:27" hostname="e2b.local" time="0.172">
+  <properties/>
+  <testcase name="reservedCharactersArePreservedCorrectly" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.001"/>
+  <testcase name="xmlEntitiesDoNotCorruptObjectNames" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.004"/>
+  <testcase name="truncatedListWithoutTokenIsRejected" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.001"/>
+  <testcase name="encodedXmlNamesAndArabicAreDecoded" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.002"/>
+  <testcase name="externalEntitiesAreRejected" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.001"/>
+  <testcase name="continuationTokensAreSortedAndEncoded" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.0"/>
+  <testcase name="prefixedXmlNamespacesAreSupported" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.002"/>
+  <testcase name="thousandObjectsAreParsedAndNextPageRequested" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.146"/>
+  <testcase name="pagesKeepContinuationToken" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.003"/>
+  <testcase name="namesAreEncodedAsRfc3986NotFormData" classname="com.unihub.app.data.cloud.S3ProtocolTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,5 +1,6 @@
 package com.unihub.app.feature.files
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -8,6 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
@@ -151,9 +155,28 @@ fun FilesScreen(
     val inboxItems by viewModel.inboxItems.collectAsStateWithLifecycle()
     val recentlyPlaced by viewModel.recentlyPlaced.collectAsStateWithLifecycle()
 
+    // ملفات سحابية جديدة على خادم Cloudflare R2 تنتظر السحب الاختياري
+    val allCloudFiles by viewModel.allCloudFiles.collectAsStateWithLifecycle()
+    val localDownloadFolders by viewModel.localDownloadFolders.collectAsStateWithLifecycle()
+    val cloudVerifyingKeys by viewModel.cloudVerifyingKeys.collectAsStateWithLifecycle()
+    val cloudLocalVerification by viewModel.cloudLocalVerification.collectAsStateWithLifecycle()
+    val cloudFolders by viewModel.cloudFolders.collectAsStateWithLifecycle()
+    val cloudScanState by viewModel.cloudScanState.collectAsStateWithLifecycle()
+    val cloudTransfer by viewModel.cloudTransferState.collectAsStateWithLifecycle()
+    val availableRemoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
+    val downloadingRemoteKeys by viewModel.downloadingRemoteKeys.collectAsStateWithLifecycle()
+    val isCloudSyncing by viewModel.isCloudSyncing.collectAsStateWithLifecycle()
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+    val uploadPlan by viewModel.uploadPlan.collectAsStateWithLifecycle()
+    val uploadReport by viewModel.cloudUploadReport.collectAsStateWithLifecycle()
+    val cloudProgress by viewModel.cloudDownloadProgress.collectAsStateWithLifecycle()
+    val cloudScanError by viewModel.cloudScanError.collectAsStateWithLifecycle()
+    val cloudReport by viewModel.cloudDownloadReport.collectAsStateWithLifecycle()
+
     var searchActive by remember { mutableStateOf(false) }
     var showAddMenuSheet by remember { mutableStateOf(false) }
     var showInboxSheet by remember { mutableStateOf(false) }
+    var showCloudPickerSheet by remember { mutableStateOf(false) }
     var showAddFolderSheet by remember { mutableStateOf(false) }
     var showAudioRecorder by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
@@ -171,6 +194,13 @@ fun FilesScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris -> viewModel.importFiles(uris) }
+
+    val folderImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            viewModel.importDeviceFolder(uri)
+        }
+    }
 
     /** فتح ملف مع معالجة ذكية لكل سبب فشل */
     val openFile: (FileEntity) -> Unit = { file ->
@@ -243,6 +273,15 @@ fun FilesScreen(
                         }
                     },
                     actions = {
+                        if (currentFolder != null) IconButton(onClick = {
+                            currentFolder?.let { viewModel.previewFolderUpload(it.id, it.name) }
+                        }, enabled = !cloudTransfer.active) {
+                            Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المجلد الحالي كاملاً")
+                        }
+                        GlowingCloudTopBarButton(
+                            newFilesCount = availableRemoteFiles.size,
+                            onClick = { showCloudPickerSheet = true }
+                        )
                         IconButton(onClick = {
                             searchActive = !searchActive
                             if (!searchActive) viewModel.setSearchQuery("")
@@ -363,10 +402,12 @@ fun FilesScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
 
-        // الأزرار العائمة: زر الإضافة + أيقونة صغيرة جنبه للملفات المشتركة الواردة
+        // الأزرار العائمة: زر الإضافة + الزر المضيء للملفات السحابية الجديدة + أيقونة الملفات المشتركة
         if (!isSelecting) {
             FilesFloatingActions(
                 padding = padding,
+                cloudNewCount = availableRemoteFiles.size,
+                onOpenCloudPicker = { showCloudPickerSheet = true },
                 inboxCount = inboxItems.size,
                 onOpenInbox = { showInboxSheet = true },
                 onOpenMenu = { showAddMenuSheet = true }
@@ -388,6 +429,8 @@ fun FilesScreen(
                         viewModel.clearSelection()
                         renameTarget = RenameTarget.FileRename(file)
                     },
+                    onUpload = { viewModel.previewSelectedUpload(selectedFiles) },
+                    uploadEnabled = !cloudTransfer.active && !isImporting,
                     onShare = { shareFiles(selectedFiles) },
                     onFavorite = { viewModel.setFavoriteFor(selectedFiles) },
                     onMove = { moveTarget = MoveTarget.FilesMove(selectedFiles) },
@@ -401,6 +444,10 @@ fun FilesScreen(
             folder = menuFolder,
             onOpenFolder = onOpenFolder,
             onDismiss = { menuFolder = null },
+            onUpload = { folder ->
+                viewModel.previewFolderUpload(folder.id, folder.name)
+                menuFolder = null
+            },
             onRename = { folder ->
                 renameTarget = RenameTarget.FolderRename(folder)
                 menuFolder = null
@@ -424,6 +471,7 @@ fun FilesScreen(
                     showAddMenuSheet = false
                     importLauncher.launch("*/*") // السلوك السابق كما هو
                 },
+                onImportFolder = { showAddMenuSheet = false; folderImportLauncher.launch(null) },
                 onNewFolder = {
                     showAddMenuSheet = false
                     showAddFolderSheet = true // السلوك السابق كما هو
@@ -445,6 +493,36 @@ fun FilesScreen(
                 items = inboxItems,
                 onDismiss = { showInboxSheet = false },
                 onRemove = viewModel::removeInboxItem
+            )
+        }
+
+        uploadPlan?.let { plan ->
+            CloudUploadConfirmationSheet(plan, isOnline, cloudTransfer, uploadReport,
+                onConfirm = viewModel::confirmUpload,
+                onDismiss = viewModel::closeUploadPlan,
+                onCancel = viewModel::cancelCloudDownloads)
+        }
+
+        // لوحة الاختيار الانتقائي للملفات السحابية الجديدة (الاسم + الحجم + سحب اختياري)
+        if (showCloudPickerSheet) {
+            CloudFilesPickerSheet(
+                remoteFiles = allCloudFiles, localFolders = localDownloadFolders,
+                verifyingKeys = cloudVerifyingKeys, localVerification = cloudLocalVerification,
+                remoteFolders = cloudFolders, scanState = cloudScanState, transferState = cloudTransfer,
+                downloadableKeys = availableRemoteFiles.mapTo(mutableSetOf()) { it.remoteKey },
+                onDownloadFolder = viewModel::downloadCloudFolder,
+                downloadingKeys = downloadingRemoteKeys,
+                isSyncing = isCloudSyncing,
+                isOnline = isOnline,
+                onRefresh = viewModel::refreshCloudFiles,
+                downloadProgress = cloudProgress,
+                lastScanError = cloudScanError,
+                downloadReport = cloudReport,
+                onCancelDownloads = viewModel::cancelCloudDownloads,
+                onDownloadSelected = { selected, destination ->
+                    viewModel.downloadSelectedCloudFiles(selected, destination)
+                },
+                onDismiss = { showCloudPickerSheet = false }
             )
         }
 
@@ -555,6 +633,8 @@ fun FilesScreen(
 @Composable
 private fun FilesFloatingActions(
     padding: androidx.compose.foundation.layout.PaddingValues,
+    cloudNewCount: Int,
+    onOpenCloudPicker: () -> Unit,
     inboxCount: Int,
     onOpenInbox: () -> Unit,
     onOpenMenu: () -> Unit
@@ -568,6 +648,17 @@ private fun FilesFloatingActions(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Bottom
         ) {
+            AnimatedVisibility(
+                visible = cloudNewCount > 0,
+                enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
+                exit = fadeOut(tween(300))
+            ) {
+                GlowingCloudFloatingButton(
+                    newFilesCount = cloudNewCount,
+                    onClick = onOpenCloudPicker
+                )
+            }
+
             AnimatedVisibility(
                 visible = inboxCount > 0,
                 enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
@@ -882,6 +973,8 @@ private fun SelectionBar(
     singleFile: FileEntity?,
     onOpenSingle: (FileEntity) -> Unit,
     onRenameSingle: (FileEntity) -> Unit,
+    onUpload: () -> Unit,
+    uploadEnabled: Boolean,
     onShare: () -> Unit,
     onFavorite: () -> Unit,
     onMove: () -> Unit,
@@ -895,7 +988,7 @@ private fun SelectionBar(
         shadowElevation = 8.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (singleFile != null) {
@@ -906,6 +999,9 @@ private fun SelectionBar(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            IconButton(onClick = onUpload, enabled = uploadEnabled) {
+                Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المحدد إلى السحابة", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onShare) {
                 Icon(
@@ -928,7 +1024,7 @@ private fun SelectionBar(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(4.dp))
             if (singleFile != null) {
                 IconButton(onClick = { onRenameSingle(singleFile) }) {
                     Icon(
@@ -955,6 +1051,7 @@ private fun FolderContextMenu(
     folder: FolderEntity?,
     onOpenFolder: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onUpload: (FolderEntity) -> Unit,
     onRename: (FolderEntity) -> Unit,
     onMove: (FolderEntity) -> Unit,
     onDelete: (FolderEntity) -> Unit
@@ -972,6 +1069,9 @@ private fun FolderContextMenu(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("فتح المجلد") }
+                TextButton(onClick = { onUpload(folder) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("رفع المجلد كاملاً مع الصور والملفات")
+                }
                 TextButton(
                     onClick = { onRename(folder) },
                     modifier = Modifier.fillMaxWidth()

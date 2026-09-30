@@ -1,6 +1,12 @@
 package com.unihub.app.feature.files
 
 import android.net.Uri
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +14,10 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.core.validation.InputValidationException
+import com.unihub.app.data.cloud.CloudSyncManager
+import com.unihub.app.data.cloud.RemoteCloudFile
+import com.unihub.app.data.cloud.CloudDownloadDestination
+import com.unihub.app.data.cloud.CloudUploadPlan
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FolderEntity
 import com.unihub.app.data.repository.FileRepository
@@ -45,12 +55,103 @@ class FilesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val folderRepository: FolderRepository,
     private val fileRepository: FileRepository,
-    private val shareInbox: ShareInbox
+    private val shareInbox: ShareInbox,
+    private val cloudSyncManager: CloudSyncManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val folderId: Long? = savedStateHandle.get<Long?>("folderId")
 
     val messenger = UiMessenger()
+
+    // ─── مستشعرات السحابة والملفات الجديدة على خادم Cloudflare R2 ─────────
+
+    val allCloudFiles = cloudSyncManager.allRemoteFiles
+    val localDownloadFolders = cloudSyncManager.localFolders
+    val cloudVerifyingKeys = cloudSyncManager.verifyingKeys
+    val cloudLocalVerification = cloudSyncManager.localVerification
+    val cloudFolders = cloudSyncManager.remoteFolders
+    val cloudScanState = cloudSyncManager.scanState
+    val cloudTransferState = cloudSyncManager.transferState
+    fun downloadCloudFolder(key: String, destination: CloudDownloadDestination) {
+        viewModelScope.launch {
+            cloudSyncManager.downloadFolder(key, destination)
+                .onSuccess { report -> messenger.notify(report.message) }
+                .onFailure { error -> messenger.notifyError(error.message ?: "تعذّر تنزيل المجلد") }
+        }
+    }
+    val availableRemoteFiles: StateFlow<List<RemoteCloudFile>> = cloudSyncManager.availableRemoteFiles
+    val downloadingRemoteKeys: StateFlow<Set<String>> = cloudSyncManager.downloadingKeys
+    val isCloudSyncing: StateFlow<Boolean> = cloudSyncManager.isSyncing
+    val isOnline: StateFlow<Boolean> = cloudSyncManager.isOnline
+
+    val cloudDownloadProgress = cloudSyncManager.downloadProgress
+    val cloudScanError = cloudSyncManager.lastScanError
+    val cloudDownloadReport = cloudSyncManager.lastDownloadReport
+    fun cancelCloudDownloads() = cloudSyncManager.cancelDownloads()
+
+    private val _uploadPlan = MutableStateFlow<CloudUploadPlan?>(null)
+    val uploadPlan = _uploadPlan.asStateFlow()
+    val cloudUploadReport = cloudSyncManager.lastUploadReport
+    fun closeUploadPlan() { _uploadPlan.value = null }
+
+    fun previewSelectedUpload(files: List<FileEntity>) {
+        viewModelScope.launch {
+            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(fileIds = files.mapTo(mutableSetOf()) { it.id }, title = "رفع الملفات المحددة")
+        }
+    }
+    fun previewFolderUpload(id: Long, name: String) {
+        viewModelScope.launch {
+            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته")
+        }
+    }
+    fun confirmUpload() {
+        val plan = _uploadPlan.value ?: return
+        viewModelScope.launch {
+            cloudSyncManager.uploadSelected(plan)
+                .onSuccess { report ->
+                    if (report.failedNames.isEmpty()) messenger.notify(report.message) else messenger.notifyError(report.message)
+                    clearSelection()
+                }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر الرفع") }
+        }
+    }
+
+    fun refreshCloudFiles() {
+        viewModelScope.launch {
+            cloudSyncManager.scanRemoteFilesAndSyncMetadata(showNotificationIfNew = false)
+                .onSuccess { list ->
+                    if (list.isEmpty()) {
+                        messenger.notify("لا توجد ملفات سحابية جديدة غير مسحوبة")
+                    } else {
+                        val total = Formatters.fileSize(list.sumOf { it.size })
+                        messenger.notify("توجد ${Formatters.fileCountLabel(list.size)} متاحة للسحب ($total)")
+                    }
+                }
+                .onFailure { err ->
+                    messenger.notifyError(err.message ?: "تعذّر فحص ملفات الخادم")
+                }
+        }
+    }
+
+    fun downloadSelectedCloudFiles(
+        selected: List<RemoteCloudFile>,
+        destination: CloudDownloadDestination = CloudDownloadDestination(),
+        onCompleted: () -> Unit = {}
+    ) {
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            cloudSyncManager.downloadSelectedFiles(selected, destination = destination)
+                .onSuccess { report ->
+                    if (report.failedNames.isEmpty()) messenger.notify(report.message)
+                    else messenger.notifyError(report.message)
+                    onCompleted()
+                }
+                .onFailure { err ->
+                    messenger.notifyError(err.message ?: "فشل سحب الملفات المحددة")
+                }
+        }
+    }
 
     // ─── صندوق المشاركة (ملفات واردة من قائمة مشاركة النظام) ─────────────
 
@@ -347,6 +448,42 @@ class FilesViewModel @Inject constructor(
                 ok > 0 -> messenger.notify("تم استيراد $ok ملف — $failedMsg")
                 else -> messenger.notifyError(failedMsg ?: "فشل الاستيراد")
             }
+        }
+    }
+
+    /** نسخ شجرة من منتقي النظام إلى التطبيق؛ لا رفع سحابي ضمن الاستيراد. */
+    fun importDeviceFolder(uri: Uri) {
+        if (importing.value) return
+        importing.value = true
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val root = DocumentFile.fromTreeUri(context, uri)
+                        ?: throw IOException("تعذّر قراءة المجلد المختار")
+                    val seen = mutableSetOf<String>()
+                    var visited = 0; var copied = 0; var failed = 0
+                    suspend fun copyTree(directory: DocumentFile, parentId: Long?, depth: Int) {
+                        if (depth > 64 || ++visited > 10_000) throw IOException("المجلد أكبر من حد الاستيراد الآمن؛ اختر جزءاً أصغر")
+                        if (!seen.add(directory.uri.toString())) return
+                        val name = InputValidator.sanitizeName(directory.name ?: "مجلد مستورد").ifBlank { "مجلد مستورد" }
+                        val id = folderRepository.create(FolderEntity(name = name, parentId = parentId))
+                        for (item in directory.listFiles()) {
+                            if (item.isDirectory) copyTree(item, id, depth + 1)
+                            else if (item.isFile) {
+                                if (++visited > 10_000) throw IOException("وصلنا إلى حد الاستيراد؛ الملفات المكتملة محفوظة")
+                                try { fileRepository.import(item.uri, item.type ?: "application/octet-stream", id); copied++ }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (_: Exception) { failed++ }
+                            }
+                        }
+                    }
+                    copyTree(root, folderId, 0)
+                    copied to failed
+                }
+                messenger.notify("استُورد ${result.first} ملف مع بنية المجلد؛ تعذّر ${result.second}. اضغط مطولاً على المجلد لرفعه للسحابة.")
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) { messenger.notifyError(error.message ?: "تعذّر استيراد المجلد")
+            } finally { importing.value = false }
         }
     }
 

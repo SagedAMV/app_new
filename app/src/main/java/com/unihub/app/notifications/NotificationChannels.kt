@@ -9,6 +9,7 @@ object NotificationChannels {
 
     const val EXAMS = "exams"
     const val TASKS = "tasks"
+    const val CLOUD_FILES = "cloud_files"
 
     fun create(context: Context) {
         // minSdk = 26 (أندرويد 8.0) — قنوات الإشعارات متاحة دائماً، فلا حاجة
@@ -23,6 +24,11 @@ object NotificationChannels {
         manager.createNotificationChannel(
             NotificationChannel(TASKS, "تذكير بالمهام", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "إشعارات مواعيد استحقاق المهام"
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CLOUD_FILES, "ملفات سحابية جديدة", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "إشعارات عند توفر ملفات جديدة على خادم Cloudflare R2 مع أسمائها وأحجامها"
             }
         )
     }

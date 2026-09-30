@@ -1,0 +1,89 @@
+{
+  "local_date": "2026-09-30",
+  "versionName": "1.3.1",
+  "versionCode": 5,
+  "compileReleaseFullKotlin": "passed",
+  "test_totals": {
+    "tests": 98,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "name": "com.unihub.app.data.cloud.CancellableHttpRequestTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudClientHashTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudDownloadPlacementTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFileRulesTest",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFolderTreeTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudPresenceMatcherTest",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudScanControllerTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.R2ClientIntegrationTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.S3ProtocolTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.storage.FileTargetAllocatorTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "r2_live_tests": 3,
+  "lintVitalReleaseFull": "passed with Kotlin analysis API compatibility warnings",
+  "physical_android_test": "not performed",
+  "git_push": "not performed",
+  "apk_for_this_revision": "not built"
+}

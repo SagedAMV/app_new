@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.data.cloud.CloudflareR2Config
+import com.unihub.app.data.cloud.CloudManifestTools
+import com.unihub.app.data.cloud.RemoteCloudFile
+import com.unihub.app.data.cloud.RemoteCloudFolder
+import com.unihub.app.data.cloud.CloudFolderLink
 import com.unihub.app.data.local.UniHubDatabase
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.ExamType
@@ -26,7 +31,10 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -73,6 +81,249 @@ class BackupRepository @Inject constructor(
             "$FILES_PREFIX$id.${extension.ifBlank { "bin" }}"
     }
 
+    /**
+     * حارس ذري يشير إلى أن القاعدة تُحدَّث حالياً بسبب سحب/استيراد نسخة،
+     * مع طابع زمني لانتهاء العملية لامتصاص إشعارات Room غير المتزامنة،
+     * فيتجاهل [AutoBackupChangeWatcher] هذا التحديث ولا يعيد رفعه في حلقة مفرغة.
+     */
+    val isApplyingRemoteSync = AtomicBoolean(false)
+    val lastRemoteApplyFinishedAt = AtomicLong(0L)
+
+    fun shouldIgnoreInvalidation(): Boolean = isApplyingRemoteSync.get()
+
+    private fun finishRemoteApply() {
+        try {
+            // تسليم إشعارات المعاملة قبل إنهاء الحارس، دون نافذة 3 ثوانٍ تبتلع تعديلات المستخدم.
+            database.invalidationTracker.refreshVersionsSync()
+        } finally {
+            lastRemoteApplyFinishedAt.set(System.currentTimeMillis())
+            isApplyingRemoteSync.set(false)
+        }
+    }
+
+    /** حساب إجمالي العناصر المحفوظة محلياً حالياً في جميع الجداول */
+    suspend fun localItemCount(): Int = withContext(Dispatchers.IO) {
+        database.folderDao().getAllOnce().size +
+            database.fileDao().getAllOnce().size +
+            database.taskDao().getAllOnce().size +
+            database.noteDao().getAllOnce().size +
+            database.examDao().getAllOnce().size +
+            database.lectureDao().getAllOnce().size
+    }
+
+    /** إرجاع قائمة الملفات المحلية الموجودة فعلياً على قرص الهاتف */
+    suspend fun getExistingLocalFiles(): List<FileEntity> = withContext(Dispatchers.IO) {
+        database.fileDao().getAllOnce().filter { File(it.filePath).isFile }
+    }
+
+    suspend fun getLocalFileRecords(): List<FileEntity> = withContext(Dispatchers.IO) { database.fileDao().getAllOnce() }
+    suspend fun getLocalFolders(): List<FolderEntity> = withContext(Dispatchers.IO) { database.folderDao().getAllOnce() }
+
+    /** إنشاء مجلد سحابي محلياً دون تصادم id أو حذف أي مجلد موجود. */
+    suspend fun ensureDownloadedFolder(remote: RemoteCloudFolder, parentId: Long?, link: CloudFolderLink?): FolderEntity =
+        withContext(Dispatchers.IO) {
+            isApplyingRemoteSync.set(true)
+            try {
+                database.withTransaction {
+                    val dao = database.folderDao()
+                    val linked = link?.let { dao.getById(it.localId) }?.takeIf { it.createdAt == link?.localCreatedAt }
+                    if (linked != null) linked else {
+                        val legacy = remote.legacyId?.let { dao.getById(it) }?.takeIf {
+                            it.name == remote.name && it.createdAt == remote.createdAt && it.parentId == parentId
+                        }
+                        if (legacy != null) legacy else {
+                            val validParent = parentId?.takeIf { dao.getById(it) != null }
+                            val row = FolderEntity(name = InputValidator.sanitizeName(remote.name).ifBlank { "مجلد سحابي" },
+                                parentId = validParent, createdAt = remote.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis())
+                            row.copy(id = dao.insert(row))
+                        }
+                    }
+                }
+            } finally { finishRemoteApply() }
+        }
+
+    /** إرجاع خريطة بأسماء المجلدات المحلية (معرّف المجلد -> اسمه) */
+    suspend fun getFolderNamesMap(): Map<Long, String> = withContext(Dispatchers.IO) {
+        database.folderDao().getAllOnce().associate { it.id to it.name }
+    }
+
+    /**
+     * بناء نص الفهرس السحابي (`unihub_manifest.json`) شاملاً الجداول الخفيفة
+     * وقائمة الملفات مع مفاتيحها المستقلة على الخادم وأحجامها.
+     */
+    suspend fun buildCloudManifestJson(): String = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            val fileRecords = database.fileDao().getAllOnce()
+            val manifest = JSONObject().apply {
+                put("app", "unihub")
+                put("schemaVersion", SCHEMA_VERSION)
+                put("exportedAt", System.currentTimeMillis())
+                put("folders", exportFolders())
+                put("files", exportFiles(fileRecords))
+                put("tasks", exportTasks())
+                put("notes", exportNotes())
+                put("exams", exportExams())
+                put("lectures", exportLectures())
+            }
+            manifest.toString()
+        }
+    }
+
+    /**
+     * مزامنة البيانات النصية الخفيفة فقط (المجلدات، المهام، الملاحظات، الامتحانات، الجدول)
+     * من الفهرس السحابي دون تنزيل الملفات الثقيلة ودون حذف الملفات المحلية الموجودة على الهاتف.
+     */
+    suspend fun syncLightweightMetadataFromManifest(
+        manifestText: String,
+        expectedLocalMetadata: String? = null
+    ): Result<List<RemoteCloudFile>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val root = parseAndValidateManifest(manifestText)
+                val folders = orderFoldersForInsertion(parseFolders(root.optJSONArray("folders")))
+                val tasks = parseTasks(root.optJSONArray("tasks"))
+                val notes = parseNotes(root.optJSONArray("notes"))
+                val exams = parseExams(root.optJSONArray("exams"))
+                val lectures = parseLectures(root.optJSONArray("lectures"))
+                isApplyingRemoteSync.set(true)
+                try {
+                    database.withTransaction {
+                        if (expectedLocalMetadata != null) {
+                            // الفحص والكتابة تحت نفس قفل Room، فلا نمسح تعديلاً وقع بعد لقطة الشبكة.
+                            val current = JSONObject().apply {
+                                put("folders", exportFolders())
+                                put("tasks", exportTasks())
+                                put("notes", exportNotes())
+                                put("exams", exportExams())
+                                put("lectures", exportLectures())
+                            }
+                            CloudManifestTools.requireUnchangedLocalMetadata(JSONObject(expectedLocalMetadata), current)
+                        }
+                        val dao = database.folderDao()
+                        val current = dao.getAllOnce().associateBy { it.id }
+                        folders.forEach { folder ->
+                            if (folder.id !in current) dao.insert(folder)
+                            else if (current[folder.id] != folder) dao.update(folder)
+                        }
+                        // هذه البيانات سبق دمجها ثلاثياً قبل الوصول إلى هنا.
+                        // لا نمسح جدول الملفات أو المجلدات، فلا يقع CASCADE على المحتوى المحلي.
+                        val oldTasks = database.taskDao().getAllOnce().associateBy { it.id }
+                        oldTasks.values.filter { old -> tasks.none { it.id == old.id } }
+                            .forEach { database.taskDao().delete(it) }
+                        tasks.forEach { if (it.id !in oldTasks) database.taskDao().insert(it)
+                            else if (oldTasks[it.id] != it) database.taskDao().update(it) }
+                        val oldNotes = database.noteDao().getAllOnce().associateBy { it.id }
+                        oldNotes.values.filter { old -> notes.none { it.id == old.id } }
+                            .forEach { database.noteDao().delete(it) }
+                        notes.forEach { if (it.id !in oldNotes) database.noteDao().insert(it)
+                            else if (oldNotes[it.id] != it) database.noteDao().update(it) }
+                        val oldExams = database.examDao().getAllOnce().associateBy { it.id }
+                        oldExams.values.filter { old -> exams.none { it.id == old.id } }
+                            .forEach { database.examDao().delete(it) }
+                        exams.forEach { if (it.id !in oldExams) database.examDao().insert(it)
+                            else if (oldExams[it.id] != it) database.examDao().update(it) }
+                        val oldLectures = database.lectureDao().getAllOnce().associateBy { it.id }
+                        oldLectures.values.filter { old -> lectures.none { it.id == old.id } }
+                            .forEach { database.lectureDao().delete(it) }
+                        lectures.forEach { if (it.id !in oldLectures) database.lectureDao().insert(it)
+                            else if (oldLectures[it.id] != it) database.lectureDao().update(it) }
+                    }
+                } finally {
+                    finishRemoteApply()
+                }
+                reminderScheduler.cancelAll()
+                exams.filter { it.date >= DateFormats.todayIso() }
+                    .forEach(reminderScheduler::scheduleExamReminders)
+                tasks.filter { !it.isDone && !it.dueDate.isNullOrBlank() }
+                    .forEach(reminderScheduler::scheduleTaskReminder)
+                parseRemoteCloudFiles(root.optJSONArray("files"), getFolderNamesMap())
+            }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+        }
+
+    /** يحفظ ملفاً مختاراً؛ لا نستعمل id البعيد لتحديد سجل Room المحلي. */
+    suspend fun saveSelectedRemoteFile(
+        remoteFile: RemoteCloudFile,
+        tempDownloadedFile: File,
+        targetLocalId: Long? = null
+    ): Result<FileEntity> = withContext(Dispatchers.IO) {
+        var newPath: String? = null
+        var committed = false
+        runCatching {
+            val path = fileStorage.importTempFile(tempDownloadedFile, remoteFile.name, remoteFile.extension)
+            newPath = path
+            var oldPath: String? = null
+            isApplyingRemoteSync.set(true)
+            val saved = try {
+                database.withTransaction {
+                    val validFolder = remoteFile.folderId?.takeIf { id ->
+                        val folder = database.folderDao().getById(id)
+                        folder != null && (remoteFile.folderName == null || folder.name == remoteFile.folderName)
+                    }
+                    val existing = targetLocalId?.let { id -> database.fileDao().getAllOnce().firstOrNull { it.id == id } }
+                    val row = FileEntity(
+                        id = existing?.id ?: 0L,
+                        name = remoteFile.name.ifBlank { "ملف سحابي" },
+                        extension = remoteFile.extension,
+                        kind = remoteFile.kind,
+                        mimeType = remoteFile.mimeType,
+                        size = File(path).length(),
+                        folderId = validFolder,
+                        filePath = path,
+                        isFavorite = existing?.isFavorite ?: false,
+                        createdAt = remoteFile.createdAt
+                    )
+                    val result = if (existing != null) {
+                        database.fileDao().update(row)
+                        oldPath = existing.filePath
+                        row
+                    } else {
+                        row.copy(id = database.fileDao().insert(row))
+                    }
+                    result
+                }.also { committed = true }
+            } finally {
+                finishRemoteApply()
+            }
+            oldPath?.takeIf { it != path }?.let(fileStorage::delete)
+            saved
+        }.onFailure { error ->
+            if (!committed) newPath?.let(fileStorage::delete)
+            if (error is kotlinx.coroutines.CancellationException) throw error
+        }
+    }
+
+    private fun parseRemoteCloudFiles(
+        array: JSONArray?,
+        folderNamesById: Map<Long, String>
+    ): List<RemoteCloudFile> {
+        if (array == null) return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            val obj = array.optJSONObject(i) ?: return@mapNotNull null
+            val id = obj.optLong("id", 0L)
+            val name = obj.optString("name").trim()
+            if (name.isBlank()) return@mapNotNull null
+            val ext = obj.optString("extension").trim()
+            val remoteKey = obj.optString("remoteKey").takeIf { it.isNotBlank() }
+                ?: CloudflareR2Config.remoteFileObjectKey(id, ext)
+            val folderId = if (obj.isNull("folderId")) null else obj.optLong("folderId")
+            RemoteCloudFile(
+                remoteKey = remoteKey,
+                id = id,
+                name = name,
+                extension = ext,
+                size = obj.optLong("size", 0L),
+                mimeType = obj.optString("mimeType", "application/octet-stream"),
+                kind = FileKind.entries.firstOrNull { it.name == obj.optString("kind") } ?: FileKind.OTHER,
+                folderId = folderId,
+                folderName = folderId?.let { folderNamesById[it] },
+                createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                etag = obj.optString("etag"),
+                sha256 = obj.optString("sha256"),
+                lastModifiedAt = obj.optLong("lastModifiedAt")
+            )
+        }
+    }
+
     // ====== التصدير ======
 
     suspend fun export(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
@@ -80,6 +331,16 @@ class BackupRepository @Inject constructor(
             context.contentResolver.openOutputStream(uri)?.use { exportToStream(it) }
                 ?: throw IOException("تعذّر فتح ملف الوجهة للكتابة")
         }.onFailure { android.util.Log.e(TAG, "فشل التصدير", it) }
+    }
+
+    /**
+     * تصدير البيانات والملفات المحلية إلى ملف على القرص (يُستخدم قبل الإرسال إلى خادم Cloudflare R2).
+     */
+    suspend fun exportToFile(targetFile: File): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            targetFile.parentFile?.mkdirs()
+            FileOutputStream(targetFile).use { exportToStream(it) }
+        }.onFailure { android.util.Log.e(TAG, "فشل تصدير النسخة إلى ملف مؤقت", it) }
     }
 
     /**
@@ -138,13 +399,37 @@ class BackupRepository @Inject constructor(
         runCatching {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: throw IOException("تعذّر قراءة ملف النسخة الاحتياطية")
-            if (bytes.size.toLong() > MAX_BACKUP_BYTES) {
+            importRawBytes(bytes)
+        }.onFailure { android.util.Log.e(TAG, "فشل الاستيراد", it) }
+    }
+
+    /**
+     * استيراد البيانات والملفات المسحوبة من خادم Cloudflare R2 وتخزينها محلياً في التطبيق.
+     */
+    suspend fun importFromFile(sourceFile: File): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!sourceFile.isFile) {
+                throw IOException("ملف النسخة المسحوبة من الخادم غير موجود")
+            }
+            if (sourceFile.length() > MAX_BACKUP_BYTES) {
                 throw IOException("ملف النسخة الاحتياطية أكبر من الحد المسموح")
             }
-            // إسقاط سطر الشفرة إن وُجد — النسخ الجديدة تبدأ به والقديمة تبدأ بـ PK مباشرة
-            val payload = BackupSignature.stripIfPresent(bytes)
-            if (isZipArchive(payload)) importFromZip(payload) else importFromLegacyJson(String(payload, Charsets.UTF_8))
-        }.onFailure { android.util.Log.e(TAG, "فشل الاستيراد", it) }
+            val bytes = sourceFile.readBytes()
+            importRawBytes(bytes)
+        }.onFailure { android.util.Log.e(TAG, "فشل استيراد النسخة المسحوبة من الخادم", it) }
+    }
+
+    private suspend fun importRawBytes(bytes: ByteArray): Int {
+        if (bytes.size.toLong() > MAX_BACKUP_BYTES) {
+            throw IOException("ملف النسخة الاحتياطية أكبر من الحد المسموح")
+        }
+        // إسقاط سطر الشفرة إن وُجد — النسخ الجديدة تبدأ به والقديمة تبدأ بـ PK مباشرة
+        val payload = BackupSignature.stripIfPresent(bytes)
+        return if (isZipArchive(payload)) {
+            importFromZip(payload)
+        } else {
+            importFromLegacyJson(String(payload, Charsets.UTF_8))
+        }
     }
 
     /** توقيع ZIP القياسي (PK\x03\x04) — يميّز الأرشيف الجديد عن نص JSON القديم */
@@ -181,6 +466,10 @@ class BackupRepository @Inject constructor(
         val text = manifestText ?: throw IOException("النسخة الاحتياطية لا تحتوي على بيانات صالحة")
         val root = parseAndValidateManifest(text)
         val declaredFiles = parseFiles(root.optJSONArray("files"))
+
+        // تنظيف مجلد المكتبة المحلي بعد التأكد التام من سلامة الأرشيف وقراءة محتوياته:
+        // يمنع تراكم ملفات يتيمة أو تحوّل الأسماء إلى «ملف (1)»، «ملف (2)» عند تكرار السحب من الخادم.
+        fileStorage.clearAll()
 
         // نعيد كتابة محتوى كل ملف داخل تخزين هذا الجهاز — الملفات التي فُقد
         // محتواها الفعلي وقت التصدير (كانت محذوفة خارج التطبيق) تُتخطى بأمان
@@ -237,22 +526,27 @@ class BackupRepository @Inject constructor(
         val validFolderIds = orderedFolders.mapTo(mutableSetOf()) { it.id }
         val validFiles = files.filter { it.folderId == null || it.folderId in validFolderIds }
 
-        database.withTransaction {
-            val folderDao = database.folderDao()
-            val fileDao = database.fileDao()
+        isApplyingRemoteSync.set(true)
+        try {
+            database.withTransaction {
+                val folderDao = database.folderDao()
+                val fileDao = database.fileDao()
 
-            folderDao.deleteAll() // يحذف الملفات تبعاً عبر CASCADE
-            database.taskDao().deleteAll()
-            database.noteDao().deleteAll()
-            database.examDao().deleteAll()
-            database.lectureDao().deleteAll()
+                folderDao.deleteAll() // يحذف الملفات تبعاً عبر CASCADE
+                database.taskDao().deleteAll()
+                database.noteDao().deleteAll()
+                database.examDao().deleteAll()
+                database.lectureDao().deleteAll()
 
-            orderedFolders.forEach { folderDao.insert(it) }
-            validFiles.forEach { fileDao.insert(it) }
-            tasks.forEach { database.taskDao().insert(it) }
-            notes.forEach { database.noteDao().insert(it) }
-            exams.forEach { database.examDao().insert(it) }
-            lectures.forEach { database.lectureDao().insert(it) }
+                orderedFolders.forEach { folderDao.insert(it) }
+                validFiles.forEach { fileDao.insert(it) }
+                tasks.forEach { database.taskDao().insert(it) }
+                notes.forEach { database.noteDao().insert(it) }
+                exams.forEach { database.examDao().insert(it) }
+                lectures.forEach { database.lectureDao().insert(it) }
+            }
+        } finally {
+            finishRemoteApply()
         }
 
         // إعادة جدولة التذكيرات: إلغاء الكل ثم جدولة القادم فقط

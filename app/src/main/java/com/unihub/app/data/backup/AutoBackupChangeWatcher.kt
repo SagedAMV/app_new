@@ -2,6 +2,8 @@ package com.unihub.app.data.backup
 
 import androidx.room.InvalidationTracker
 import com.unihub.app.core.prefs.AutoBackupPreferences
+import com.unihub.app.core.prefs.CloudSyncPreferences
+import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.local.UniHubDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,21 +16,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * «نسخة بعد كل عملية تعديل» (طلب تعليمات.md — لتجربة أن النسخ يعمل فعلاً).
+ * مراقب التعديلات المركزي على قاعدة البيانات:
+ * 1) يشغّل النسخ الاحتياطي المحلي التلقائي عند تفعيل «نسخة بعد كل تعديل».
+ * 2) يشغّل المزامنة السحابية مع خادم Cloudflare R2 (يرسل البيانات للخادم إن توفر
+ *    الإنترنت، أو يحفظ راية الانتظار محلياً ليرسلها فور توفر الإنترنت).
  *
- * التنفيذ مركزي هنا بدل نثر استدعاءات في كل مستودع: نراقب جداول القاعدة عبر
- * [InvalidationTracker] — أي كتابة على أي جدول تُشعرنا فوراً. ننتظر خمس ثوانٍ
- * من آخر تعديل (إزالة اهتزاز: الكتابة المتتابعة تُعامل كتعديل واحد) ثم نطلب
- * نسخة فورية فوق ملف «آخر نسخة» الثابت — بلا تراكم ملفات.
- *
- * آمن من الحلقات: النسخ التلقائي نفسه لا يكتب في القاعدة (يكتب في شجرة SAF
- * فقط) فلا يُعيد إشعار المراقب أبداً.
+ * محصّن ضد الحلقات المفرغة: إذا كانت الكتابة في القاعدة ناتجة عن سحب نسخة من
+ * الخادم ([BackupRepository.shouldIgnoreInvalidation])، يتجاهل المراقب الإشعار.
  */
 @Singleton
 class AutoBackupChangeWatcher @Inject constructor(
     private val database: UniHubDatabase,
+    private val backupRepository: BackupRepository,
     private val preferences: AutoBackupPreferences,
-    private val scheduler: AutoBackupScheduler
+    private val scheduler: AutoBackupScheduler,
+    private val cloudSyncPreferences: CloudSyncPreferences,
+    private val cloudSyncManager: CloudSyncManager
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -43,6 +46,7 @@ class AutoBackupChangeWatcher @Inject constructor(
                 "folders", "files", "tasks", "notes", "exams", "lectures"
             ) {
                 override fun onInvalidated(tables: Set<String>) {
+                    if (backupRepository.shouldIgnoreInvalidation()) return
                     scheduleBackupAfterDebounce()
                 }
             }
@@ -50,14 +54,25 @@ class AutoBackupChangeWatcher @Inject constructor(
     }
 
     private fun scheduleBackupAfterDebounce() {
+        // نسجّل فوراً أن هناك تعديلاً محلياً جديداً حتى لو أُغلق التطبيق قبل انتهاء المهلة
+        scope.launch {
+            if (!backupRepository.shouldIgnoreInvalidation()) {
+                cloudSyncPreferences.markLocalChange()
+            }
+        }
         debounceJob?.cancel()
         debounceJob = scope.launch {
             delay(DEBOUNCE_MILLIS)
+            if (backupRepository.shouldIgnoreInvalidation()) return@launch
+
+            // 1) النسخ المحلي التلقائي عبر SAF (إن كان مفعلاً)
             val settings = preferences.snapshot()
-            // الخيار مفعّل + المجلد محدد — وإلا لا معنى لأي نسخة
             if (settings.backupOnChange && settings.isFolderConfigured) {
                 scheduler.enqueueOnceLatest()
             }
+
+            // 2) المزامنة السحابية مع خادم Cloudflare R2 (أونلاين / أوفلاين)
+            cloudSyncManager.onLocalDataChanged()
         }
     }
 

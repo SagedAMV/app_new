@@ -1,0 +1,90 @@
+{
+  "date": "2026-09-30",
+  "variant": "releaseFull",
+  "versionName": "1.3.0",
+  "versionCode": 4,
+  "test_totals": {
+    "tests": 74,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "name": "com.unihub.app.data.cloud.CancellableHttpRequestTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudClientHashTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFileRulesTest",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFolderTreeTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudScanControllerTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.R2ClientIntegrationTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.S3ProtocolTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.storage.FileTargetAllocatorTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "r2_live_tests": 3,
+  "compile": "passed",
+  "lintVital": "passed; analysis API compatibility warnings emitted",
+  "apk": {
+    "filename": "UniHub-1.3.0-cloud-folders.apk",
+    "size_bytes": 14139577,
+    "sha256": "869100bed9b697cc8cba643c066e6c68e5719f36812b3b8bb52135ab26a2e02c",
+    "package": "com.unihub.app",
+    "versionName": "1.3.0",
+    "versionCode": 4,
+    "minSdk": 26,
+    "targetSdk": 35,
+    "signature": "APK v2 verified",
+    "signing_certificate_sha256": "5109c404c5cd4d207d0ee0dc1f1ed77b58fd0269b28d8fc2520aaff1a36b74ca",
+    "signing_certificate_matches_repository_key": true,
+    "zipalign_4": "passed",
+    "source_hashes_unchanged_during_build": true
+  },
+  "phone_runtime_test": "not performed; install this new APK and test cloud empty/timeout/folder upload",
+  "git_push": "not performed"
+}

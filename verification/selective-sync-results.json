@@ -1,0 +1,65 @@
+{
+  "verified_local_date": "2026-09-30",
+  "variant": "releaseFull",
+  "test_totals": {
+    "tests": 48,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "name": "com.unihub.app.data.cloud.CloudClientHashTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFileRulesTest",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.R2ClientIntegrationTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.S3ProtocolTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.storage.FileTargetAllocatorTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "r2_live_tests": {
+    "count": 2,
+    "enabled": true,
+    "result": "passed",
+    "namespace": "unihub-tests/<UUID>/",
+    "cleanup_asserted": true
+  },
+  "compile": "passed",
+  "lint_vital": "passed; Kotlin analysis API compatibility warnings were emitted",
+  "apk": {
+    "filename": "UniHub-selective-sync.apk",
+    "size_bytes": 14090425,
+    "sha256": "fb7fee9fee22ee631df12a9004a41781fb2de8618a70f7d6cee7ad0b0f500d4b",
+    "signature": "APK v2 verified",
+    "zipalign_4": "verified"
+  },
+  "physical_android_device_test": "not performed; see SELECTIVE_SYNC.md checklist",
+  "git_commit_or_push": "not performed"
+}

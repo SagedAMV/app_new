@@ -14,6 +14,7 @@ import androidx.navigation.toRoute
 import com.unihub.app.feature.backup.BackupScreen
 import com.unihub.app.feature.dashboard.DashboardScreen
 import com.unihub.app.feature.files.FilesScreen
+import com.unihub.app.feature.files.CloudNotificationPickerHost
 import com.unihub.app.feature.files.capture.CameraCaptureScreen
 import com.unihub.app.feature.galaxy.GalaxyScreen
 import com.unihub.app.feature.planner.PlannerScreen
@@ -24,7 +25,8 @@ import com.unihub.app.feature.settings.SettingsScreen
  * وواجهات الإعدادات/النسخ الاحتياطي تُفتح فوقها بشريط علوي وزر رجوع.
  */
 @Composable
-fun AppNavHost() {
+fun AppNavHost(cloudPickerRequest: Int = 0) {
+    CloudNotificationPickerHost(cloudPickerRequest)
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination

@@ -15,8 +15,8 @@ android {
         applicationId = "com.unihub.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -162,6 +162,8 @@ dependencies {
 
     // اختبارات الوحدة
     testImplementation(libs.junit)
+    // JSON حقيقي لا بدائل android.jar الوهمية، لاختبارات منطق الفهرس وعميل R2 على JVM.
+    testImplementation("org.json:json:20240303")
     testImplementation(libs.kotlinx.coroutines.test)
 
     // أدوات التطوير

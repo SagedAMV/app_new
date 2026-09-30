@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.storage.FileTargetAllocatorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-30T12:28:23" hostname="e2b.local" time="0.06">
+  <properties/>
+  <testcase name="concurrentImportsCannotOverwriteEachOther" classname="com.unihub.app.data.storage.FileTargetAllocatorTest" time="0.058"/>
+  <testcase name="noExtensionDoesNotAddTrailingDot" classname="com.unihub.app.data.storage.FileTargetAllocatorTest" time="0.001"/>
+  <testcase name="existingContentIsNeverReplaced" classname="com.unihub.app.data.storage.FileTargetAllocatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

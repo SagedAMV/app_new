@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,7 +41,8 @@ fun AddMenuSheet(
     onImportFiles: () -> Unit,
     onNewFolder: () -> Unit,
     onCapturePhoto: () -> Unit,
-    onRecordAudio: () -> Unit
+    onRecordAudio: () -> Unit,
+    onImportFolder: () -> Unit = {}
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -68,9 +70,16 @@ fun AddMenuSheet(
             AddMenuItem(
                 icon = Icons.Filled.UploadFile,
                 tint = MaterialTheme.colorScheme.primary,
-                title = "رفع ملف",
+                title = "استيراد ملفات من الجهاز",
                 subtitle = "من تخزين الجهاز عبر منتقي النظام",
                 onClick = onImportFiles
+            )
+            AddMenuItem(
+                icon = Icons.Filled.FolderOpen,
+                tint = MaterialTheme.colorScheme.primary,
+                title = "استيراد مجلد من الجهاز",
+                subtitle = "نسخ المجلد ومحتوياته؛ يمكنك رفعه للسحابة بعد ذلك",
+                onClick = onImportFolder
             )
             AddMenuItem(
                 icon = Icons.Filled.CreateNewFolder,

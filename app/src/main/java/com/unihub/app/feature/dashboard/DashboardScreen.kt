@@ -65,6 +65,8 @@ import com.unihub.app.core.common.NextLectureResolver
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.LectureEntity
 import com.unihub.app.data.local.entity.TaskEntity
+import com.unihub.app.feature.files.CloudFilesPickerSheet
+import com.unihub.app.feature.files.GlowingCloudTopBarButton
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.StatCard
@@ -103,11 +105,41 @@ fun DashboardScreen(
     val upcomingExamCount by viewModel.upcomingExamCount.collectAsStateWithLifecycle()
     val noteCount by viewModel.noteCount.collectAsStateWithLifecycle()
     val fileCount by viewModel.fileCount.collectAsStateWithLifecycle()
+    val allCloudFiles by viewModel.allCloudFiles.collectAsStateWithLifecycle()
+    val localDownloadFolders by viewModel.localDownloadFolders.collectAsStateWithLifecycle()
+    val cloudVerifyingKeys by viewModel.cloudVerifyingKeys.collectAsStateWithLifecycle()
+    val cloudLocalVerification by viewModel.cloudLocalVerification.collectAsStateWithLifecycle()
+    val cloudFolders by viewModel.cloudFolders.collectAsStateWithLifecycle()
+    val cloudScanState by viewModel.cloudScanState.collectAsStateWithLifecycle()
+    val cloudTransfer by viewModel.cloudTransferState.collectAsStateWithLifecycle()
+    val remoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
+    val downloadingKeys by viewModel.downloadingRemoteKeys.collectAsStateWithLifecycle()
+    val cloudSyncing by viewModel.isCloudSyncing.collectAsStateWithLifecycle()
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+    val cloudProgress by viewModel.cloudDownloadProgress.collectAsStateWithLifecycle()
+    val cloudError by viewModel.cloudScanError.collectAsStateWithLifecycle()
+    val cloudReport by viewModel.cloudDownloadReport.collectAsStateWithLifecycle()
+    var showCloudPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        if (showCloudPicker) {
+            CloudFilesPickerSheet(
+                remoteFiles = allCloudFiles, localFolders = localDownloadFolders,
+                verifyingKeys = cloudVerifyingKeys, localVerification = cloudLocalVerification,
+                remoteFolders = cloudFolders, scanState = cloudScanState, transferState = cloudTransfer,
+                downloadableKeys = remoteFiles.mapTo(mutableSetOf()) { it.remoteKey },
+                onDownloadFolder = viewModel::downloadCloudFolder, downloadingKeys = downloadingKeys,
+                isSyncing = cloudSyncing, isOnline = isOnline,
+                onRefresh = viewModel::refreshCloudFiles,
+                onDownloadSelected = viewModel::downloadSelectedCloudFiles,
+                onDismiss = { showCloudPicker = false },
+                downloadProgress = cloudProgress, lastScanError = cloudError,
+                downloadReport = cloudReport, onCancelDownloads = viewModel::cancelCloudDownloads
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -137,12 +169,14 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                GlowingCloudTopBarButton(remoteFiles.size) { showCloudPicker = true }
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Outlined.Settings, contentDescription = "الإعدادات")
                 }
             }
 
             Spacer(Modifier.height(16.dp))
+
 
             // بطاقة «لقطة اليوم»: النصف الأيسر لجدول المحاضرات وتوقيتها، والنصف
             // الأيمن لأقرب امتحان وأقرب مهمة مطلوبة، يفصل بينهما خط رأسي — وتدخل

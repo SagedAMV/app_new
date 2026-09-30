@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.unihub.app.data.backup.AutoBackupChangeWatcher
 import com.unihub.app.data.backup.AutoBackupExporter
+import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.local.DatabaseSelfHeal
 import com.unihub.app.notifications.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
@@ -25,6 +26,9 @@ class UniHubApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var autoBackupExporter: AutoBackupExporter
 
+    /** مدير المزامنة السحابية (أوفلاين / أونلاين) مع Cloudflare R2 */
+    @Inject lateinit var cloudSyncManager: CloudSyncManager
+
     /** نطاق إقلاع خفيف لفحوصات الخلفية غير الحرجة — لا يعطل الإقلاع أبداً */
     private val bootScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -34,8 +38,10 @@ class UniHubApplication : Application(), Configuration.Provider {
         // إن كان من بِناء سابق بمخطط غير متوافق — يمنع كراش الإقلاع نهائياً.
         DatabaseSelfHeal.ensureHealthyDatabase(this)
         NotificationChannels.create(this)
-        // يبدأ المراقب بالتقاط تغييرات القاعدة (إن كان خيار «نسخ بعد كل تعديل» مفعلاً)
+        // يبدأ المراقب بالتقاط تغييرات القاعدة (للنسخ المحلي والمزامنة السحابية)
         autoBackupChangeWatcher.start()
+        // يبدأ مراقبة الإنترنت والمزامنة التلقائية (إرسال للخادم / سحب وتخزين محلي)
+        cloudSyncManager.startMonitoring()
         // تحقق إقلاع للنسخ التلقائي: إن كان المجلد المحدد قد فقد الوصول إليه
         // تظهر رسالة واضحة في الإعدادات فوراً بدل انتظار أول محاولة لتفشل
         // (تحصين جلسة إصلاح «النسخ التلقائي لا يعمل» — راجع تعليمات.md)

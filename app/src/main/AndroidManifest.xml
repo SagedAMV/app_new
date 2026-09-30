@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- إذن الإنترنت وفحص حالة الشبكة للمزامنة السحابية مع خادم Cloudflare R2
+         (يعمل التطبيق أوفلاين بالتخزين المحلي عند انقطاع الشبكة ويزامن عند توفرها). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- إذن الإشعارات (أندرويد 13+) لتذكيرات المهام والامتحانات.
          لا أذونات تخزين: الملفات تُختار عبر SAF وتُنسخ لتخزين التطبيق الداخلي. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

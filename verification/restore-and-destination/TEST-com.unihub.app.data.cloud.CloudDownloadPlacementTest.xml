@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudDownloadPlacementTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-30T12:28:13" hostname="e2b.local" time="0.015">
+  <properties/>
+  <testcase name="nestedDownloadDoesNotCreateCloudAncestorsAboveTheChosenFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.005"/>
+  <testcase name="chosenLocalFolderDoesNotCreateCloudNames" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="customFolderNameDoesNotRenameTheDestinationFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="downloadingRootOfSelectionCreatesOnlyThatRoot" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="unrelatedFolderCannotEscapeTheSelectionAnchor" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="cloudTreeRemainsAnAvailableChoice" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="defaultNameIsUsedOnlyForNewSubfolderNotUserParent" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="localRootIsAnExplicitDestinationNotACloudFolderFallback" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -64,6 +64,8 @@
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
 -keep class com.unihub.app.notifications.ReminderWorker { *; }
+-keep class com.unihub.app.data.backup.AutoBackupWorker { *; }
+-keep class com.unihub.app.data.cloud.CloudSyncWorker { *; }
 
 # 3ب) إقلاع WorkManager نفسه: يتم عند أول تشغيل عبر androidx.startup — يقرأ
 # InitializationProvider اسم androidx.work.impl.WorkManagerInitializer من

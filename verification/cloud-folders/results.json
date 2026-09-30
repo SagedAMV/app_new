@@ -1,0 +1,75 @@
+{
+  "local_date": "2026-09-30",
+  "compileReleaseFullKotlin": "passed",
+  "test_totals": {
+    "tests": 74,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "name": "com.unihub.app.data.cloud.CancellableHttpRequestTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudClientHashTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFileRulesTest",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudFolderTreeTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.CloudScanControllerTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.R2ClientIntegrationTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.cloud.S3ProtocolTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "com.unihub.app.data.storage.FileTargetAllocatorTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "r2_live_tests": 3,
+  "test_namespace": "unihub-tests/<UUID>/",
+  "production_data_modified_by_tests": false,
+  "physical_phone_test_of_this_revision": "not performed",
+  "apk_generated_or_retained": false,
+  "git_push": "not performed",
+  "lintVitalReleaseFull": "passed with Kotlin analysis API compatibility warnings"
+}
