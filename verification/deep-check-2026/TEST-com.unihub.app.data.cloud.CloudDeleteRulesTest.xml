@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudDeleteRulesTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-10-01T20:48:21" hostname="e2b.local" time="0.073">
+  <properties/>
+  <testcase name="delete_files_keeps_other_entries_byte_identical" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.021"/>
+  <testcase name="delete_files_of_empty_manifest_is_safe" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="manifest_merge_collapses_duplicate_keys" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.005"/>
+  <testcase name="links_pruned_only_for_deleted_keys" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="delete_files_is_idempotent_for_missing_keys" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.003"/>
+  <testcase name="delete_operation_cap_is_declared_and_positive" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="folder_removal_drops_only_requested_subtree" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.009"/>
+  <testcase name="delete_targets_keep_order_deduplicate_and_map_to_discovered_files" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.005"/>
+  <testcase name="delete_targets_filter_unknown_keys" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="folder_links_pruned_only_for_removed_folders" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.0"/>
+  <testcase name="delete_targets_reject_system_object_keys" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="folder_delete_is_allowed_for_empty_app_folder_only" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="folder_delete_requires_empty_tree" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.003"/>
+  <testcase name="delete_files_removes_only_requested_entries" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.001"/>
+  <testcase name="folder_delete_rejects_path_and_legacy_folders" classname="com.unihub.app.data.cloud.CloudDeleteRulesTest" time="0.006"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

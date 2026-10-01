@@ -1,0 +1,45 @@
+{
+  "local_date": "2026-10-01",
+  "variant": "releaseFull",
+  "versionName": "1.3.1",
+  "versionCode": 5,
+  "gates": {
+    "compile": "passed (3m33s)",
+    "tests": {
+      "tests": 125,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3
+    },
+    "lintVital": "passed with Kotlin analysis warnings",
+    "assemble": "passed (2m26s)"
+  },
+  "errors_found_and_fixed": {
+    "DestinationFolderTreeTest_4_of_125_failing": {
+      "symptom": "onlyRootsVisibleBeforeExpansion / clickingToExpandRevealsChildrenIndentedOneLevel / nestedExpansionReachesGrandchildrenAndCollapseHidesThem / selectionFlagFollowsTheSelectedFolderAtAnyDepth — AssertionError",
+      "root_cause_1": "المسح التكميلي في rows() كان يرقّي كل مجلد غير معروض إلى المستوى الأعلى — فيسرّب أبناء المجلدات المطوية (4 صفوف بدل صف واحد قبل التوسيع)",
+      "root_cause_2": "childrenOf كان يعيد الفرز باسم CASE_INSENSITIVE فيكسر ترتيب المصدر الموثوق (sortOrder ثم الأحدث من Room) وعقد الاختبارات",
+      "fix": "ترشيح مستقر بلا إعادة فرز + مسح يرقّي فقط المجلدات غير القابلة للبلوغ (سلسلة أبوية تبلغ أباً مفقوداً أو دورة parentId) مع ممرات متكررة لأن الترقية تجعل الأحفاد قابلة للبلوغ",
+      "file": "app/src/main/java/com/unihub/app/feature/files/DestinationFolderTree.kt"
+    }
+  },
+  "static_checks": {
+    "force_unwrap_in_main_sources": 0,
+    "todo_fixme_in_sources": 0,
+    "kotlin_compiler_warnings": 0,
+    "dead_private_members": 0
+  },
+  "r2_live_tests_skipped_by_design": 3,
+  "apk": {
+    "filename": "UniHub-v1.3.1-release-full.apk",
+    "size_bytes": 14172345,
+    "sha256": "66e5697ef1b23e32e9a68ed14025b275d2ebde4ad6ebc6c2d858a25820e79966",
+    "signature": "APK v2 verified",
+    "signing_certificate_sha256": "5109c404c5cd4d207d0ee0dc1f1ed77b58fd0269b28d8fc2520aaff1a36b74ca",
+    "signing_certificate_matches_repository_key": true,
+    "zipalign_4": "passed"
+  },
+  "environment": "OpenJDK 17.0.20 + Android SDK platform-35 + build-tools 34.0.0 + Gradle 8.9 — آلة 2GB بلا Swap (ضبط الكومة 832m والبناء المتسلسل الموثقان في gradle.properties عملا كما صُمما)",
+  "physical_phone_test": "not performed",
+  "git_push": "app_new (fix + report) then buled (APK)"
+}

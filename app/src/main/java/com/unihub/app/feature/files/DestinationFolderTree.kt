@@ -20,17 +20,24 @@ data class DestinationFolderRow(
 
 object DestinationFolderTree {
 
-    /** أبناء مستوى معيّن، مرتبون باسم غير حساس لحالة الأحرف (اتساقاً مع CloudMoveSheet). */
+    /**
+     * أبناء مستوى معيّن بترتيب المصدر كما هو (ترشيح مستقر بلا إعادة ترتيب) —
+     * الترتيب يأتي من استعلامات Room (الترتيب اليدوي sortOrder ثم الأحدث)،
+     * وإعادة الفرز هنا كانت تمسح ترتيب المستخدم اليدوي وتكسر عقد الاختبارات.
+     */
     fun childrenOf(folders: List<FolderEntity>, parentId: Long?): List<FolderEntity> =
         folders.filter { it.parentId == parentId }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
     fun hasChildren(folders: List<FolderEntity>, id: Long): Boolean =
         folders.any { it.parentId == id }
 
     /**
-     * يبسط الشجرة إلى صفوف مرئية حسب مجموعة التوسيع. حارس [seen] يوقف أي دورة في
-     * parentId (بيانات فاسدة) — المجلد يظهر مرة واحدة ولا يدخل العرض في حلقة لانهائية.
+     * يبسط الشجرة إلى صفوف مرئية حسب مجموعة التوسيع.
+     *
+     * أبناء المجلدات المطوية لا يظهرون في الصفوف لكنهم ليسوا ضائعين: يكشفهم
+     * توسيع آبائهم. وحدها المجلدات غير القابلة للبلوغ إطلاقاً (بيانات فاسدة:
+     * أب مفقود أو دورة parentId) تُرقّى إلى المستوى الأعلى مرة واحدة لكل منها،
+     * وحارس [seen] يمنع أي حلقة لانهائية أو تكرار في العرض.
      */
     fun rows(folders: List<FolderEntity>, expandedIds: Set<Long>, selectedId: Long?): List<DestinationFolderRow> {
         val result = mutableListOf<DestinationFolderRow>()
@@ -43,12 +50,34 @@ object DestinationFolderTree {
             if (expanded && hasKids) childrenOf(folders, folder.id).forEach { add(it, depth + 1) }
         }
         childrenOf(folders, null).forEach { add(it, 0) }
-        // بيانات فاسدة (دورات parentId أو إشارة لأب غير موجود): تظهر في المستوى
-        // الأعلى بدل أن تضيع من العرض — وحارس seen يمنع أي حلقة لانهائية (اتساقاً
-        // مع روح CloudFolderTree.normalise التي تعيد تأهيل الآباء المفقودين).
-        folders.filter { it.id !in seen }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-            .forEach { add(it, 0) }
+
+        // المسح التكميلي: قبل الإصلاح كان يُرقّي كل مجلد غير معروض إلى الأعلى —
+        // فيسرب أبناء المجلدات المطوية (الخلل الذي كسر اختبارات الشجرة). الآن
+        // يُرقّى فقط من يستحيل ظهوره بالتوسيع: سلسلته الأبوية لا تبلغ مجلداً
+        // معروضاً ولا جذراً حقيقياً (أب مفقود أو دورة). الممرات المتكررة تلزم
+        // لأن ترقية مجلد تجعل أحفاده قابلة للبلوغ فتمتنع ترقيتهم.
+        val byId = folders.associateBy { it.id }
+        fun attachable(start: FolderEntity): Boolean {
+            val chain = mutableSetOf<Long>()
+            var current: FolderEntity? = start
+            while (true) {
+                val node = current ?: return true         // جذر حقيقي — معروض منذ البداية
+                if (!chain.add(node.id)) return false     // دورة parentId — غير قابل للبلوغ
+                if (node.id in seen) return true          // سلف معروض — يظهر بالتوسيع
+                val parentId = node.parentId ?: return true
+                if (parentId !in byId) return false       // أب مفقود — يتيم
+                current = byId[parentId]
+            }
+        }
+        var progressed = true
+        while (progressed) {
+            progressed = false
+            for (folder in folders) {
+                if (folder.id in seen || attachable(folder)) continue
+                add(folder, 0)
+                progressed = true
+            }
+        }
         return result
     }
 

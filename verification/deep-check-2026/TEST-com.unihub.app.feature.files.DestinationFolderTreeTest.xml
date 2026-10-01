@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.feature.files.DestinationFolderTreeTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-01T20:48:20" hostname="e2b.local" time="0.06">
+  <properties/>
+  <testcase name="selfParentFolderDoesNotHangAndAppearsOnce" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.044"/>
+  <testcase name="clickingToExpandRevealsChildrenIndentedOneLevel" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.001"/>
+  <testcase name="nestedExpansionReachesGrandchildrenAndCollapseHidesThem" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.006"/>
+  <testcase name="selectionFlagFollowsTheSelectedFolderAtAnyDepth" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.002"/>
+  <testcase name="parentIdCyclesTerminateAndAppearAtTopLevelOnce" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.002"/>
+  <testcase name="emptyFolderShowsAsLeafWithoutExpandArrow" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.0"/>
+  <testcase name="onlyRootsVisibleBeforeExpansion" classname="com.unihub.app.feature.files.DestinationFolderTreeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
