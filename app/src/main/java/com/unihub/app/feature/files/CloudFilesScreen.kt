@@ -1,7 +1,17 @@
 package com.unihub.app.feature.files
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColor
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -74,9 +84,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -96,14 +109,18 @@ import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.UiMessagesHost
+import com.unihub.app.ui.theme.SemanticSuccess
 
 /**
  * زر السحابة في الشريط العلوي:
  * عندما توجد ملفات جديدة على خادم Cloudflare R2 غير موجودة في الهاتف ([newFilesCount] > 0)،
- * يضيء الزر وينبض بلون مميز مع شارة تعرض عدد الملفات الجديدة.
+ * يتشبع الزر تدريجياً بلون النجاح الأخضر ثم يعود للونه الطبيعي في دورة بطيئة جداً،
+ * مع شارة ثابتة تعرض عدد الملفات الجديدة.
  *
  * جولة تعليمات.md: هذا الزر — مع مثيله في أعلى شاشة الملفات — نقطة الدخول الوحيدة
  * إلى شاشة السحابة (أزيلت الأزرار السفلية وزر النسخ الاحتياطي وتوجيه الإشعار).
+ * وأُسلوب النبض القديم (تكبير/ومضان كل 900م.ث) استُبدل بدورة «امتلاء أخضر» ناعمة:
+ * النبض صار أسلوباً قديماً ومزعجاً بصرياً، والدورة البطيئة تلفت الانتباه دون توتر.
  */
 @Composable
 fun GlowingCloudTopBarButton(
@@ -111,40 +128,33 @@ fun GlowingCloudTopBarButton(
     onClick: () -> Unit
 ) {
     val hasNew = newFilesCount > 0
+    val idleContainer = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     if (!hasNew) {
         FilledTonalIconButton(onClick = onClick, colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = idleContainer,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
             Icon(Icons.Filled.CloudQueue, contentDescription = "السحابة")
         }
         return
     }
-    val transition = rememberInfiniteTransition(label = "cloud_glow")
-    val glowColor by transition.animateColor(
-        initialValue = MaterialTheme.colorScheme.primaryContainer,
-        targetValue = MaterialTheme.colorScheme.tertiaryContainer,
+    // دورة «الامتلاء الأخضر» البطيئة بدل النبض القديم: قيمة واحدة تصعد وتهبط ببطء شديد
+    // (8.4 ثانية للدورة الكاملة) تُشتق منها ألوان الخلفية والمحتوى — لا تكبير ولا وميض.
+    // اللون الأخضر هو لون النجاح في ثيم التطبيق (SemanticSuccess) فيبقى الزر منسجماً
+    // مع هويته الهادئة وهو «يمتلئ» دلالة على وجود محتوى جديد جاهز للتنزيل.
+    val transition = rememberInfiniteTransition(label = "cloud_fill")
+    val fill by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 4200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "glow_color"
+        label = "cloud_fill_amount"
     )
-    // بعد العودة المبكرة أعلاه (!hasNew) تكون hasNew هنا حقيقةً دائمة؛ لذلك حُذفت
-    // الفروع الميتة التي كانت تفحصها مرة أخرى — جولة تدقيق تعليمات.md.
-    val pulseScale by transition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
-    )
-
+    val containerColor = lerp(idleContainer, SemanticSuccess, fill)
+    val contentColor = lerp(MaterialTheme.colorScheme.onSurfaceVariant, Color.White, fill)
     BadgedBox(
-        modifier = Modifier
-            .padding(end = 4.dp)
-            .scale(pulseScale),
+        modifier = Modifier.padding(end = 4.dp),
         badge = {
             Badge(
                 containerColor = MaterialTheme.colorScheme.error,
@@ -157,8 +167,8 @@ fun GlowingCloudTopBarButton(
         FilledTonalIconButton(
             onClick = onClick,
             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = glowColor,
-                contentColor = MaterialTheme.colorScheme.primary
+                containerColor = containerColor,
+                contentColor = contentColor
             )
         ) {
             Icon(
@@ -220,13 +230,20 @@ fun CloudFilesScreen(
     // الحذف من داخل السحابة: تحديد ملفات (أو ملف واحد) / مجلد فارغ — مع تأكيد صريح
     var deleteFileTargets by remember { mutableStateOf<List<RemoteCloudFile>?>(null) }
     var deleteFolderTarget by remember { mutableStateOf<RemoteCloudFolder?>(null) }
+    // انيميشنات ناعمة (جولة تعليمات.md): نحتفظ بآخر حالة «نشطة» لبطاقة النقل وآخر تقرير
+    // تنزيل حتى تكتمل انيميشن الخروج بمحتوى حقيقي بدل أن تفرغ البطاقة فجأة أثناء الاختفاء.
+    var lastActiveTransfer by remember { mutableStateOf(transferState) }
+    LaunchedEffect(transferState) { if (transferState.active) lastActiveTransfer = transferState }
+    var lastReport by remember { mutableStateOf(downloadReport) }
+    LaunchedEffect(downloadReport) { if (downloadReport != null) lastReport = downloadReport }
+    val layoutDirection = LocalLayoutDirection.current
     val folders = remember(remoteFolders) { CloudFolderTree.normalise(remoteFolders) }
     val current = folders.firstOrNull { it.key == currentKey }
     val foldersWithMissing = remember(folders, remoteFiles, downloadableKeys, verifyingKeys) {
         CloudPresenceMatcher.foldersForMissing(folders, remoteFiles, downloadableKeys + verifyingKeys)
     }
-    val children = folders.filter { it.parentKey == currentKey && (!missingOnly || it.key in foldersWithMissing) }
-    val visibleFiles = remoteFiles.filter { it.cloudFolderKey == currentKey && (!missingOnly || it.remoteKey in downloadableKeys || it.remoteKey in verifyingKeys) }
+    // قائمة المستوى الحالي تُحسب داخل AnimatedContent أدناه (من لقطة المفتاح، لا من
+    // الحالة الحية) حتى تحتفظ الصفحة الخارجة بمحتواها أثناء انيميشن الصعود/الدخول.
     val selected = remoteFiles.filter { it.remoteKey in selectedKeys && it.remoteKey in downloadableKeys }
     val canChoose = !transferState.active
     LaunchedEffect(Unit) { onRefresh() }
@@ -363,8 +380,16 @@ fun CloudFilesScreen(
                 FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("لم تُنزَّل") })
                 FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("كل الملفات") })
             }
-            CloudTransferProgressCard(transferState, onCancelDownloads)
-            downloadReport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) }
+            AnimatedVisibility(
+                visible = transferState.active,
+                enter = fadeIn(tween(260, easing = FastOutSlowInEasing)) + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(260, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(180)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(180))
+            ) { CloudTransferProgressCard(lastActiveTransfer, onCancelDownloads) }
+            AnimatedVisibility(
+                visible = downloadReport != null,
+                enter = fadeIn(tween(260, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(180))
+            ) { lastReport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) } }
             // لقطة قراءة واحدة للمفتاح الحالي (smart cast بدل force-unwrap — بوابة «صفر !!» في تعليمات.md)
             val key = currentKey
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -381,6 +406,11 @@ fun CloudFilesScreen(
                     Text("تنزيل المجلد")
                 }
             }
+            // خيارات التحديد السياقية (جولة تعليمات.md): كانت الأزرار الأربعة تظهر معاً
+            // طوال الوقت ومعظمها معطل — شكل مضلل ومزعج. الآن يظهر لكل حالة ما يعمل
+            // فيها فقط: بلا تحديد يظهر «تحديد الكل» وحده، وبمجرد التحديد تدخل أفعال
+            // التحديد (إلغاء/نقل/حذف + عداد الحجم) بانيميشن ناعم وتخرج عند إلغاء التحديد.
+            val hasSelection = selectedKeys.isNotEmpty()
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     // قراءة المفتاح لحظة النقر نفسها — بلا !! وبلا افتراض ثباته منذ التركيب
@@ -388,23 +418,57 @@ fun CloudFilesScreen(
                     val within = if (target == null) remoteFiles else CloudFolderTree.filesWithin(remoteFiles, folders, target)
                     selectedKeys = selectedKeys + within.filter { it.remoteKey in downloadableKeys }.map { it.remoteKey }
                 }, enabled = canChoose) { Text("تحديد الكل") }
-                TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose && selectedKeys.isNotEmpty()) { Text("إلغاء التحديد") }
-                TextButton(onClick = { moveTargets = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) { Text("نقل المحدد") }
-                TextButton(onClick = { deleteFileTargets = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) {
-                    Text("حذف المحدد", color = MaterialTheme.colorScheme.error)
+                AnimatedVisibility(
+                    visible = hasSelection,
+                    enter = fadeIn(tween(240, easing = FastOutSlowInEasing)) + expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(240, easing = FastOutSlowInEasing)),
+                    exit = fadeOut(tween(160)) + shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(160))
+                ) {
+                    Row {
+                        TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose) { Text("إلغاء التحديد") }
+                        TextButton(onClick = { moveTargets = selected }, enabled = isOnline && canChoose) { Text("نقل المحدد") }
+                        TextButton(onClick = { deleteFileTargets = selected }, enabled = isOnline && canChoose) {
+                            Text("حذف المحدد", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
                 Spacer(Modifier.weight(1f))
-                Text("${selected.size} • ${Formatters.fileSize(selected.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium)
+                AnimatedVisibility(
+                    visible = hasSelection,
+                    enter = fadeIn(tween(240, easing = FastOutSlowInEasing)),
+                    exit = fadeOut(tween(160))
+                ) {
+                    Text("${selected.size} • ${Formatters.fileSize(selected.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium)
+                }
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (children.isEmpty() && visibleFiles.isEmpty()) item {
+            // تنقّل ناعم بين المجلدات (جولة تعليمات.md): دخول المجلدات والصعود منها لم يعد
+            // تبديلاً مفاجئاً للقائمة بل انزلاقاً أفقياً خفيفاً مع خفوت. الاتجاه يُشتق من
+            // العمق (الأعمق يدخل من الأمام)، وجانب الانزلاق يراعي اتجاه التطبيق (عربي/إنجليزي).
+            AnimatedContent(
+                targetState = currentKey,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                transitionSpec = {
+                    val deeper = CloudFolderTree.ancestors(folders, targetState).size >=
+                        CloudFolderTree.ancestors(folders, initialState).size
+                    val forward = if (deeper) 1 else -1
+                    val side = if (layoutDirection == LayoutDirection.Rtl) -forward else forward
+                    (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { w -> side * w / 6 } +
+                        fadeIn(tween(300, easing = FastOutSlowInEasing)))
+                        .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { w -> -side * w / 6 } +
+                            fadeOut(tween(300, easing = FastOutSlowInEasing)))
+                },
+                label = "cloud_folder_nav"
+            ) { levelKey ->
+                val levelChildren = folders.filter { it.parentKey == levelKey && (!missingOnly || it.key in foldersWithMissing) }
+                val levelFiles = remoteFiles.filter { it.cloudFolderKey == levelKey && (!missingOnly || it.remoteKey in downloadableKeys || it.remoteKey in verifyingKeys) }
+                LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (levelChildren.isEmpty() && levelFiles.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(if (scanState.phase == CloudScanPhase.ERROR) Icons.Filled.CloudOff else Icons.Filled.CloudQueue,
                             contentDescription = null, modifier = Modifier.size(34.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(when {
                             missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "لا توجد ملفات للتنزيل — كل المحتوى على جهازك"
-                            currentKey != null -> "لا توجد ملفات ضمن هذا العرض"
+                            levelKey != null -> "لا توجد ملفات ضمن هذا العرض"
                             scanState.phase == CloudScanPhase.SCANNING -> "جارٍ التحقق من محتويات الخادم…"
                             scanState.phase == CloudScanPhase.EMPTY -> "لا توجد ملفات أو مجلدات في السحابة"
                             scanState.phase == CloudScanPhase.ERROR -> "تعذّر التحقق — ليس معنى ذلك أن السحابة فارغة"
@@ -416,7 +480,7 @@ fun CloudFilesScreen(
                         }
                     }
                 }
-                items(children, key = { "folder:${it.key}" }) { folder ->
+                items(levelChildren, key = { "folder:${it.key}" }) { folder ->
                     val all = CloudFolderTree.filesWithin(remoteFiles, folders, folder.key)
                     val pending = all.filter { it.remoteKey in downloadableKeys }.mapTo(mutableSetOf()) { it.remoteKey }
                     val verifying = all.count { it.remoteKey in verifyingKeys }
@@ -447,7 +511,7 @@ fun CloudFilesScreen(
                         }
                     }
                 }
-                items(visibleFiles, key = { "file:${it.remoteKey}" }) { file ->
+                items(levelFiles, key = { "file:${it.remoteKey}" }) { file ->
                     val pending = file.remoteKey in downloadableKeys
                     val checked = file.remoteKey in selectedKeys
                     Card(Modifier.fillMaxWidth().clickable(enabled = pending && canChoose) {
@@ -469,11 +533,20 @@ fun CloudFilesScreen(
                         }
                     }
                 }
+                }
             }
-            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.End) {
-                Button(onClick = { requestFiles = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) {
-                    Icon(Icons.Filled.CloudDownload, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
+            // زر «تنزيل المحدد» يتبع قاعدة الخيارات السياقية نفسها: لا يظهر إلا عند وجود
+            // تحديد فعّال، ويدخل ويخرج بانيميشن ناعم بدل أن يبقى ظاهراً ومعطلاً طوال الوقت.
+            AnimatedVisibility(
+                visible = selected.isNotEmpty(),
+                enter = fadeIn(tween(240, easing = FastOutSlowInEasing)) + expandVertically(expandFrom = Alignment.Bottom, animationSpec = tween(240, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(160)) + shrinkVertically(shrinkTowards = Alignment.Bottom, animationSpec = tween(160))
+            ) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.End) {
+                    Button(onClick = { requestFiles = selected }, enabled = isOnline && canChoose) {
+                        Icon(Icons.Filled.CloudDownload, contentDescription = null)
+                        Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
+                    }
                 }
             }
         }

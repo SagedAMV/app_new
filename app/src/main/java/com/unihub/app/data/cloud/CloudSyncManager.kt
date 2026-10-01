@@ -221,7 +221,6 @@ class CloudSyncManager @Inject constructor(
     }
 
     fun cancelDownloads() { downloadJob?.cancel() }
-    fun cancelTransfers() = cancelDownloads()
 
     suspend fun downloadFolder(key: String, destination: CloudDownloadDestination = CloudDownloadDestination()): Result<CloudDownloadReport> = downloadSelectedFiles(
         CloudFolderTree.filesWithin(_allRemoteFiles.value, _remoteFolders.value, key), setOf(key), destination)
@@ -664,9 +663,16 @@ class CloudSyncManager @Inject constructor(
             val parent = local.parentId?.let { describeFolder(it) }
             val current = catalog.snapshot(activeConnection)
             val linked = current.folderLinks.firstOrNull { it.localId == id && it.localCreatedAt == local.createdAt }
-            val key = linked?.remoteKey ?: "folder:${UUID.randomUUID()}"
+            // دمج تعليمات.md: المجلد الموجود في السحابة أولى من إنشاء هوية جديدة —
+            // (1) مجلد مرتبط ما زال موجوداً على الخادم، وإلا (2) مجلد بنفس الاسم في نفس
+            // المستوى حتى لو أُنشئ من جهاز آخر، وإلا (3) مجلد جديد. هكذا تختفي المجلدات
+            // المكررة بنفس الاسم: يُدمج المحتوى في المجلد القائم بدل إنشاء ثانٍ بجانبه.
+            val linkedFolder = linked?.remoteKey?.let { rk -> scan.state.folders.firstOrNull { it.key == rk } }
+            val merged = linkedFolder ?: CloudUploadMergeRules.findExistingFolder(scan.state.folders, local.name, parent)
+            val key = merged?.key ?: "folder:${UUID.randomUUID()}"
             folderKeys[id] = key
-            folderDescriptions += RemoteCloudFolder(key, local.name, parent, local.createdAt)
+            // المجلد المدموج يبقى باسمه ومكانه كما هو؛ نشر الوصف بمفتاحه لا يحركه ولا يعيد تسميته.
+            folderDescriptions += merged ?: RemoteCloudFolder(key, local.name, parent, local.createdAt)
             val link = CloudFolderLink(id, local.createdAt, key)
             catalog.update(activeConnection) { it.copy(folderLinks = it.folderLinks.filterNot { old -> old.localId == id } + link) }
             return key
@@ -713,6 +719,7 @@ class CloudSyncManager @Inject constructor(
                 bytesTotal = disk.length(), phase = "تحضير بصمة ${file.name}")
             try {
                 val length = disk.length(); val modified = disk.lastModified()
+                val parentKey = file.folderId?.let { folderKeys[it] }
                 val state = catalog.snapshot(activeConnection)
                 val previous = state.links.firstOrNull { it.localId == file.id && it.localCreatedAt == file.createdAt }
                 val hash = if (previous != null && previous.localSize == length && previous.localModifiedAt == modified) previous.sha256
@@ -721,7 +728,15 @@ class CloudSyncManager @Inject constructor(
                 // reusable يصبح الرابط نفسه حين تتحقق شروط إعادة الاستخدام — smart cast بدل force-unwrap (بوابة «صفر !!» في تعليمات.md)
                 val reusable = previous?.takeIf { it.sha256 == hash &&
                     (old == null || it.remoteVersion.isBlank() || it.remoteVersion == "${old.etag}:${old.size}") }
-                val key = reusable?.remoteKey ?: CloudFileRules.contentObjectKey(hash, file.extension, UUID.randomUUID().toString())
+                // دمج تعليمات.md: ملف موجود مسبقاً في السحابة ببصمته واسمه داخل المجلد الوجهة
+                // لا يُرفع مرة أخرى حتى لو رُفع من جهاز آخر (بلا رابط محلي). نبحث في قائمة
+                // الفحص وفيما خُطط لهذه الجولة معاً، فالتكرار داخل الجولة الواحدة يُدمج أيضاً.
+                // تطابق الاسم شرط إلزامي: إعادة استخدام مفتاح باسم مختلف تعني إعادة تسمية صامتة في البيان.
+                // المفتاح يُستخرج من كل فرع بنوعه: الرابط المحلي يحمل مفتاحه، وقاعدة الدمج
+                // تعيد ملفاً بعيداً بمفتاحه — لا نمزج النوعين في تعبير واحد (مشتركهما Any).
+                val mergedKey = reusable?.remoteKey
+                    ?: CloudUploadMergeRules.findExistingFile(scan.state.files + descriptions, file.name, file.extension, hash, length, parentKey)?.remoteKey
+                val key = mergedKey ?: CloudFileRules.contentObjectKey(hash, file.extension, UUID.randomUUID().toString())
                 var obj = objects[key]
                 if (obj == null || obj.size != length) {
                     val reserved = CloudFileLink(file.id, key, "", hash, length, modified, file.createdAt)
@@ -734,7 +749,6 @@ class CloudSyncManager @Inject constructor(
                     uploaded++
                 } else present++
                 if (disk.length() != length || disk.lastModified() != modified) throw IOException("تغير الملف أثناء الرفع")
-                val parentKey = file.folderId?.let { folderKeys[it] }
                 val descriptor = RemoteCloudFile(key, 0L, file.name, file.extension, length, file.mimeType, file.kind,
                     folderId = null, folderName = file.folderId?.let { localFolders[it]?.name }, createdAt = file.createdAt,
                     etag = obj.etag, sha256 = hash, lastModifiedAt = obj.lastModifiedAt, cloudFolderKey = parentKey)
