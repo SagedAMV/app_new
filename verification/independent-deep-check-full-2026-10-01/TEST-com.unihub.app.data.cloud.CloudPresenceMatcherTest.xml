@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudPresenceMatcherTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-01T23:24:58" hostname="e2b.local" time="0.014">
+  <properties/>
+  <testcase name="localFileDeletionInvalidatesFingerprint" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.003"/>
+  <testcase name="newRemoteVersionDoesNotUseAnOldIdentityLink" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="restoredContentIsPresentWithoutCloudLinks" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="matchingNameAndSizeWithDifferentBytesIsMissing" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="noChecksumNeverMatchesBySizeAlone" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="checksumComparisonIsCaseInsensitive" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.001"/>
+  <testcase name="changedPathInvalidatesFingerprint" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="exactExistingLinkStillWorksWithoutAFullHashPass" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="identicalPayloadAtAnotherLocalFolderIsNotDownloadedTwice" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="backupByteRoundTripThenCloudComparisonDoesNotNeedOldIdsOrPaths" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.004"/>
+  <testcase name="completedFoldersDoNotAppearInMissingOnlyTree" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="partialRestoreShowsOnlyFoldersWithMissingDescendants" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="unhashedBackupIsVerifyingNotFalselyNew" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.001"/>
+  <testcase name="idReuseCannotReuseAnotherRecordsFingerprint" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="sameSizedLocalEditInvalidatesCachedFingerprint" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <testcase name="changedRoomIdAndFilenameDoNotForceRedownload" classname="com.unihub.app.data.cloud.CloudPresenceMatcherTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

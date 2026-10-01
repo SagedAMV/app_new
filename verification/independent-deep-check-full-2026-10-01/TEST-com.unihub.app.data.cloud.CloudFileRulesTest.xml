@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudFileRulesTest" tests="31" skipped="0" failures="0" errors="0" timestamp="2026-10-01T23:24:58" hostname="e2b.local" time="0.053">
+  <properties/>
+  <testcase name="remoteDescriptorJsonRoundTrips" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.005"/>
+  <testcase name="fileMetadataUpdatesRatherThanDuplicatingKey" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.002"/>
+  <testcase name="concurrentTextEditsAreDetectedRatherThanOverwritten" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.006"/>
+  <testcase name="snapshotTimestampsDoNotCauseFalseRaceDetection" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="contentKeysDoNotUseAutoIncrementIds" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.016"/>
+  <testcase name="updatedVersionNotifiesOnceAgain" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="remoteEditUpdatesUnchangedLocalMetadata" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="sameNameAndSizeNeverEstablishIdentity" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="exactIdentityAndVersionAreDownloaded" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="missingDiskFileIsNotDownloaded" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="emptyFilesAreValid" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="firstImportAddsRemoteMetadata" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="remoteDeletionAppliesWhenLocalUnchanged" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="independentPhoneIdCollisionIsDetected" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="remoteEditCannotOverwriteUnsentLocalEdit" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="sameSizeChangedEtagIsAvailableAgain" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="updatingPartialLibraryPreservesUnselectedCloudFiles" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="unmappedFileIsNotAssumedDownloaded" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="sameLogicalIdentityIsSafeToRetry" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="objectFieldOrderingDoesNotCreateFakeChanges" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="equalContentsCanKeepDifferentNamesAndFolders" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="remoteRoomIdIsNotLocalIdentity" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="truncatedDiskFileIsNotDownloaded" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="extensionCannotEscapePrefix" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="ordinaryRemoteEditIsNotAConflict" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="localDeletionIsNotUndoneByUnchangedRemote" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="metadataUploadDoesNotLeakLocalAbsolutePaths" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="localEditDuringScanAbortsMetadataReplacement" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="badHashIsRejected" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <testcase name="sameVersionDoesNotNotifyTwice" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.0"/>
+  <testcase name="folderDeletionNeverCascadesToLocalFiles" classname="com.unihub.app.data.cloud.CloudFileRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
