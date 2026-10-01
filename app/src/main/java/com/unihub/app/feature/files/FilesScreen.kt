@@ -1,6 +1,7 @@
 package com.unihub.app.feature.files
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -150,6 +151,10 @@ fun FilesScreen(
     val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val isSelecting = selection.isNotEmpty()
+    // جولة تعليمات.md — حل مشكلة زر الرجوع (نظام التشغيل) في وضع التحديد: كان يُخرج
+    // من شاشة الملفات كاملة. الآن يخرج من وضع التحديد فقط، وعند عدم وجود تحديد يسري
+    // السلوك الافتراضي (رجوع للمجلد السابق — التنقل هنا مبني على مسارات التنقل).
+    BackHandler(enabled = isSelecting) { viewModel.clearSelection() }
     val selectedFiles = remember(files, selection) { files.filter { it.id in selection } }
 
     // صندوق المشاركة: ملفات واردة من تطبيقات النظام تنتظر اختيار مجلدها

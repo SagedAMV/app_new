@@ -2,6 +2,15 @@ package com.unihub.app.data.cloud
 
 /** اختيار الوجهة لا يغيّر أسماء أو تنظيم مجلدات المستخدم الحالية. */
 enum class CloudDownloadLocation { ORIGINAL_CLOUD_TREE, LOCAL_FOLDER, FOLDER_INSIDE_LOCAL }
+
+/**
+ * جولة تعليمات.md: «ترتيب تلقائي .. موصى بة» هو الخيار المفعّل افتراضياً عند فتح
+ * حوار الوجهة، مع بقاء الاختيار كاملاً للمستخدم. مصدر وحيد تقرأه الواجهة ويثبته
+ * اختبار محلي — حتى لا ينحرف الافتراضي في الواجهة عن طبقة البيانات.
+ */
+object CloudDownloadDefaults {
+    val location: CloudDownloadLocation = CloudDownloadLocation.ORIGINAL_CLOUD_TREE
+}
 data class CloudDownloadDestination(
     val location: CloudDownloadLocation = CloudDownloadLocation.ORIGINAL_CLOUD_TREE,
     val localFolderId: Long? = null,

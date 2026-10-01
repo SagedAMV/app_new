@@ -34,4 +34,10 @@ class CloudDownloadPlacementTest {
         val target = CloudDownloadDestination(CloudDownloadLocation.FOLDER_INSIDE_LOCAL, 7)
         assertEquals("صور", CloudDownloadPlacement.localRootName(target, folders[1]))
     }
+    @Test fun defaultLocationIsTheRecommendedCloudTreeFromSingleSource() {
+        // جولة تعليمات.md: «ترتيب تلقائي .. موصى بة» مفعّل افتراضياً — المصدر الوحيد
+        // CloudDownloadDefaults تقرأه الواجهة، وهذا الاختبار يثبته حتى لا ينحرف.
+        assertEquals(CloudDownloadLocation.ORIGINAL_CLOUD_TREE, CloudDownloadDefaults.location)
+        assertEquals(CloudDownloadDefaults.location, CloudDownloadDestination().location)
+    }
 }

@@ -1,5 +1,6 @@
 package com.unihub.app.feature.files
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -233,6 +234,19 @@ fun CloudFilesScreen(
         selectedKeys = selectedKeys.intersect(downloadableKeys)
         if (currentKey != null && current == null) currentKey = null
     }
+    // جولة تعليمات.md — حل مشكلة زر الرجوع الخاص بنظام التشغيل في واجهة الملفات
+    // السحابية: كان يُخرج من الشاشة كاملة. الآن يتراجع تدريجياً: إلغاء التحديد
+    // أولاً، ثم الصعود للمجلد الأب، ثم الخروج من الشاشة عند الجذر بلا تحديد.
+    // النوافذ والأوراق المفتوحة تعالج رجوعها بنفسها لأن مستمعها يُسجَّل بعد هذا
+    // المستمع في OnBackPressedDispatcher فتُقدَّم عليه.
+    val handleBack: () -> Unit = {
+        when (CloudBackPolicy.step(hasSelection = selectedKeys.isNotEmpty(), isInsideFolder = currentKey != null)) {
+            BackStep.CLEARED_SELECTION -> selectedKeys = emptySet()
+            BackStep.WENT_UP -> currentKey = current?.parentKey
+            BackStep.EXITED -> onBack()
+        }
+    }
+    BackHandler(onBack = handleBack)
     if (requestFiles != null || requestFolder != null) {
         CloudDownloadDestinationDialog(localFolders, requestFolder?.name,
             onConfirm = { destination ->
@@ -323,7 +337,8 @@ fun CloudFilesScreen(
             TopAppBar(
                 title = { Text("الملفات السحابية") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    // نفس سلّم الرجوع الموحّد — زر الشريط يتطابق مع زر النظام
+                    IconButton(onClick = handleBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 },
