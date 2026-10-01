@@ -481,6 +481,80 @@ class CloudSyncManager @Inject constructor(
         }
     }
 
+    /**
+     * حذف ملفات من السحابة نفسها (جولة تعليمات.md — تحكم كامل داخل الواجهة).
+     *
+     * **الترتيب مقصود** (قرار محاكمة الحلقة 5 — H1): تُحذف كائنات R2 أولاً ثم يُنظَّف بيان
+     * الفهرس. السبب: [discoverFiles] يبني القائمة من كائنات الحاوية لا من سجلات البيان،
+     * فحذف الكائن يُخفي الملف فوراً حتى لو تعارض نشر البيان مع جهاز آخر — بلا كائن يتيم
+     * يُتبنّى تلقائياً فيعود إشعاراً كاذباً للمستخدم.
+     *
+     * **النسخ المحلية لا تُمس إطلاقاً** (ثابت Inv1): تُنقّى روابط الفهرس فقط، فيبقى ملف
+     * المستخدم على جهازه كما هو ولو حُذفت نسخته السحابية.
+     */
+    suspend fun deleteRemoteFiles(remoteKeys: List<String>): Result<Int> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        val targets = CloudDeleteRules.targets(scan.state.files, remoteKeys)
+        if (targets.isEmpty()) {
+            throw IOException("الملفات المطلوبة لم تعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
+        }
+        if (targets.size > CloudDeleteRules.MAX_PER_OPERATION) {
+            throw IOException("الحد الأقصى للحذف في العملية الواحدة ${CloudDeleteRules.MAX_PER_OPERATION} ملفاً؛ قسّم التحديد ثم أعد المحاولة")
+        }
+        val deleted = linkedSetOf<String>()
+        val failed = mutableListOf<String>()
+        for (file in targets) {
+            r2Client.deleteObject(settings.credentials, file.remoteKey).fold(
+                onSuccess = { deleted += file.remoteKey },
+                onFailure = { failed += file.fullDisplayName }
+            )
+        }
+        if (deleted.isEmpty()) {
+            throw IOException("تعذّر حذف الملفات من السحابة: ${failed.take(3).joinToString("، ")}")
+        }
+        // الكائنات لم تعد موجودة فعلاً؛ فصل روابط النسخ المحلية يتم حتى لو تعارض نشر البيان.
+        catalog.update(activeConnection) { it.copy(links = CloudDeleteRules.pruneLinks(it.links, deleted)) }
+        try {
+            publishManifestEdit(settings, scan) { root ->
+                root.put("files", CloudManifestTools.withoutFiles(root.optJSONArray("files"), deleted))
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // الحذف تمّ فعلاً واختفت الملفات من القائمة؛ الرسالة تصف الحالة بدقة بلا ادعاء فشل كامل.
+            throw IOException("حُذف ${deleted.size} من السحابة، ولم يُحدَّث الفهرس (${error.message})؛ نفّذ «فحص ومزامنة»")
+        } finally {
+            refreshAvailable(catalog.snapshot(activeConnection))
+        }
+        if (failed.isNotEmpty()) {
+            throw IOException("حُذف ${deleted.size}، وتعذّر ${failed.size}: ${failed.take(3).joinToString("، ")}")
+        }
+        deleted.size
+    }
+
+    /**
+     * حذف مجلد سحابي أنشأه التطبيق (مفتاح folder:) بشرط أن يكون فارغاً من الملفات.
+     * لا يُحذف أي كائن محتوى في هذه العملية — المجلد وصف في البيان، وملفاته (لو وُجدت)
+     * تمنع الحذف برسالة تشرح المطلوب. ومجلدات path:/legacy: تُرفض لأنها تعكس بنية
+     * التخزين أو مكتبة الجهاز المحلية.
+     */
+    suspend fun deleteRemoteFolder(folderKey: String): Result<Unit> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        val folder = scan.state.folders.firstOrNull { it.key == folderKey }
+            ?: throw IOException("المجلد لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
+        CloudDeleteRules.folderDeletionBlockReason(folder, scan.state.files, scan.state.folders)
+            ?.let { throw IOException(it) }
+        val removed = CloudFolderTree.descendants(scan.state.folders, folderKey)
+        publishManifestEdit(settings, scan) { root ->
+            root.put("cloudFolders", CloudManifestTools.withoutFolders(root.optJSONArray("cloudFolders"), removed))
+        }
+        catalog.update(activeConnection) { it.copy(folderLinks = CloudDeleteRules.pruneFolderLinks(it.folderLinks, removed)) }
+    }
+
     private data class Scan(
         val objects: List<R2ObjectSummary>,
         val remoteManifest: JSONObject?,

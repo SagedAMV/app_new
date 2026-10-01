@@ -1,0 +1,90 @@
+{
+  "suite": "cloud-delete-control",
+  "gradleTask": "testDebugUnitTest",
+  "jdk": "Temurin 17.0.20.1",
+  "androidSdk": "platforms;android-35 + build-tools;35.0.0",
+  "gradle": "8.9",
+  "totalTests": 113,
+  "totalFailures": 0,
+  "totalTimeSeconds": 0.65,
+  "classes": [
+    {
+      "class": "com.unihub.app.data.cloud.CancellableHttpRequestTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.176
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudClientHashTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.018
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudDeleteRulesTest",
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.044
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudDownloadPlacementTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.005
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudFileRulesTest",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.048
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudFolderTreeTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.021
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudPresenceMatcherTest",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.025
+    },
+    {
+      "class": "com.unihub.app.data.cloud.CloudScanControllerTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.077
+    },
+    {
+      "class": "com.unihub.app.data.cloud.R2ClientIntegrationTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.004
+    },
+    {
+      "class": "com.unihub.app.data.cloud.S3ProtocolTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.15
+    },
+    {
+      "class": "com.unihub.app.data.storage.FileTargetAllocatorTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "timeSeconds": 0.082
+    }
+  ],
+  "note": "أدلة تشغيل فعلية داخل جلسة الوكيل على JVM؛ لا تشمل تشغيل التطبيق على جهاز/محاكي."
+}

@@ -28,6 +28,54 @@ object CloudFileRules {
     }
 }
 
+/**
+ * قواعد الحذف السحابي — نقية وقابلة للاختبار على JVM بلا شبكة.
+ * الحذف إجراء تدميري لا رجعة فيه، فكل دالة هنا تحرس ثابتاً صريحاً **قبل** أي طلب شبكي:
+ *  - كائنات النظام (الفهرس/الوصف/النسخة الاحتياطية) لا تُحذف من واجهة الملفات أبداً.
+ *  - لا يُحذف إلا مفتاح مُكتشف فعلاً في آخر فحص (لا مفاتيح ملفقة/قديمة).
+ *  - النسخ المحلية لا تُمس؛ تُنقّى روابط الفهرس فقط.
+ *  - لا يُحذف مجلد إلا إن كان من مجلدات البيان (folder:) وخالياً من الملفات.
+ */
+object CloudDeleteRules {
+    /** سقف العملية الواحدة: يمنع تجاوز مهلة تحرير البيان فتنتج حالة نصفية غامضة. */
+    const val MAX_PER_OPERATION: Int = 200
+
+    fun isDeletableObjectKey(objectKey: String): Boolean =
+        objectKey.isNotBlank() && !objectKey.endsWith("/") &&
+            objectKey != CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY &&
+            objectKey != CloudflareR2Config.REMOTE_META_OBJECT_KEY &&
+            objectKey != CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY
+
+    /** الملفات المكتشفة فعلاً والمطابقة للمفاتيح المطلوبة — وبدون تكرار، وبترتيب الطلب. */
+    fun targets(files: List<RemoteCloudFile>, requestedKeys: Collection<String>): List<RemoteCloudFile> =
+        requestedKeys.asSequence().distinct()
+            .mapNotNull { key -> files.firstOrNull { it.remoteKey == key } }
+            .filter { isDeletableObjectKey(it.remoteKey) }
+            .toList()
+
+    fun pruneLinks(links: List<CloudFileLink>, removedKeys: Set<String>): List<CloudFileLink> =
+        links.filterNot { it.remoteKey in removedKeys }
+
+    fun pruneFolderLinks(links: List<CloudFolderLink>, removedFolderKeys: Set<String>): List<CloudFolderLink> =
+        links.filterNot { it.remoteKey in removedFolderKeys }
+
+    /** سبب رفض حذف المجلد، أو null إن كان الحذف مسموحاً (مجلد بيان فارغ من الملفات). */
+    fun folderDeletionBlockReason(
+        folder: RemoteCloudFolder,
+        files: List<RemoteCloudFile>,
+        folders: List<RemoteCloudFolder>
+    ): String? {
+        if (!folder.key.startsWith("folder:")) {
+            return "هذا المجلد مرتبط بمسار التخزين أو بمكتبة جهازك؛ لا يُحذف من السحابة"
+        }
+        val within = CloudFolderTree.filesWithin(files, folders, folder.key)
+        if (within.isNotEmpty()) {
+            return "المجلد غير فارغ (${within.size} ملف)؛ انقل ما فيه أو احذفه أولاً"
+        }
+        return null
+    }
+}
+
 /** دمج ثلاثي للجداول الخفيفة: لا نستبدل تعديلاً محلياً بتعديل بعيد غير مشروط. */
 object CloudManifestTools {
     val metadataTables = listOf("folders", "tasks", "notes", "exams", "lectures")
@@ -100,6 +148,31 @@ object CloudManifestTools {
         if (array != null) for (i in 0 until array.length()) {
             array.optJSONObject(i)?.let { put(it.optLong("id"), it) }
         }
+    }
+
+    /**
+     * إزالة سجلات ملفات محددة من بيان الخادم مع الحفاظ على ترتيب الباقي ونصوصه كما هي.
+     * تُستخدم في الحذف السحابي: لا تُلمس أي سجل غير مطلوب.
+     */
+    fun withoutFiles(remote: JSONArray?, keys: Set<String>): JSONArray {
+        val result = JSONArray()
+        if (remote != null) for (i in 0 until remote.length()) {
+            val row = remote.optJSONObject(i) ?: continue
+            if (row.optString("remoteKey") in keys) continue
+            result.put(JSONObject(row.toString()))
+        }
+        return result
+    }
+
+    /** إزالة مجلدات بيان محددة (بمفاتيحها) من بيان الخادم — تُستخدم لحذف المجلدات الفارغة. */
+    fun withoutFolders(existing: JSONArray?, keys: Set<String>): JSONArray {
+        val result = JSONArray()
+        if (existing != null) for (i in 0 until existing.length()) {
+            val row = existing.optJSONObject(i) ?: continue
+            if (row.optString("key") in keys) continue
+            result.put(JSONObject(row.toString()))
+        }
+        return result
     }
 
     fun canonical(value: Any?): String = when (value) {

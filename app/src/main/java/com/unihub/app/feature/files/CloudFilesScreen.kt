@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
@@ -81,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.core.common.Formatters
+import com.unihub.app.data.cloud.CloudDeleteRules
 import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudFolderTree
 import com.unihub.app.data.cloud.CloudPresenceMatcher
@@ -90,6 +92,7 @@ import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.ui.components.AppSheet
+import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.UiMessagesHost
 
@@ -213,6 +216,9 @@ fun CloudFilesScreen(
     var renameFileTarget by remember { mutableStateOf<RemoteCloudFile?>(null) }
     var renameFolderTarget by remember { mutableStateOf<RemoteCloudFolder?>(null) }
     var moveTargets by remember { mutableStateOf<List<RemoteCloudFile>?>(null) }
+    // الحذف من داخل السحابة: تحديد ملفات (أو ملف واحد) / مجلد فارغ — مع تأكيد صريح
+    var deleteFileTargets by remember { mutableStateOf<List<RemoteCloudFile>?>(null) }
+    var deleteFolderTarget by remember { mutableStateOf<RemoteCloudFolder?>(null) }
     val folders = remember(remoteFolders) { CloudFolderTree.normalise(remoteFolders) }
     val current = folders.firstOrNull { it.key == currentKey }
     val foldersWithMissing = remember(folders, remoteFiles, downloadableKeys, verifyingKeys) {
@@ -242,16 +248,24 @@ fun CloudFilesScreen(
         CloudFileMenuSheet(
             file = file,
             canDownload = isOnline && canChoose && file.remoteKey in downloadableKeys,
+            canDelete = isOnline && canChoose,
             onRename = { renameFileTarget = file; fileMenu = null },
             onMove = { moveTargets = listOf(file); fileMenu = null },
             onDownload = { requestFiles = listOf(file); fileMenu = null },
+            onDelete = { deleteFileTargets = listOf(file); fileMenu = null },
             onDismiss = { fileMenu = null }
         )
     }
     folderMenu?.let { folder ->
         CloudFolderMenuSheet(
             folder = folder,
+            deleteBlockReason = if (isOnline && canChoose) {
+                CloudDeleteRules.folderDeletionBlockReason(folder, remoteFiles, folders)
+            } else {
+                "الحذف متاح عندما يكون الاتصال متوفراً ولا توجد عملية نقل جارية"
+            },
             onRename = { renameFolderTarget = folder; folderMenu = null },
+            onDelete = { deleteFolderTarget = folder; folderMenu = null },
             onDismiss = { folderMenu = null }
         )
     }
@@ -282,11 +296,32 @@ fun CloudFilesScreen(
         )
     }
 
+    // تأكيد الحذف من السحابة — لا حذف بلا تأكيد، والرسالة تصرّح بأن النسخ المحلية لا تُمس.
+    deleteFileTargets?.let { targets ->
+        val label = if (targets.size == 1) "«${targets.first().fullDisplayName}»" else Formatters.fileCountLabel(targets.size)
+        ConfirmDialog(
+            title = "حذف من السحابة؟",
+            message = "سيُحذف $label نهائيًا من السحابة ولا يمكن التراجع. نسخك المحلية على هذا الجهاز لن تُحذف.",
+            confirmLabel = "حذف من السحابة",
+            onConfirm = { viewModel.deleteFiles(targets); deleteFileTargets = null },
+            onDismiss = { deleteFileTargets = null }
+        )
+    }
+    deleteFolderTarget?.let { folder ->
+        ConfirmDialog(
+            title = "حذف المجلد من السحابة؟",
+            message = "سيُحذف المجلد «${folder.name}» من قائمة السحابة. المجلد فارغ من الملفات، ولن تُحذف أي نسخة محلية.",
+            confirmLabel = "حذف المجلد",
+            onConfirm = { viewModel.deleteFolder(folder); deleteFolderTarget = null },
+            onDismiss = { deleteFolderTarget = null }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("السحابة — الملفات والمجلدات") },
+                title = { Text("الملفات السحابية") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
@@ -294,7 +329,7 @@ fun CloudFilesScreen(
                 },
                 actions = {
                     IconButton(onClick = onRefresh, enabled = scanState.phase != CloudScanPhase.SCANNING) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "فحص السحابة الآن")
+                        Icon(Icons.Filled.Refresh, contentDescription = "تحديث القائمة")
                     }
                 }
             )
@@ -306,12 +341,12 @@ fun CloudFilesScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             if (scanState.phase == CloudScanPhase.SCANNING) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (localVerification.active) Text("مقارنة الملفات المحلية ${localVerification.completed}/${localVerification.total}: ${localVerification.fileName}",
+            if (localVerification.active) Text("جارٍ التحقق من النسخ المحلية (${localVerification.completed}/${localVerification.total}): ${localVerification.fileName}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             localVerification.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("غير المنزَّل") })
-                FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("الجميع") })
+                FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("لم تُنزَّل") })
+                FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("كل الملفات") })
             }
             CloudTransferProgressCard(transferState, onCancelDownloads)
             downloadReport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) }
@@ -340,6 +375,9 @@ fun CloudFilesScreen(
                 }, enabled = canChoose) { Text("تحديد الكل") }
                 TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose && selectedKeys.isNotEmpty()) { Text("إلغاء التحديد") }
                 TextButton(onClick = { moveTargets = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) { Text("نقل المحدد") }
+                TextButton(onClick = { deleteFileTargets = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) {
+                    Text("حذف المحدد", color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.weight(1f))
                 Text("${selected.size} • ${Formatters.fileSize(selected.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium)
             }
@@ -383,8 +421,9 @@ fun CloudFilesScreen(
                                     style = MaterialTheme.typography.bodySmall)
                                 Text("افتح المجلد للاختيار والتنزيل", style = MaterialTheme.typography.labelSmall)
                             }
+                            // أيقونة إجراءات موحّدة مع صفوف الملفات: ثلاث نقاط بدل قلم رصاص
                             IconButton(onClick = { folderMenu = folder }) {
-                                Icon(Icons.Filled.Edit, contentDescription = "إجراءات ${folder.name}")
+                                Icon(Icons.Filled.MoreVert, contentDescription = "إجراءات ${folder.name}")
                             }
                             IconButton(onClick = { requestFolder = folder }, enabled = isOnline && canChoose && verifying == 0 &&
                                 (pending.isNotEmpty() || (all.isEmpty() && !missingOnly))) {
@@ -426,14 +465,16 @@ fun CloudFilesScreen(
     }
 }
 
-/** قائمة إجراءات ملف سحابي: إعادة تسمية، تغيير المسار (نقل)، تنزيل. */
+/** قائمة إجراءات ملف سحابي: تنزيل، إعادة تسمية، نقل إلى مجلد، حذف من السحابة. */
 @Composable
 private fun CloudFileMenuSheet(
     file: RemoteCloudFile,
     canDownload: Boolean,
+    canDelete: Boolean,
     onRename: () -> Unit,
     onMove: () -> Unit,
     onDownload: () -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AppSheet(
@@ -445,6 +486,7 @@ private fun CloudFileMenuSheet(
             CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية الملف", onClick = onRename)
             CloudMenuActionRow(icon = Icons.AutoMirrored.Filled.DriveFileMove, text = "نقل إلى مجلد", onClick = onMove)
             CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل", enabled = canDownload, onClick = onDownload)
+            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف من السحابة", enabled = canDelete, danger = true, onClick = onDelete)
             if (!canDownload) Text(
                 "التنزيل متاح عندما يكون الملف غير موجود على جهازك والاتصال متوفراً",
                 style = MaterialTheme.typography.bodySmall,
@@ -456,14 +498,17 @@ private fun CloudFileMenuSheet(
 }
 
 /**
- * قائمة إجراءات مجلد سحابي: إعادة تسمية المجلد.
+ * قائمة إجراءات مجلد سحابي: إعادة تسمية المجلد، وحذفه من قائمة السحابة.
  * المجلدات المبنية على مسار التخزين (path:) أو على مجلدات المكتبة المحلية (legacy:)
- * لا تُعاد تسميتها من السحابة — الاسم هناك يتبع مصدره، والرسالة توضح السبب.
+ * لا تُعاد تسميتها ولا تُحذف من السحابة — الاسم والحذف هناك يتبعان مصدرهما،
+ * والرسالة توضح السبب. والحذف يُرفض أيضاً للمجلد الذي يحوي ملفات: تُشرح الخطوة الصحيحة.
  */
 @Composable
 private fun CloudFolderMenuSheet(
     folder: RemoteCloudFolder,
+    deleteBlockReason: String?,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val canRename = folder.key.startsWith("folder:")
@@ -474,24 +519,35 @@ private fun CloudFolderMenuSheet(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية المجلد", enabled = canRename, onClick = onRename)
+            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد من السحابة", enabled = deleteBlockReason == null, danger = true, onClick = onDelete)
             if (!canRename) Text(
                 "هذا المجلد مبني على مسار التخزين أو على مجلد محلي؛ إعادة التسمية متاحة للمجلدات التي أنشأها التطبيق في السحابة",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp)
             )
+            deleteBlockReason?.let { reason ->
+                Text(
+                    reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+                )
+            }
         }
     }
 }
 
-/** صف إجراء واحد داخل قوائم السحابة */
+/** صف إجراء واحد داخل قوائم السحابة. danger = إجراء تدميري (حذف) بلون الخطأ. */
 @Composable
 private fun CloudMenuActionRow(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
+    danger: Boolean = false,
     onClick: () -> Unit
 ) {
+    val activeColor = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -502,7 +558,7 @@ private fun CloudMenuActionRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (enabled) MaterialTheme.colorScheme.primary
+            tint = if (enabled) activeColor
             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier.size(22.dp)
         )
@@ -510,8 +566,11 @@ private fun CloudMenuActionRow(
         Text(
             text = text,
             style = MaterialTheme.typography.titleSmall,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = when {
+                enabled && danger -> MaterialTheme.colorScheme.error
+                enabled -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            }
         )
     }
 }
@@ -658,7 +717,8 @@ fun CloudTransferProgressCard(state: CloudTransferState, onCancel: () -> Unit) {
             else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             if (state.bytesTotal > 0) Text("${Formatters.fileSize(state.bytesDone)} / ${Formatters.fileSize(state.bytesTotal)}",
                 style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = onCancel) { Text("إيقاف النقل") }
+            // «إيقاف» بلا كلمة «النقل»: كلمة النقل صارت محجوزة لمعنى «نقل إلى مجلد»
+            TextButton(onClick = onCancel) { Text("إيقاف") }
         }
     }
 }

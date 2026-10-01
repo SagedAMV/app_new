@@ -7,6 +7,7 @@ import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.RemoteCloudFile
+import com.unihub.app.data.cloud.RemoteCloudFolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -81,6 +82,29 @@ class CloudFilesViewModel @Inject constructor(private val manager: CloudSyncMana
             manager.renameRemoteFolder(folderKey, newName).fold(
                 onSuccess = { messenger.notify("أُعيدت تسمية المجلد في السحابة") },
                 onFailure = { messenger.notifyError(it.message ?: "تعذّرت إعادة تسمية المجلد") }
+            )
+        }
+    }
+
+    /**
+     * حذف ملفات مختارة من السحابة. **النسخ المحلية على الجهاز لا تُحذف** — الرسالة
+     * النهائية هنا صريحة بهذا حتى لا يفترض المستخدم أن حذفه السحابي محا جهازه.
+     */
+    fun deleteFiles(files: List<RemoteCloudFile>) {
+        viewModelScope.launch {
+            manager.deleteRemoteFiles(files.map { it.remoteKey }).fold(
+                onSuccess = { count -> messenger.notify("حُذف ${Formatters.fileCountLabel(count)} من السحابة؛ نسخك المحلية كما هي") },
+                onFailure = { messenger.notifyError(it.message ?: "تعذّر الحذف من السحابة") }
+            )
+        }
+    }
+
+    /** حذف مجلد سحابي أنشأه التطبيق (فارغ فقط) من داخل شاشة السحابة. */
+    fun deleteFolder(folder: RemoteCloudFolder) {
+        viewModelScope.launch {
+            manager.deleteRemoteFolder(folder.key).fold(
+                onSuccess = { messenger.notify("حُذف المجلد من السحابة") },
+                onFailure = { messenger.notifyError(it.message ?: "تعذّر حذف المجلد") }
             )
         }
     }

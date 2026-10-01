@@ -235,6 +235,25 @@ class CloudflareR2Client @Inject constructor() {
             }
         }
 
+    /**
+     * حذف كائن محتوى من الحاوية (تحكم كامل داخل شاشة السحابة).
+     * S3 يجعل DELETE متكرراً آمناً: 404 تعني «محذوف مسبقاً» لا فشلاً — فتكون إعادة المحاولة
+     * بعد انقطاع آمنة. كائنات النظام (الفهرس/الوصف/النسخة الاحتياطية) محميّة بنيوياً هنا
+     * وفي قواعد الحذف، فلا يمكن لهذا المسار أن يمحو فهرس الخادم أو نسخة احتياطية.
+     */
+    suspend fun deleteObject(credentials: R2Credentials, objectKey: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            cloudAttempt {
+                if (!CloudDeleteRules.isDeletableObjectKey(objectKey)) {
+                    throw IOException("هذا الكائن محمي من الحذف")
+                }
+                val conn = connection(credentials, objectKey, "DELETE")
+                withCancellableConnection(conn) {
+                    if (conn.responseCode != 404) requireSuccess(conn)
+                }
+            }
+        }
+
     private fun connection(
         credentials: R2Credentials,
         objectKey: String?,
