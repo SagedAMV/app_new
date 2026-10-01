@@ -14,7 +14,6 @@ import androidx.navigation.toRoute
 import com.unihub.app.feature.backup.BackupScreen
 import com.unihub.app.feature.dashboard.DashboardScreen
 import com.unihub.app.feature.files.CloudFilesScreen
-import com.unihub.app.feature.files.CloudNotificationPickerHost
 import com.unihub.app.feature.files.FilesScreen
 import com.unihub.app.feature.files.capture.CameraCaptureScreen
 import com.unihub.app.feature.galaxy.GalaxyScreen
@@ -26,13 +25,10 @@ import com.unihub.app.feature.settings.SettingsScreen
  * وواجهات الإعدادات/النسخ الاحتياطي تُفتح فوقها بشريط علوي وزر رجوع.
  */
 @Composable
-fun AppNavHost(cloudPickerRequest: Int = 0) {
+fun AppNavHost() {
     val navController = rememberNavController()
-    // إشعار «ملفات جديدة على الخادم» يقود التنقل إلى شاشة السحابة المستقلة
-    // (launchSingleTop يمنع تكديس الشاشة نفسها لو تكرر الطلب وهي مفتوحة)
-    CloudNotificationPickerHost(cloudPickerRequest) {
-        navController.navigate(CloudFilesRoute) { launchSingleTop = true }
-    }
+    // جولة تعليمات.md: فتح شاشة السحابة محصور في زرّي الشريط العلوي (الرئيسية
+    // والملفات)؛ أُزيل توجيه إشعار الملفات الجديدة إليها توحيداً لنقاط الدخول.
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
@@ -99,10 +95,7 @@ fun AppNavHost(cloudPickerRequest: Int = 0) {
             }
 
             composable<BackupRoute> {
-                BackupScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenCloud = { navController.navigate(CloudFilesRoute) }
-                )
+                BackupScreen(onBack = { navController.popBackStack() })
             }
 
             composable<CloudFilesRoute> {

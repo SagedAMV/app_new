@@ -266,7 +266,7 @@ fun FilesScreen(
                         if (currentFolder != null) IconButton(onClick = {
                             currentFolder?.let { viewModel.previewFolderUpload(it.id, it.name) }
                         }, enabled = !cloudTransfer.active) {
-                            Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المجلد الحالي كاملاً")
+                            Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المجلد إلى السحابة")
                         }
                         GlowingCloudTopBarButton(
                             newFilesCount = availableRemoteFiles.size,
@@ -383,7 +383,7 @@ fun FilesScreen(
                         subtitle = if (favoritesOnly) {
                             "اضغط النجمة أعلاه لعرض كل الملفات"
                         } else {
-                            "أنشئ مجلداً لمادة دراسية أو استورد ملفاتك عبر زر الإضافة"
+                            "أنشئ مجلداً لمادة دراسية أو ارفع ملفاتك من زر الإضافة"
                         }
                     )
                 }
@@ -392,12 +392,12 @@ fun FilesScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
 
-        // الأزرار العائمة: زر الإضافة + الزر المضيء للملفات السحابية الجديدة + أيقونة الملفات المشتركة
+        // الأزرار العائمة: زر الإضافة + أيقونة الملفات الواردة عبر المشاركة فقط.
+        // جولة تعليمات.md: أزيل الزر السحابي السفلي — فتح السحابة محصور في زرّي
+        // الشريط العلوي (أعلى هذه الشاشة وأعلى الشاشة الرئيسية).
         if (!isSelecting) {
             FilesFloatingActions(
                 padding = padding,
-                cloudNewCount = availableRemoteFiles.size,
-                onOpenCloud = onOpenCloud,
                 inboxCount = inboxItems.size,
                 onOpenInbox = { showInboxSheet = true },
                 onOpenMenu = { showAddMenuSheet = true }
@@ -593,15 +593,13 @@ fun FilesScreen(
 
 /**
  * الأزرار العائمة أسفل شاشة الملفات:
- *  - زر «إضافة» الموسع (كما كان) يفتح قائمة الإضافة المنبثقة.
- *  - أيقونة صغيرة جنبه تظهر فقط عندما توجد ملفات مشتركة واردة من تطبيقات
- *    النظام (واتساب وغيره)، بشارة تعرض عددها — نقرة تفتح لوحة الصندوق.
+ *  - زر «إضافة» الموسع يفتح قائمة الإضافة المنبثقة.
+ *  - أيقونة صغيرة جنبه تظهر فقط عندما توجد ملفات واردة عبر مشاركة النظام
+ *    (واتساب وغيره)، بشارة تعرض عددها — نقرة تفتح لوحة الوارد.
  */
 @Composable
 private fun FilesFloatingActions(
     padding: androidx.compose.foundation.layout.PaddingValues,
-    cloudNewCount: Int,
-    onOpenCloud: () -> Unit,
     inboxCount: Int,
     onOpenInbox: () -> Unit,
     onOpenMenu: () -> Unit
@@ -615,17 +613,6 @@ private fun FilesFloatingActions(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Bottom
         ) {
-            AnimatedVisibility(
-                visible = cloudNewCount > 0,
-                enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
-                exit = fadeOut(tween(300))
-            ) {
-                GlowingCloudFloatingButton(
-                    newFilesCount = cloudNewCount,
-                    onClick = onOpenCloud
-                )
-            }
-
             AnimatedVisibility(
                 visible = inboxCount > 0,
                 enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
@@ -643,7 +630,7 @@ private fun FilesFloatingActions(
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.DriveFileMove,
-                            contentDescription = "الملفات المشتركة الواردة"
+                            contentDescription = "الملفات الواردة عبر المشاركة"
                         )
                     }
                 }
@@ -659,8 +646,8 @@ private fun FilesFloatingActions(
 }
 
 /**
- * شريط «ضعها هنا»: يظهر أعلى أي مجلد عندما تكون هناك ملفات مشتركة بانتظار
- * مكان — ضغطة واحدة تنسخها كلها إلى المجلد المفتوح.
+ * شريط «نقل إلى هذا المجلد»: يظهر أعلى أي مجلد عندما تكون هناك ملفات واردة
+ * عبر المشاركة — ضغطة واحدة تنسخها كلها إلى المجلد المفتوح.
  */
 @Composable
 private fun InboxPlacementBanner(
@@ -687,13 +674,13 @@ private fun InboxPlacementBanner(
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                text = Formatters.fileCountLabel(count) + " مشتركة بانتظار مكان",
+                text = Formatters.fileCountLabel(count) + " واردة عبر المشاركة",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.weight(1f)
             )
             FilledTonalButton(onClick = onPlace) {
-                Text("ضعها هنا")
+                Text("نقل إلى هذا المجلد")
             }
         }
     }
@@ -720,7 +707,7 @@ private fun FadeInIfHighlighted(highlight: Boolean, content: @Composable () -> U
 /**
  * لوحة صندوق المشاركة: قائمة الملفات الواردة من تطبيقات النظام مع إمكانية
  * إهمال أي ملف. العناصر تدخل بتلاشي متدرج — «انميشن دخولها بشكل تلاشي».
- * الوضع الفعلي في المجلدات يتم عبر شريط «ضعها هنا».
+ * الوضع الفعلي في المجلدات يتم عبر شريط «نقل إلى هذا المجلد».
  */
 @Composable
 private fun InboxSheet(
@@ -729,7 +716,7 @@ private fun InboxSheet(
     onRemove: (InboxItem) -> Unit
 ) {
     AppSheet(
-        title = "الملفات المشتركة الواردة",
+        title = "الملفات الواردة عبر المشاركة",
         onDismiss = onDismiss,
         actions = {
             TextButton(onClick = onDismiss) { Text("إغلاق") }
@@ -737,13 +724,13 @@ private fun InboxSheet(
         content = {
             if (items.isEmpty()) {
                 Text(
-                    "لا ملفات مشتركة حالياً — شارك ملفات من أي تطبيق وستظهر هنا.",
+                    "لا ملفات واردة حالياً — شارك ملفات من أي تطبيق وستظهر هنا.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 Text(
-                    "ادخل المجلد الذي تريده واضغط «ضعها هنا» لنسخها إليه — أو أهمل ما لا تريده.",
+                    "ادخل المجلد الذي تريده واضغط «نقل إلى هذا المجلد» — أو أهمل ما لا تريده.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1037,7 +1024,7 @@ private fun FolderContextMenu(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("فتح المجلد") }
                 TextButton(onClick = { onUpload(folder) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("رفع المجلد كاملاً مع الصور والملفات")
+                    Text("رفع المجلد إلى السحابة")
                 }
                 TextButton(
                     onClick = { onRename(folder) },
@@ -1202,7 +1189,7 @@ private fun AddFolderSheet(
     var color by remember { mutableStateOf(FolderPalette.first()) }
 
     AppSheet(
-        title = "مجلد جديد",
+        title = "إنشاء مجلد",
         onDismiss = onDismiss,
         actions = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
@@ -1212,7 +1199,7 @@ private fun AddFolderSheet(
             ) { Text("إنشاء") }
         }
     ) {
-        Field(label = "اسم المجلد (المادة)", value = name, onValueChange = { name = it })
+        Field(label = "اسم المجلد", value = name, onValueChange = { name = it })
         Field(
             label = "وصف (اختياري)",
             value = description,

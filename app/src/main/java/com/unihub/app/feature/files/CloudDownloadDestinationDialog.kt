@@ -66,7 +66,7 @@ fun CloudDownloadDestinationDialog(
     }, confirmButton = {
         Button(onClick = { onConfirm(CloudDownloadDestination(mode, selected?.id, selected?.createdAt,
             rootName.takeIf { mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL })) },
-            enabled = mode != CloudDownloadLocation.FOLDER_INSIDE_LOCAL || rootName.isNotBlank()) { Text("بدء التنزيل إلى هذه الوجهة") }
+            enabled = mode != CloudDownloadLocation.FOLDER_INSIDE_LOCAL || rootName.isNotBlank()) { Text("تنزيل") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } })
 }
 

@@ -18,6 +18,9 @@ import javax.inject.Singleton
  * مسؤول إظهار إشعار فوري للمستخدم عند اكتشاف ملفات جديدة على خادم Cloudflare R2
  * غير موجودة في تخزين الهاتف المحلي، مع عرض اسم الملف الجديد وحجمه (وأسماء وأحجام
  * بقية الملفات إن وجدت أكثر من ملف).
+ *
+ * جولة تعليمات.md: النقرة تفتح التطبيق فقط؛ أزيل التوجيه المباشر إلى شاشة السحابة
+ * لأن فتحها محصور في زرّي الشريط العلوي (الرئيسية والملفات) توحيداً لنقاط الدخول.
  */
 @Singleton
 class CloudFileNotificationHelper @Inject constructor(
@@ -32,7 +35,6 @@ class CloudFileNotificationHelper @Inject constructor(
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_OPEN_CLOUD_PICKER, true)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -50,24 +52,24 @@ class CloudFileNotificationHelper @Inject constructor(
 
         if (files.size == 1) {
             title = "ملف جديد متاح على الخادم"
-            shortText = "${first.fullDisplayName} (${firstSize}) — انقر لاختيار سحبه"
+            shortText = "${first.fullDisplayName} (${firstSize})"
             expandedLines = listOf(
                 "الاسم: ${first.fullDisplayName}",
                 "الحجم: $firstSize",
-                "انقر لفتح قائمة الاختيار وسحب الملف إلى هاتفك"
+                "متاح للتنزيل من شاشة السحابة"
             )
         } else {
             val totalBytes = files.sumOf { it.size }
             val totalFormatted = Formatters.fileSize(totalBytes)
             val othersCount = files.size - 1
             title = "توجد ${Formatters.fileCountLabel(files.size)} جديدة على الخادم ($totalFormatted)"
-            shortText = "${first.fullDisplayName} ($firstSize) و $othersCount أخرى — انقر للاختيار"
+            shortText = "${first.fullDisplayName} ($firstSize) و $othersCount أخرى"
             expandedLines = files.take(6).map { file ->
                 "• ${file.fullDisplayName} — ${Formatters.fileSize(file.size)}"
             } + if (files.size > 6) {
                 listOf("… و ${files.size - 6} ملفات أخرى (الإجمالي: $totalFormatted)")
             } else {
-                listOf("انقر لاختيار الملفات التي تريد سحبها وتخزينها محلياً")
+                listOf("متاحة للتنزيل من شاشة السحابة")
             }
         }
 
@@ -99,6 +101,5 @@ class CloudFileNotificationHelper @Inject constructor(
 
     companion object {
         const val NOTIFICATION_ID = 9042
-        const val EXTRA_OPEN_CLOUD_PICKER = "open_cloud_files_picker"
     }
 }

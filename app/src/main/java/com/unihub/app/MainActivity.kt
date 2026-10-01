@@ -4,18 +4,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.content.Intent
 import javax.inject.Inject
 import com.unihub.app.data.cloud.CloudSyncManager
-import com.unihub.app.notifications.CloudFileNotificationHelper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,20 +24,6 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var cloudSyncManager: CloudSyncManager
-    private var cloudPickerRequest by mutableIntStateOf(0)
-
-    private fun consumeCloudIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(CloudFileNotificationHelper.EXTRA_OPEN_CLOUD_PICKER, false) == true) {
-            cloudPickerRequest++
-            intent.removeExtra(CloudFileNotificationHelper.EXTRA_OPEN_CLOUD_PICKER)
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        consumeCloudIntent(intent)
-    }
 
     override fun onStart() {
         super.onStart()
@@ -53,7 +35,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* رفض الإذن لا يعطل التطبيق — التذكيرات فقط لن تظهر */ }
@@ -63,8 +44,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
-        consumeCloudIntent(intent)
-        setContent { UniHubApp(cloudPickerRequest = cloudPickerRequest) }
+        setContent { UniHubApp() }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -82,13 +62,16 @@ class MainActivity : ComponentActivity() {
 /**
  * جذر الواجهة: يطبق السمة المحفوظة ثم يستضيف مخطط التنقل.
  * النشاط نفسه لا يحمل أي حالة تطبيق — كل الحالة في وجهات التنقل.
+ *
+ * جولة تعليمات.md: أزيل توجيه إشعار الملفات الجديدة إلى شاشة السحابة؛ فتح السحابة
+ * محصور الآن في زرّي الشريط العلوي (الرئيسية والملفات)، والإشعار يفتح التطبيق فقط.
  */
 @Composable
-fun UniHubApp(cloudPickerRequest: Int = 0, themeViewModel: ThemeViewModel = hiltViewModel()) {
+fun UniHubApp(themeViewModel: ThemeViewModel = hiltViewModel()) {
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle()
     val useDynamicColor by themeViewModel.useDynamicColor.collectAsStateWithLifecycle()
 
     UniHubTheme(mode = themeMode, useDynamicColor = useDynamicColor) {
-        AppNavHost(cloudPickerRequest)
+        AppNavHost()
     }
 }

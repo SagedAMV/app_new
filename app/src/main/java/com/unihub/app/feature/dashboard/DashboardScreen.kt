@@ -286,7 +286,7 @@ fun DashboardScreen(
                 FilledTonalButton(
                     onClick = { onOpenFiles(null) },
                     modifier = Modifier.weight(1f)
-                ) { Text("استيراد ملف") }
+                ) { Text("الملفات") }
             }
         }
     }

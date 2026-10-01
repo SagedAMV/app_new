@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,16 +23,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
@@ -44,6 +48,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -52,7 +57,8 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -83,11 +89,17 @@ import com.unihub.app.data.cloud.CloudTransferState
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.local.entity.FileKind
+import com.unihub.app.ui.components.AppSheet
+import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.UiMessagesHost
 
 /**
  * زر السحابة في الشريط العلوي:
  * عندما توجد ملفات جديدة على خادم Cloudflare R2 غير موجودة في الهاتف ([newFilesCount] > 0)،
  * يضيء الزر وينبض بلون مميز مع شارة تعرض عدد الملفات الجديدة.
+ *
+ * جولة تعليمات.md: هذا الزر — مع مثيله في أعلى شاشة الملفات — نقطة الدخول الوحيدة
+ * إلى شاشة السحابة (أزيلت الأزرار السفلية وزر النسخ الاحتياطي وتوجيه الإشعار).
  */
 @Composable
 fun GlowingCloudTopBarButton(
@@ -99,7 +111,7 @@ fun GlowingCloudTopBarButton(
         FilledTonalIconButton(onClick = onClick, colors = IconButtonDefaults.filledTonalIconButtonColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
-            Icon(Icons.Filled.CloudQueue, contentDescription = "فحص قائمة السحابة")
+            Icon(Icons.Filled.CloudQueue, contentDescription = "السحابة")
         }
         return
     }
@@ -147,144 +159,22 @@ fun GlowingCloudTopBarButton(
         ) {
             Icon(
                 imageVector = Icons.Filled.CloudDownload,
-                contentDescription = "ملفات سحابية جديدة متاحة للسحب"
+                contentDescription = "ملفات سحابية جديدة"
             )
         }
     }
 }
 
 /**
- * زر عائم مضيء يظهر في شاشة الملفات عندما تتوفر ملفات سحابية جديدة على الخادم.
- */
-@Composable
-fun GlowingCloudFloatingButton(
-    newFilesCount: Int,
-    onClick: () -> Unit
-) {
-    if (newFilesCount <= 0) return
-    val transition = rememberInfiniteTransition(label = "fab_cloud_glow")
-    val glowColor by transition.animateColor(
-        initialValue = MaterialTheme.colorScheme.primary,
-        targetValue = MaterialTheme.colorScheme.tertiary,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "fab_glow_color"
-    )
-
-    BadgedBox(
-        badge = {
-            Badge(
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = MaterialTheme.colorScheme.onError
-            ) {
-                Text(newFilesCount.toString())
-            }
-        }
-    ) {
-        SmallFloatingActionButton(
-            onClick = onClick,
-            containerColor = glowColor,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Icon(
-                imageVector = Icons.Filled.CloudDownload,
-                contentDescription = "ملفات جديدة في الخادم"
-            )
-        }
-    }
-}
-
-/**
- * شريط إشعار داخلي مضيء يعرض اسم الملف الجديد وحجمه (أو عدد الملفات الجديدة وأحجامها)
- * وينقل إلى شاشة السحابة المستقلة (CloudFilesRoute) فور النقر عليه.
- */
-@Composable
-fun CloudNewFilesBanner(
-    remoteFiles: List<RemoteCloudFile>,
-    onClick: () -> Unit
-) {
-    if (remoteFiles.isEmpty()) return
-
-    val transition = rememberInfiniteTransition(label = "banner_glow")
-    val borderColor by transition.animateColor(
-        initialValue = MaterialTheme.colorScheme.primary,
-        targetValue = MaterialTheme.colorScheme.tertiary,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "banner_border"
-    )
-
-    val first = remoteFiles.first()
-    val firstSize = Formatters.fileSize(first.size)
-    val totalSize = Formatters.fileSize(remoteFiles.sumOf { it.size })
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
-        ),
-        border = BorderStroke(1.5.dp, borderColor),
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Filled.CloudDownload,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = if (remoteFiles.size == 1) {
-                        "ملف جديد على الخادم: ${first.fullDisplayName} ($firstSize)"
-                    } else {
-                        "توجد ${Formatters.fileCountLabel(remoteFiles.size)} جديدة على الخادم ($totalSize)"
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = if (remoteFiles.size == 1) {
-                        "انقر هنا لعرض التفاصيل واختيار سحبه إلى هاتفك"
-                    } else {
-                        "منها: ${first.fullDisplayName} ($firstSize) — انقر لاختيار ما تريد سحبه"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                )
-            }
-        }
-    }
-}
-
-/**
- * شاشة السحابة المستقلة — بديل اللوحة المنبثقة السابقة `CloudFilesPickerSheet`
- * التي كانت تظهر من أسفل الشاشة. صارت وجهة تنقل كاملة (راوت CloudFilesRoute في مخطط التنقل) بشريط
+ * شاشة السحابة المستقلة — وجهة تنقل كاملة (راوت CloudFilesRoute في مخطط التنقل) بشريط
  * علوي وزر رجوع، وتقرأ حالتها مباشرةً من [CloudFilesViewModel] بمصدر حقيقة واحد
  * (نفس مدير المزامنة @Singleton) بدل تمرير نحو عشرين معاملاً من كل شاشة.
  *
- * الوظائف محفوظة كما كانت: تصفح المجلدات، الفلترة (غير الموجود في هاتفي/عرض
- * الجميع)، التحديد الجماعي، تنزيل المجلد كاملًا، الفحص وإعادة المحاولة، إيقاف
- * النقل، وتقرير آخر تنزيل — مع حوار اختيار الوجهة عند التنزيل.
- *
- * تنبيه من جولة التحويل: أُسقطت أربعة معاملات كانت مُعرَّفة في الورقة السابقة
- * ولم تُستخدم في جسمها إطلاقاً (downloadingKeys, isSyncing, downloadProgress,
- * lastScanError) — فلا تُنقل إلى الشاشة الجديدة.
+ * الوظائف (جولة تعليمات.md — تسميات شائعة + تحكم كامل داخل السحابة نفسها):
+ * تصفح المجلدات، الفلترة (غير المنزَّل/الجميع)، التحديد الجماعي، تنزيل المحدد أو
+ * المجلد كاملاً، الفحص وإعادة المحاولة، إيقاف النقل، وتقرير آخر تنزيل — مع حوار
+ * اختيار الوجهة عند التنزيل. وأضيفت إعادة تسمية الملفات والمجلدات وتغيير مسار
+ * الملفات (نقلها بين مجلدات السحابة) بتحرير بيان الفهرس على الخادم.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -292,6 +182,9 @@ fun CloudFilesScreen(
     onBack: () -> Unit,
     viewModel: CloudFilesViewModel = hiltViewModel()
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    UiMessagesHost(viewModel.messenger, snackbarHostState)
+
     val remoteFiles by viewModel.files.collectAsStateWithLifecycle()
     val remoteFolders by viewModel.folders.collectAsStateWithLifecycle()
     val localFolders by viewModel.localFolders.collectAsStateWithLifecycle()
@@ -314,6 +207,12 @@ fun CloudFilesScreen(
     var missingOnly by rememberSaveable { mutableStateOf(true) }
     var requestFiles by remember { mutableStateOf<List<RemoteCloudFile>?>(null) }
     var requestFolder by remember { mutableStateOf<RemoteCloudFolder?>(null) }
+    // التحكم داخل السحابة: قوائم الإجراءات وإعادة التسمية وتغيير المسار
+    var fileMenu by remember { mutableStateOf<RemoteCloudFile?>(null) }
+    var folderMenu by remember { mutableStateOf<RemoteCloudFolder?>(null) }
+    var renameFileTarget by remember { mutableStateOf<RemoteCloudFile?>(null) }
+    var renameFolderTarget by remember { mutableStateOf<RemoteCloudFolder?>(null) }
+    var moveTargets by remember { mutableStateOf<List<RemoteCloudFile>?>(null) }
     val folders = remember(remoteFolders) { CloudFolderTree.normalise(remoteFolders) }
     val current = folders.firstOrNull { it.key == currentKey }
     val foldersWithMissing = remember(folders, remoteFiles, downloadableKeys, verifyingKeys) {
@@ -337,7 +236,54 @@ fun CloudFilesScreen(
                 requestFiles = null; requestFolder = null
             }, onDismiss = { requestFiles = null; requestFolder = null })
     }
+
+    // أوراق التحكم داخل السحابة (إعادة تسمية / تغيير مسار) — تفتح من قوائم الصفوف
+    fileMenu?.let { file ->
+        CloudFileMenuSheet(
+            file = file,
+            canDownload = isOnline && canChoose && file.remoteKey in downloadableKeys,
+            onRename = { renameFileTarget = file; fileMenu = null },
+            onMove = { moveTargets = listOf(file); fileMenu = null },
+            onDownload = { requestFiles = listOf(file); fileMenu = null },
+            onDismiss = { fileMenu = null }
+        )
+    }
+    folderMenu?.let { folder ->
+        CloudFolderMenuSheet(
+            folder = folder,
+            onRename = { renameFolderTarget = folder; folderMenu = null },
+            onDismiss = { folderMenu = null }
+        )
+    }
+    renameFileTarget?.let { file ->
+        CloudRenameSheet(
+            title = "إعادة تسمية الملف",
+            initialName = file.fullDisplayName,
+            fieldLabel = "الاسم الجديد (مع الامتداد)",
+            onSave = { newName -> viewModel.renameFile(file.remoteKey, newName); renameFileTarget = null },
+            onDismiss = { renameFileTarget = null }
+        )
+    }
+    renameFolderTarget?.let { folder ->
+        CloudRenameSheet(
+            title = "إعادة تسمية المجلد",
+            initialName = folder.name,
+            fieldLabel = "الاسم الجديد",
+            onSave = { newName -> viewModel.renameFolder(folder.key, newName); renameFolderTarget = null },
+            onDismiss = { renameFolderTarget = null }
+        )
+    }
+    moveTargets?.let { targets ->
+        CloudMoveSheet(
+            folders = folders,
+            currentKey = targets.firstOrNull()?.cloudFolderKey,
+            onConfirm = { destinationKey -> viewModel.moveFiles(targets, destinationKey); moveTargets = null },
+            onDismiss = { moveTargets = null }
+        )
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("السحابة — الملفات والمجلدات") },
@@ -364,8 +310,8 @@ fun CloudFilesScreen(
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             localVerification.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("غير الموجود في هاتفي") })
-                FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("عرض الجميع") })
+                FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("غير المنزَّل") })
+                FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("الجميع") })
             }
             CloudTransferProgressCard(transferState, onCancelDownloads)
             downloadReport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) }
@@ -382,7 +328,7 @@ fun CloudFilesScreen(
                 }
                 if (key != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && key in foldersWithMissing &&
                     CloudFolderTree.filesWithin(remoteFiles, folders, key).none { it.remoteKey in verifyingKeys }) {
-                    Text("تنزيل المجلد كاملًا")
+                    Text("تنزيل المجلد")
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -391,8 +337,9 @@ fun CloudFilesScreen(
                     val target = currentKey
                     val within = if (target == null) remoteFiles else CloudFolderTree.filesWithin(remoteFiles, folders, target)
                     selectedKeys = selectedKeys + within.filter { it.remoteKey in downloadableKeys }.map { it.remoteKey }
-                }, enabled = canChoose) { Text("تحديد الكل هنا") }
+                }, enabled = canChoose) { Text("تحديد الكل") }
                 TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose && selectedKeys.isNotEmpty()) { Text("إلغاء التحديد") }
+                TextButton(onClick = { moveTargets = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) { Text("نقل المحدد") }
                 Spacer(Modifier.weight(1f))
                 Text("${selected.size} • ${Formatters.fileSize(selected.sumOf { it.size })}", style = MaterialTheme.typography.labelMedium)
             }
@@ -403,7 +350,7 @@ fun CloudFilesScreen(
                             contentDescription = null, modifier = Modifier.size(34.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(when {
-                            missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "لا توجد ملفات ناقصة؛ المحتويات موجودة في هاتفك"
+                            missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "لا توجد ملفات للتنزيل — كل المحتوى على جهازك"
                             currentKey != null -> "لا توجد ملفات ضمن هذا العرض"
                             scanState.phase == CloudScanPhase.SCANNING -> "جارٍ التحقق من محتويات الخادم…"
                             scanState.phase == CloudScanPhase.EMPTY -> "لا توجد ملفات أو مجلدات في السحابة"
@@ -432,13 +379,16 @@ fun CloudFilesScreen(
                             Icon(Icons.Filled.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column(Modifier.weight(1f).clickable { currentKey = folder.key }.padding(horizontal = 10.dp, vertical = 6.dp)) {
                                 Text(folder.name, fontWeight = FontWeight.SemiBold)
-                                Text("${all.size} ملف • ${Formatters.fileSize(all.sumOf { it.size })} • ${pending.size} غير منزّل" + if (verifying > 0) " • $verifying قيد المقارنة" else "",
+                                Text("${all.size} ملف • ${Formatters.fileSize(all.sumOf { it.size })} • ${pending.size} غير منزَّل" + if (verifying > 0) " • $verifying قيد المقارنة" else "",
                                     style = MaterialTheme.typography.bodySmall)
-                                Text("انقر لعرض المحتويات والاختيار داخل المجلد", style = MaterialTheme.typography.labelSmall)
+                                Text("افتح المجلد للاختيار والتنزيل", style = MaterialTheme.typography.labelSmall)
+                            }
+                            IconButton(onClick = { folderMenu = folder }) {
+                                Icon(Icons.Filled.Edit, contentDescription = "إجراءات ${folder.name}")
                             }
                             IconButton(onClick = { requestFolder = folder }, enabled = isOnline && canChoose && verifying == 0 &&
                                 (pending.isNotEmpty() || (all.isEmpty() && !missingOnly))) {
-                                Icon(Icons.Filled.CloudDownload, contentDescription = "تنزيل ${folder.name} كاملًا")
+                                Icon(Icons.Filled.CloudDownload, contentDescription = "تنزيل ${folder.name}")
                             }
                         }
                     }
@@ -456,8 +406,11 @@ fun CloudFilesScreen(
                             Icon(file.kind.icon(), contentDescription = null, modifier = Modifier.size(24.dp))
                             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                                 Text(file.fullDisplayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text("${Formatters.fileSize(file.size)} • " + if (file.remoteKey in verifyingKeys) "جارٍ التحقق من النسخة المحلية" else if (pending) "متاح للتنزيل" else "موجود في هاتفك ✓",
+                                Text("${Formatters.fileSize(file.size)} • " + if (file.remoteKey in verifyingKeys) "جارٍ التحقق من النسخة المحلية" else if (pending) "متاح للتنزيل" else "منزَّل ✓",
                                     style = MaterialTheme.typography.bodySmall)
+                            }
+                            IconButton(onClick = { fileMenu = file }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "إجراءات ${file.fullDisplayName}")
                             }
                         }
                     }
@@ -467,6 +420,227 @@ fun CloudFilesScreen(
                 Button(onClick = { requestFiles = selected }, enabled = selected.isNotEmpty() && isOnline && canChoose) {
                     Icon(Icons.Filled.CloudDownload, contentDescription = null)
                     Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
+                }
+            }
+        }
+    }
+}
+
+/** قائمة إجراءات ملف سحابي: إعادة تسمية، تغيير المسار (نقل)، تنزيل. */
+@Composable
+private fun CloudFileMenuSheet(
+    file: RemoteCloudFile,
+    canDownload: Boolean,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AppSheet(
+        title = file.fullDisplayName,
+        onDismiss = onDismiss,
+        actions = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية الملف", onClick = onRename)
+            CloudMenuActionRow(icon = Icons.AutoMirrored.Filled.DriveFileMove, text = "نقل إلى مجلد", onClick = onMove)
+            CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل", enabled = canDownload, onClick = onDownload)
+            if (!canDownload) Text(
+                "التنزيل متاح عندما يكون الملف غير موجود على جهازك والاتصال متوفراً",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * قائمة إجراءات مجلد سحابي: إعادة تسمية المجلد.
+ * المجلدات المبنية على مسار التخزين (path:) أو على مجلدات المكتبة المحلية (legacy:)
+ * لا تُعاد تسميتها من السحابة — الاسم هناك يتبع مصدره، والرسالة توضح السبب.
+ */
+@Composable
+private fun CloudFolderMenuSheet(
+    folder: RemoteCloudFolder,
+    onRename: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val canRename = folder.key.startsWith("folder:")
+    AppSheet(
+        title = folder.name,
+        onDismiss = onDismiss,
+        actions = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية المجلد", enabled = canRename, onClick = onRename)
+            if (!canRename) Text(
+                "هذا المجلد مبني على مسار التخزين أو على مجلد محلي؛ إعادة التسمية متاحة للمجلدات التي أنشأها التطبيق في السحابة",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+            )
+        }
+    }
+}
+
+/** صف إجراء واحد داخل قوائم السحابة */
+@Composable
+private fun CloudMenuActionRow(
+    icon: ImageVector,
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
+    }
+}
+
+/** ورقة إعادة تسمية موحدة لملف أو مجلد سحابي */
+@Composable
+private fun CloudRenameSheet(
+    title: String,
+    initialName: String,
+    fieldLabel: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    AppSheet(
+        title = title,
+        onDismiss = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            FilledTonalButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("حفظ") }
+        }
+    ) {
+        Field(label = fieldLabel, value = name, onValueChange = { name = it })
+    }
+}
+
+/**
+ * منتقي وجهة «نقل إلى مجلد» داخل السحابة: يبحر في شجرة المجلدات السحابية
+ * (نقر للدخول، زر صعود للأعلى)، وزر «نقل إلى هنا» يثبّت المستوى الحالي وجهةً
+ * (المستوى الرئيسي = بلا مجلد). مجلدات legacy: مرتبطة بالمكتبة المحلية فلا تُختار
+ * وجهة، ويُعطَّل التأكيد أيضاً عند البقاء في مجلد الملفات الحالي نفسه.
+ */
+@Composable
+private fun CloudMoveSheet(
+    folders: List<RemoteCloudFolder>,
+    currentKey: String?,
+    onConfirm: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var browseKey by remember { mutableStateOf(currentKey) }
+    val browseFolder = remember(folders, browseKey) { folders.firstOrNull { it.key == browseKey } }
+    val children = remember(folders, browseKey) {
+        folders.filter { it.parentKey == browseKey }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+    val onLegacyLevel = browseKey?.startsWith("legacy:") == true
+    val sameAsCurrent = browseKey == currentKey
+    AppSheet(
+        title = "نقل إلى مجلد",
+        onDismiss = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            FilledTonalButton(
+                onClick = { onConfirm(browseKey) },
+                enabled = !sameAsCurrent && !onLegacyLevel
+            ) { Text("نقل إلى هنا") }
+        }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { browseKey = browseFolder?.parentKey }, enabled = browseKey != null) {
+                Icon(
+                    imageVector = Icons.Filled.ArrowUpward,
+                    contentDescription = "المستوى الأعلى",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = browseFolder?.name ?: "المستوى الرئيسي",
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (browseKey == null) "الوجهة الحالية: أعلى مستوى في السحابة (بلا مجلد)"
+                    else "ادخل مجلداً فرعياً أو ثبّت هذا المستوى وجهةً",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        when {
+            onLegacyLevel -> Text(
+                "مجلد مرتبط بالمكتبة المحلية؛ لا يُستخدم وجهةً للنقل داخل السحابة",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            sameAsCurrent -> Text(
+                "الملفات موجودة في هذا المجلد بالفعل",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (children.isEmpty()) {
+            Text(
+                "لا مجلدات فرعية هنا",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 300.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(children, key = { it.key }) { folder ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { browseKey = folder.key }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (folder.key.startsWith("legacy:")) Text(
+                                "مرتبط بمجلد محلي — للملاحة فقط",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -484,7 +658,7 @@ fun CloudTransferProgressCard(state: CloudTransferState, onCancel: () -> Unit) {
             else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             if (state.bytesTotal > 0) Text("${Formatters.fileSize(state.bytesDone)} / ${Formatters.fileSize(state.bytesTotal)}",
                 style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = onCancel) { Text("إيقاف النقل — الملفات المكتملة تبقى محفوظة") }
+            TextButton(onClick = onCancel) { Text("إيقاف النقل") }
         }
     }
 }

@@ -30,9 +30,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
- * قائمة الإضافة المنبثقة (Bottom Sheet) — تحل محل القائمة المنسدلة القديمة فوق الزر العائم.
- * أربعة خيارات: رفع ملف من الجهاز، مجلد جديد، التقاط صورة بالكاميرا، تسجيل صوتي.
- * الخياران الأولان يحافظان على السلوك السابق كما هو تماماً.
+ * قائمة الإضافة المنبثقة (Bottom Sheet) — تُفتح من زر «إضافة» في شاشة الملفات فقط.
+ * خمسة خيارات بتسميات شائعة موحدة (جولة تعليمات.md): رفع ملف، رفع مجلد،
+ * إنشاء مجلد، التقاط صورة، تسجيل صوتي. الاسم يكفي لمعرفة الفعل.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,12 +56,12 @@ fun AddMenuSheet(
                 .padding(bottom = 28.dp)
         ) {
             Text(
-                text = "أضف إلى هذا المجلد",
+                text = "إضافة",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp)
             )
             Text(
-                text = "اختر طريقة الإضافة المناسبة",
+                text = "اختر ما تريد إضافته إلى هذا المجلد",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
@@ -70,22 +70,22 @@ fun AddMenuSheet(
             AddMenuItem(
                 icon = Icons.Filled.UploadFile,
                 tint = MaterialTheme.colorScheme.primary,
-                title = "استيراد ملفات من الجهاز",
-                subtitle = "من تخزين الجهاز عبر منتقي النظام",
+                title = "رفع ملف",
+                subtitle = "اختيار ملفات من تخزين الجهاز",
                 onClick = onImportFiles
             )
             AddMenuItem(
                 icon = Icons.Filled.FolderOpen,
                 tint = MaterialTheme.colorScheme.primary,
-                title = "استيراد مجلد من الجهاز",
-                subtitle = "نسخ المجلد ومحتوياته؛ يمكنك رفعه للسحابة بعد ذلك",
+                title = "رفع مجلد",
+                subtitle = "نسخ مجلد بمحتوياته من الجهاز",
                 onClick = onImportFolder
             )
             AddMenuItem(
                 icon = Icons.Filled.CreateNewFolder,
                 tint = MaterialTheme.colorScheme.tertiary,
-                title = "مجلد جديد",
-                subtitle = "إنشاء مجلد فرعي داخل هذا المجلد",
+                title = "إنشاء مجلد",
+                subtitle = "مجلد فرعي جديد داخل هذا المجلد",
                 onClick = onNewFolder
             )
             AddMenuItem(

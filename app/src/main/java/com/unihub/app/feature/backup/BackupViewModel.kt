@@ -30,7 +30,8 @@ class BackupViewModel @Inject constructor(
     // السحابة هنا: ما تحتاجه هذه الشاشة (حالة الاتصال/المزامنة وإعدادات الخادم
     // وعدد الملفات الجديدة للزر والبانر) — التصفح والتنزيل انتقلا إلى الشاشة
     // المستقلة CloudFilesScreen.
-    val availableRemoteFiles = cloudSyncManager.availableRemoteFiles
+    // جولة تعليمات.md: أُزيلت خاصية availableRemoteFiles من هنا بعد توحيد نقاط فتح
+    // السحابة؛ مستهلكوها السابقون (الشارة والبانر وزر الاختيار) أزيلوا من الشاشة.
     val cloudSettings = cloudSyncPreferences.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private fun runBusy(action: suspend () -> Unit) {

@@ -356,6 +356,131 @@ class CloudSyncManager @Inject constructor(
         report
     }
 
+    // ─── التحكم داخل السحابة (جولة تعليمات.md): إعادة تسمية ملفات، تغيير مساراتها،
+    // وإعادة تسمية مجلدات — كلها تحرير لبيان الفهرس (Manifest) دون لمس المحتوى:
+    // مفاتيح الكائنات محتوى‑العنوان (hash) والأسماء والمجلدات وصفات في البيان. ───
+
+    /**
+     * قفل تحرير عام للبيان: يتسلسل مع عمليات النقل عبر [mutex] نفسه، بمهلة خاصة أطول
+     * من مهلة الفحص لأن العملية فحص + نشر. لا يرفع حالة نقل (لا بطاقة تقدم للمستخدم).
+     */
+    private suspend fun <T> editRemoteMetadata(block: suspend () -> T): Result<T> = withContext(Dispatchers.IO) {
+        if (!mutex.tryLock()) return@withContext Result.failure(CloudBusyException())
+        _isSyncing.value = true
+        try {
+            withTimeout(METADATA_EDIT_TIMEOUT_MS) { cloudAttempt(block) }
+        } catch (_: TimeoutCancellationException) { Result.failure(CloudScanTimeoutException()) }
+        finally { _isSyncing.value = false; mutex.unlock() }
+    }
+
+    /**
+     * نشر تعديل على بيان الفهرس فوق آخر نسخة خادم (If-Match يصدّ التعديل المتزامن).
+     * يبدأ من بيان الخادم نفسه — لا يمزج النصوص المحلية حتى لا يتحول تحرير سحابي
+     * إلى رفع نصي غير مقصود — ثم يعيد اكتشاف الملفات والمجلدات وينعش الواجهات.
+     */
+    private suspend fun publishManifestEdit(settings: CloudSyncSettings, scan: Scan, mutate: (JSONObject) -> Unit) {
+        if (scan.metadataConflicts.isNotEmpty()) {
+            throw IOException("يوجد تعارض في البيانات النصية مع الخادم؛ نفّذ «فحص ومزامنة» أولاً ثم أعد المحاولة")
+        }
+        val root = scan.remoteManifest?.let { JSONObject(it.toString()) } ?: JSONObject().apply {
+            put("app", "unihub")
+            put("schemaVersion", BackupRepository.SCHEMA_VERSION)
+            put("storageMode", "selective-v2")
+        }
+        mutate(root)
+        root.put("exportedAt", System.currentTimeMillis())
+        val text = root.toString()
+        val uploaded = r2Client.uploadText(
+            settings.credentials, CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY, text,
+            ifMatch = scan.manifestEtag.takeIf { it.isNotBlank() },
+            ifNoneMatch = scan.remoteManifest == null
+        ).getOrThrow()
+        val discovered = discoverFiles(scan.objects, root)
+        val folders = CloudFolderTree.foldersFromManifest(root, discovered, scan.objects)
+        catalog.update(activeConnection) {
+            it.copy(files = discovered, folders = folders, metadataBaseline = text, metadataEtag = uploaded.etag)
+        }
+        refreshAvailable(catalog.snapshot(activeConnection))
+    }
+
+    /**
+     * إعادة تسمية ملف داخل السحابة: يعدّل الاسم والامتداد (وبالتالي النوع وصيغة MIME)
+     * في البيان فقط؛ مفتاح المحتوى وبصمته ثابتان فلا تتأثر النسخ المحلية المرتبطة.
+     * الملفات غير المسجلة في البيان تُتبنّى تلقائياً بإدخال وصفها لأول مرة.
+     */
+    suspend fun renameRemoteFile(remoteKey: String, newNameWithExtension: String): Result<Unit> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        val current = scan.state.files.firstOrNull { it.remoteKey == remoteKey }
+            ?: throw IOException("الملف لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
+        val cleaned = newNameWithExtension.trim().trim('.')
+        if (cleaned.isBlank() || cleaned.contains('/')) throw IOException("اسم غير صالح: لا يمكن أن يكون فارغاً أو يحوي /")
+        val dot = cleaned.lastIndexOf('.')
+        val name = if (dot > 0) cleaned.substring(0, dot) else cleaned
+        val extension = (if (dot > 0) cleaned.substring(dot + 1) else current.extension)
+            .lowercase(Locale.US).filter { it.isLetterOrDigit() }
+            .ifBlank { current.extension.ifBlank { "bin" } }
+        val updated = current.copy(
+            name = name, extension = extension,
+            kind = FileKind.fromExtension(extension), mimeType = mimeType(extension)
+        )
+        publishManifestEdit(settings, scan) { root ->
+            root.put("files", CloudManifestTools.mergeFiles(root.optJSONArray("files"), listOf(updated)))
+        }
+    }
+
+    /**
+     * تغيير مسار ملفات في السحابة: نقلها إلى مجلد سحابي آخر بتعديل cloudFolderKey
+     * في البيان. الوجهة المسموحة: مجلد بيان (folder:) أو مجلد مسار (path:) أو
+     * المستوى الرئيسي (null). مفاتيح legacy: مرتبطة بالمكتبة المحلية ولا تُستخدم وجهة.
+     */
+    suspend fun moveRemoteFiles(remoteKeys: List<String>, destinationFolderKey: String?): Result<Int> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        if (destinationFolderKey != null) {
+            if (!destinationFolderKey.startsWith("folder:") && !destinationFolderKey.startsWith("path:")) {
+                throw IOException("لا يمكن النقل إلى هذا المجلد؛ اختر مجلداً من شجرة السحابة")
+            }
+            if (scan.state.folders.none { it.key == destinationFolderKey }) {
+                throw IOException("مجلد الوجهة لم يعد متاحاً؛ اضغط فحص ثم أعد المحاولة")
+            }
+        }
+        val moving = remoteKeys.distinct()
+            .mapNotNull { key -> scan.state.files.firstOrNull { it.remoteKey == key } }
+            .filter { it.cloudFolderKey != destinationFolderKey }
+        if (moving.isEmpty()) return@editRemoteMetadata 0
+        val destinationName = destinationFolderKey?.let { key -> scan.state.folders.firstOrNull { it.key == key }?.name }
+        val updated = moving.map { it.copy(cloudFolderKey = destinationFolderKey, folderId = null, folderName = destinationName) }
+        publishManifestEdit(settings, scan) { root ->
+            root.put("files", CloudManifestTools.mergeFiles(root.optJSONArray("files"), updated))
+        }
+        moving.size
+    }
+
+    /**
+     * إعادة تسمية مجلد سحابي أنشأه التطبيق (مفتاح folder:) — الاسم وصف في البيان
+     * والمفتاح هوية ثابتة، فلا تتأثر روابط المجلدات المنزّلة محلياً.
+     * مجلدات path: تعكس بنية التخزين الفعلية للكائنات، وlegacy: أسماء مجلدات محلية؛
+     * كلاهما لا يُعاد تسميته من السحابة ورسالة الخطأ توضح السبب.
+     */
+    suspend fun renameRemoteFolder(folderKey: String, newName: String): Result<Unit> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        if (!folderKey.startsWith("folder:")) {
+            throw IOException("هذا المجلد مبني على مسار التخزين أو على مجلد محلي؛ لا يمكن إعادة تسميته من السحابة")
+        }
+        val cleaned = newName.trim()
+        if (cleaned.isBlank() || cleaned.contains('/')) throw IOException("اسم غير صالح: لا يمكن أن يكون فارغاً أو يحوي /")
+        val current = scan.state.folders.firstOrNull { it.key == folderKey }
+            ?: throw IOException("المجلد لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
+        publishManifestEdit(settings, scan) { root ->
+            root.put("cloudFolders", CloudFolderTree.mergeFolders(root.optJSONArray("cloudFolders"), listOf(current.copy(name = cleaned))))
+        }
+    }
+
     private data class Scan(
         val objects: List<R2ObjectSummary>,
         val remoteManifest: JSONObject?,
@@ -741,6 +866,7 @@ class CloudSyncManager @Inject constructor(
         private const val LIVE_PULSE_INTERVAL_MS = 20_000L
         private const val EMPTY_PULSE_INTERVAL_MS = 120_000L
         private const val SCAN_TIMEOUT_MS = 30_000L
+        private const val METADATA_EDIT_TIMEOUT_MS = 60_000L
         private const val RESERVE_BYTES = 16L * 1024 * 1024
     }
 }

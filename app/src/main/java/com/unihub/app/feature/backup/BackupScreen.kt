@@ -18,7 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.FileDownload
@@ -53,8 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.unihub.app.feature.files.CloudNewFilesBanner
-import com.unihub.app.feature.files.GlowingCloudTopBarButton
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.SectionHeader
 import java.text.SimpleDateFormat
@@ -65,7 +62,6 @@ import java.util.Locale
 @Composable
 fun BackupScreen(
     onBack: () -> Unit,
-    onOpenCloud: () -> Unit,
     viewModel: BackupViewModel = hiltViewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -74,9 +70,9 @@ fun BackupScreen(
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val cloudSettings by viewModel.cloudSettings.collectAsStateWithLifecycle()
-    // السحابة هنا: ما تحتاجه هذه الشاشة فقط (شارة الزر والبانر وحالة الخادم) —
-    // أما التصفح والتنزيل فانتقلا إلى الشاشة المستقلة CloudFilesScreen
-    val availableRemoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
+    // جولة تعليمات.md: أزيلت نقاط فتح السحابة من هذه الشاشة (الزر العلوي والبانر
+    // وزر الاختيار) — التصفح والتنزيل والتحكم محصورة في شاشة السحابة المستقلة
+    // CloudFilesScreen، وتُفتح من زرّي الشريط العلوي في الرئيسية والملفات فقط.
 
     val isWorking = busy || isSyncing
 
@@ -115,12 +111,6 @@ fun BackupScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
-                },
-                actions = {
-                    GlowingCloudTopBarButton(
-                        newFilesCount = availableRemoteFiles.size,
-                        onClick = onOpenCloud
-                    )
                 }
             )
         }
@@ -133,13 +123,6 @@ fun BackupScreen(
                 .padding(horizontal = 18.dp)
                 .padding(bottom = 24.dp)
         ) {
-            if (availableRemoteFiles.isNotEmpty()) {
-                CloudNewFilesBanner(
-                    remoteFiles = availableRemoteFiles,
-                    onClick = onOpenCloud
-                )
-            }
-
             // ─── قسم خادم Cloudflare R2 (أونلاين / أوفلاين + سحب اختياري) ────
             SectionHeader(title = "خادم Cloudflare R2 (أونلاين / أوفلاين)")
             ElevatedCard(
@@ -202,21 +185,6 @@ fun BackupScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick = onOpenCloud,
-                            enabled = !isWorking
-                        ) {
-                            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                if (availableRemoteFiles.isNotEmpty()) {
-                                    "الملفات الجديدة (${availableRemoteFiles.size})"
-                                } else {
-                                    "اختيار ملفات للسحب"
-                                }
-                            )
-                        }
-
                         FilledTonalButton(
                             onClick = viewModel::pushToCloud,
                             enabled = !isWorking

@@ -1,9 +1,9 @@
 package com.unihub.app.feature.files
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.Formatters
+import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.RemoteCloudFile
@@ -16,13 +16,16 @@ import javax.inject.Inject
  * (Singleton واحد لكل التطبيق) ولا يحتفظ بأي حالة خاصة به — فالشاشة تقرأ منه
  * مباشرةً بمصدر حقيقة واحد، وأي شاشة أخرى تفتحها ترى الحالة ذاتها بلا مزامنة.
  *
- * ملاحظة جولة التحويل من اللوحة المنبثقة إلى الشاشة: أُزيلت أربع خصائص كانت
- * تُمرَّر إلى اللوحة السابقة ولم تكن مستعملة أصلاً (busy, downloading, progress,
- * error) التزاماً بقاعدة «لا كود ميت» — إن احتجت لاحقاً عرض تقدّم لكل ملف أو
- * نص خطأ مفصّل فمصادرها باقية في [CloudSyncManager] وتُعاد بسهولة.
+ * جولة تعليمات.md: أُضيفت عمليات التحكم داخل السحابة نفسها (إعادة تسمية ملف،
+ * تغيير مسار ملفات، إعادة تسمية مجلد) كدوال رفيعة فوق عمليات المدير، مع قناة
+ * رسائل [UiMessenger] لتأكيد النجاح أو شرح سبب الفشل مباشرة في الشاشة.
+ * وأُزيلت بوابة الإشعار التي كانت تفتح السحابة عند نقره لأن فتح السحابة صار
+ * محصوراً في زرّي الشريط العلوي (الرئيسية والملفات) بقرار توحيد نقاط الدخول.
  */
 @HiltViewModel
 class CloudFilesViewModel @Inject constructor(private val manager: CloudSyncManager) : ViewModel() {
+
+    val messenger = UiMessenger()
 
     val files = manager.allRemoteFiles
     val localFolders = manager.localFolders
@@ -48,19 +51,37 @@ class CloudFilesViewModel @Inject constructor(private val manager: CloudSyncMana
     }
 
     fun cancel() = manager.cancelDownloads()
-}
 
-/**
- * بوابة «افتح السحابة» القادمة من إشعار الملفات الجديدة (عدّاد الطلبات في
- * [com.unihub.app.MainActivity]).
- *
- * كانت تفتح اللوحة المنبثقة فوق أية وجهة مفتوحة؛ وبعد تحويل السحابة إلى وجهة
- * تنقل مستقلة صارت وظيفتها تحويل الطلب إلى تنقل عبر [onOpen] — لا تملك حالة
- * ولا مرسوماً بصرياً، والملاحة تُنفَّذ بمعرّفات آمنة الأنواع في مخطط التنقل.
- */
-@Composable
-fun CloudNotificationPickerHost(request: Int, onOpen: () -> Unit) {
-    LaunchedEffect(request) {
-        if (request > 0) onOpen()
+    /** إعادة تسمية ملف داخل السحابة (الاسم والامتداد في البيان؛ المحتوى والمفتاح ثابتان). */
+    fun renameFile(remoteKey: String, newName: String) {
+        viewModelScope.launch {
+            manager.renameRemoteFile(remoteKey, newName).fold(
+                onSuccess = { messenger.notify("أُعيدت تسمية الملف في السحابة") },
+                onFailure = { messenger.notifyError(it.message ?: "تعذّرت إعادة التسمية") }
+            )
+        }
+    }
+
+    /** تغيير مسار ملفات: نقلها إلى مجلد سحابي آخر (null = المستوى الرئيسي). */
+    fun moveFiles(files: List<RemoteCloudFile>, destinationFolderKey: String?) {
+        viewModelScope.launch {
+            manager.moveRemoteFiles(files.map { it.remoteKey }, destinationFolderKey).fold(
+                onSuccess = { moved ->
+                    if (moved == 0) messenger.notify("لا يلزم نقل؛ الملفات في الوجهة نفسها")
+                    else messenger.notify("تغيّر مسار ${Formatters.fileCountLabel(moved)} في السحابة")
+                },
+                onFailure = { messenger.notifyError(it.message ?: "تعذّر تغيير المسار") }
+            )
+        }
+    }
+
+    /** إعادة تسمية مجلد سحابي أنشأه التطبيق؛ مجلدات المسار المادي لا تُعاد تسميتها هنا. */
+    fun renameFolder(folderKey: String, newName: String) {
+        viewModelScope.launch {
+            manager.renameRemoteFolder(folderKey, newName).fold(
+                onSuccess = { messenger.notify("أُعيدت تسمية المجلد في السحابة") },
+                onFailure = { messenger.notifyError(it.message ?: "تعذّرت إعادة تسمية المجلد") }
+            )
+        }
     }
 }
