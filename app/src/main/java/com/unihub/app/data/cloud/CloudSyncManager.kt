@@ -519,9 +519,10 @@ class CloudSyncManager @Inject constructor(
                 val hash = if (previous != null && previous.localSize == length && previous.localModifiedAt == modified) previous.sha256
                     else r2Client.sha256Hex(disk) { ctx.ensureActive() }
                 val old = previous?.let { objects[it.remoteKey] }
-                val reusable = previous != null && previous.sha256 == hash &&
-                    (old == null || previous.remoteVersion.isBlank() || previous.remoteVersion == "${old.etag}:${old.size}")
-                val key = if (reusable) previous!!.remoteKey else CloudFileRules.contentObjectKey(hash, file.extension, UUID.randomUUID().toString())
+                // reusable يصبح الرابط نفسه حين تتحقق شروط إعادة الاستخدام — smart cast بدل force-unwrap (بوابة «صفر !!» في تعليمات.md)
+                val reusable = previous?.takeIf { it.sha256 == hash &&
+                    (old == null || it.remoteVersion.isBlank() || it.remoteVersion == "${old.etag}:${old.size}") }
+                val key = reusable?.remoteKey ?: CloudFileRules.contentObjectKey(hash, file.extension, UUID.randomUUID().toString())
                 var obj = objects[key]
                 if (obj == null || obj.size != length) {
                     val reserved = CloudFileLink(file.id, key, "", hash, length, modified, file.createdAt)

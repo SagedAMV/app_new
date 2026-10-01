@@ -113,9 +113,11 @@ fun GlowingCloudTopBarButton(
         ),
         label = "glow_color"
     )
+    // بعد العودة المبكرة أعلاه (!hasNew) تكون hasNew هنا حقيقةً دائمة؛ لذلك حُذفت
+    // الفروع الميتة التي كانت تفحصها مرة أخرى — جولة تدقيق تعليمات.md.
     val pulseScale by transition.animateFloat(
         initialValue = 1.0f,
-        targetValue = if (hasNew) 1.12f else 1.0f,
+        targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -126,44 +128,27 @@ fun GlowingCloudTopBarButton(
     BadgedBox(
         modifier = Modifier
             .padding(end = 4.dp)
-            .scale(if (hasNew) pulseScale else 1f),
+            .scale(pulseScale),
         badge = {
-            if (hasNew) {
-                Badge(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                ) {
-                    Text(newFilesCount.toString())
-                }
+            Badge(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
+            ) {
+                Text(newFilesCount.toString())
             }
         }
     ) {
-        if (hasNew) {
-            FilledTonalIconButton(
-                onClick = onClick,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = glowColor,
-                    contentColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudDownload,
-                    contentDescription = "ملفات سحابية جديدة متاحة للسحب"
-                )
-            }
-        } else {
-            FilledTonalIconButton(
-                onClick = onClick,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudQueue,
-                    contentDescription = "فحص ملفات السحابة"
-                )
-            }
+        FilledTonalIconButton(
+            onClick = onClick,
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = glowColor,
+                contentColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudDownload,
+                contentDescription = "ملفات سحابية جديدة متاحة للسحب"
+            )
         }
     }
 }
@@ -213,7 +198,7 @@ fun GlowingCloudFloatingButton(
 
 /**
  * شريط إشعار داخلي مضيء يعرض اسم الملف الجديد وحجمه (أو عدد الملفات الجديدة وأحجامها)
- * ويفتح نافذة الاختيار الانتقائي فور النقر عليه.
+ * وينقل إلى شاشة السحابة المستقلة (CloudFilesRoute) فور النقر عليه.
  */
 @Composable
 fun CloudNewFilesBanner(
@@ -384,23 +369,27 @@ fun CloudFilesScreen(
             }
             CloudTransferProgressCard(transferState, onCancelDownloads)
             downloadReport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall) }
+            // لقطة قراءة واحدة للمفتاح الحالي (smart cast بدل force-unwrap — بوابة «صفر !!» في تعليمات.md)
+            val key = currentKey
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (currentKey != null) IconButton(onClick = { currentKey = current?.parentKey }) {
+                if (key != null) IconButton(onClick = { currentKey = current?.parentKey }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "المجلد الأب")
                 }
                 Column(Modifier.weight(1f)) {
                     Text(current?.name ?: "الرئيسية", fontWeight = FontWeight.Bold)
-                    if (current != null) Text(CloudFolderTree.ancestors(folders, currentKey).joinToString(" / ") { it.name },
+                    if (current != null) Text(CloudFolderTree.ancestors(folders, key).joinToString(" / ") { it.name },
                         style = MaterialTheme.typography.bodySmall)
                 }
-                if (currentKey != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && currentKey in foldersWithMissing &&
-                    CloudFolderTree.filesWithin(remoteFiles, folders, currentKey!!).none { it.remoteKey in verifyingKeys }) {
+                if (key != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && key in foldersWithMissing &&
+                    CloudFolderTree.filesWithin(remoteFiles, folders, key).none { it.remoteKey in verifyingKeys }) {
                     Text("تنزيل المجلد كاملًا")
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
-                    val within = if (currentKey == null) remoteFiles else CloudFolderTree.filesWithin(remoteFiles, folders, currentKey!!)
+                    // قراءة المفتاح لحظة النقر نفسها — بلا !! وبلا افتراض ثباته منذ التركيب
+                    val target = currentKey
+                    val within = if (target == null) remoteFiles else CloudFolderTree.filesWithin(remoteFiles, folders, target)
                     selectedKeys = selectedKeys + within.filter { it.remoteKey in downloadableKeys }.map { it.remoteKey }
                 }, enabled = canChoose) { Text("تحديد الكل هنا") }
                 TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose && selectedKeys.isNotEmpty()) { Text("إلغاء التحديد") }
