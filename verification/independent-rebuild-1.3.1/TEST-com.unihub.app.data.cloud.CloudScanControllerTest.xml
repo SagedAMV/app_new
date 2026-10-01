@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudScanControllerTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-01T23:01:07" hostname="e2b.local" time="0.054">
+  <properties/>
+  <testcase name="silentEmptyPollingDoesNotRestartVisibleLoading" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.017"/>
+  <testcase name="emptyScanStopsLoadingAndStatesEmpty" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.002"/>
+  <testcase name="timeoutCannotLeaveAnInfiniteSpinner" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.006"/>
+  <testcase name="folderWithoutFilesIsNotAnEmptyCloud" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.004"/>
+  <testcase name="cancellingOwnerCannotLeaveScanningState" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.004"/>
+  <testcase name="networkErrorIsNotMisreportedAsNoData" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.003"/>
+  <testcase name="failedRequestCanBeRetriedSuccessfully" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.002"/>
+  <testcase name="duplicateRequestsDoNotCreateAQueue" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.01"/>
+  <testcase name="busyTransferStopsScanRatherThanWaitingIndefinitely" classname="com.unihub.app.data.cloud.CloudScanControllerTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudFolderTreeTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-10-01T23:01:07" hostname="e2b.local" time="0.022">
+  <properties/>
+  <testcase name="emptyS3FolderMarkersRemainVisible" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.005"/>
+  <testcase name="sameFolderNamesDoNotMergeDistinctIdentities" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.0"/>
+  <testcase name="remoteFileFolderKeySurvivesCachedJson" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <testcase name="folderMetadataRoundTripsAndKeepsHierarchy" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <testcase name="missingParentsRemainVisibleAtRoot" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.0"/>
+  <testcase name="ancestorsAreOrderedForLocalFolderCreation" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.0"/>
+  <testcase name="oldManifestFolderIdsMigrateWithoutLosingParents" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.002"/>
+  <testcase name="selectedFileDoesNotUploadFilesInItsAncestors" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.002"/>
+  <testcase name="wholeFolderPlanIncludesPhotosAndNestedFilesOnly" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.002"/>
+  <testcase name="folderSelectionIncludesAllNestedFilesButNotOtherFolders" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <testcase name="rawR2PathsProduceBrowsableNestedFolders" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <testcase name="folderCyclesAreBrokenBeforeBrowsing" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <testcase name="emptyFolderCanBeUploadedWithoutInventingAFile" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.0"/>
+  <testcase name="updateDoesNotDeleteUnselectedCloudFolder" classname="com.unihub.app.data.cloud.CloudFolderTreeTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
