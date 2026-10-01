@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -98,6 +99,8 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.unihub.app.feature.files.BackStep
+import com.unihub.app.feature.files.CloudBackPolicy
 import com.unihub.app.feature.files.FilesViewModel
 import com.unihub.app.ui.components.UiMessagesHost
 import kotlinx.coroutines.CoroutineScope
@@ -183,6 +186,19 @@ fun CameraCaptureScreen(
                 runCatching { shot.file.delete() }
                 runCatching { shot.thumbnail.recycle() }
             }
+        }
+    }
+
+    // جولة تعليمات.md (زر الرجوع الخاص بالنظام يسري على كامل التطبيق): الرجوع
+    // لا يُضيع اللقطات — من طور المراجعة يعود إلى الكاميرا (مثل زر «العودة
+    // للكاميرا» داخل الشاشة)، وفي طور الالتقاط واللقطات موجودة ينتقل للمراجعة
+    // (مثل زر الإغلاق داخل الشاشة: shots.isEmpty ← خروج، وإلا مراجعة)، ولا
+    // يغادر الشاشة مباشرة إلا والجلسة فارغة فعلاً.
+    BackHandler(enabled = phase == CapturePhase.REVIEW || shots.isNotEmpty()) {
+        when (CloudBackPolicy.step(hasSelection = false, isInsideFolder = phase == CapturePhase.REVIEW)) {
+            BackStep.CLEARED_SELECTION -> onBack() // لا تنطبق: لا تحديد في الكاميرا
+            BackStep.WENT_UP -> phase = CapturePhase.CAPTURE // المراجعة ← الكاميرا
+            BackStep.EXITED -> if (shots.isEmpty()) onBack() else phase = CapturePhase.REVIEW
         }
     }
 

@@ -151,10 +151,6 @@ fun FilesScreen(
     val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val isSelecting = selection.isNotEmpty()
-    // جولة تعليمات.md — حل مشكلة زر الرجوع (نظام التشغيل) في وضع التحديد: كان يُخرج
-    // من شاشة الملفات كاملة. الآن يخرج من وضع التحديد فقط، وعند عدم وجود تحديد يسري
-    // السلوك الافتراضي (رجوع للمجلد السابق — التنقل هنا مبني على مسارات التنقل).
-    BackHandler(enabled = isSelecting) { viewModel.clearSelection() }
     val selectedFiles = remember(files, selection) { files.filter { it.id in selection } }
 
     // صندوق المشاركة: ملفات واردة من تطبيقات النظام تنتظر اختيار مجلدها
@@ -184,6 +180,23 @@ fun FilesScreen(
     // جلب لقطة المجلدات الكاملة عند فتح منتقي النقل فقط (لا اشتراك دائم)
     LaunchedEffect(moveTarget != null) {
         if (moveTarget != null) pickerFolders = viewModel.allFoldersOnce()
+    }
+
+    // جولة تعليمات.md (دمج الجولتين — معالجة واحدة لا اثنتين): زر الرجوع الخاص
+    // بالنظام يفكّك طبقة واحدة في كل ضغطة عبر السلّم الموحّد CloudBackPolicy —
+    // التحديد الجماعي أولاً، ثم شريط البحث، ولا خروج من الشاشة وأحدهما نشط.
+    // عمق المجلدات هنا راوتات تنقل مستقلة (FilesRoute) فيتولاه الرجوع الافتراضي
+    // بعد تصفية الطبقتين.
+    BackHandler(enabled = isSelecting || searchActive) {
+        when (CloudBackPolicy.step(hasSelection = isSelecting, isInsideFolder = false)) {
+            BackStep.CLEARED_SELECTION -> viewModel.clearSelection()
+            BackStep.WENT_UP -> onBack() // لا تنطبق: لا عمق داخل الشاشة (راوتات تنقل)
+            BackStep.EXITED ->
+                if (searchActive) {
+                    searchActive = false
+                    viewModel.setSearchQuery("")
+                } else onBack()
+        }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
