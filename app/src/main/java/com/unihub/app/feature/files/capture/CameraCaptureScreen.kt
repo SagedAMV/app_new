@@ -74,6 +74,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -294,7 +296,7 @@ private fun CaptureContent(
     val scope = rememberCoroutineScope()
     val providerFuture = remember { ProcessCameraProvider.getInstance(context) }
 
-    var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var cameraFailed by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
@@ -303,7 +305,7 @@ private fun CaptureContent(
     var flashState by remember { mutableStateOf(FlashState.OFF) }
     var hasFlashUnit by remember { mutableStateOf(false) }
     // نسبة الزوم الحالية لعرضها في المؤشر — المصدر الحي هو zoomState داخل الكاميرا نفسها
-    var zoomRatio by remember { mutableStateOf(1f) }
+    var zoomRatio by remember { mutableFloatStateOf(1f) }
     // حارس الربط: لا يُعاد ربط الكاميرا إلا عند تغيّر العدسة فعلاً، وإلا لأُعيد الربط
     // عند كل إعادة تركيب (مثلاً عند إضافة مصغّرة جديدة) فوميضت المعاينة وتصفّر الزوم
     var boundLens by remember { mutableStateOf<Int?>(null) }
@@ -687,7 +689,7 @@ private fun ReviewCapturesContent(
     val density = LocalDensity.current.density
     val rowHeightPx = REVIEW_ROW_HEIGHT.value * density
     var draggedId by remember { mutableStateOf<Long?>(null) }
-    var dragOffsetPx by remember { mutableStateOf(0f) }
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
 
     Surface(
         modifier = modifier,

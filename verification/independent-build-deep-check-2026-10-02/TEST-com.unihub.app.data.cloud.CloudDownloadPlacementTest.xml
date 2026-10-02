@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudDownloadPlacementTest" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-10-02T11:20:51" hostname="e2b.local" time="0.038">
+  <properties/>
+  <testcase name="nestedDownloadDoesNotCreateCloudAncestorsAboveTheChosenFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.004"/>
+  <testcase name="sameFileInAnotherLocalFolderDoesNotPreventDownloadIntoTargetFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.006"/>
+  <testcase name="resolveLocalFolderPrefersOldestSameLevelFolderOverStaleOrMovedLink" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.002"/>
+  <testcase name="chosenLocalFolderDoesNotCreateCloudNames" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="defaultLocationIsTheRecommendedCloudTreeFromSingleSource" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="duplicateLocalFilesInSameFolderDeterministicallySelectOldestId" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="customFolderNameDoesNotRenameTheDestinationFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="rawCloudObjectWithoutManifestHashMatchesByFolderNameExtensionAndSize" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="downloadingRootOfSelectionCreatesOnlyThatRoot" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="existingLocalFileInTargetFolderIsSkippedWhileNewFileIsDownloaded" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="unrelatedFolderCannotEscapeTheSelectionAnchor" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="cloudTreeRemainsAnAvailableChoice" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.0"/>
+  <testcase name="existingLocalFolderIsMatchedOnlyAtTheSameParentIncludingRoot" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="shouldReuseChosenFolderAsRootPreventsNestedDuplicateFolderCreation" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="localFolderMatchNormalizesNameAndPreservesTheOldestFolder" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="defaultNameIsUsedOnlyForNewSubfolderNotUserParent" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="localRootIsAnExplicitDestinationNotACloudFolderFallback" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.008"/>
+  <testcase name="fileAndFolderMatchingAreCaseInsensitiveAndSanitizeUntrustedNames" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="modifiedLocalFileWithDifferentHashOrSizeIsNeverTreatedAsIdentical" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <testcase name="resolveLocalFolderSupportsLegacyIdAndBlankNameFallback" classname="com.unihub.app.data.cloud.CloudDownloadPlacementTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

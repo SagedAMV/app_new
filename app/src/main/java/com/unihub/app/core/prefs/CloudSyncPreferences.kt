@@ -97,11 +97,6 @@ class CloudSyncPreferences @Inject constructor(@ApplicationContext private val c
         }
     }
 
-    /** تُحفظ قبل أول PUT حتى تتعافى المحاولة بعد قتل العملية وسط رفع مجموعة كبيرة. */
-    suspend fun markUploadPending() {
-        context.cloudSyncDataStore.edit { it[pendingKey] = true }
-    }
-
     /** نجاح فحص/تنزيل لا يمسح التعديلات المحلية المعلقة. */
     suspend fun recordSyncSuccess(remoteTimestamp: Long, message: String) {
         context.cloudSyncDataStore.edit { prefs ->

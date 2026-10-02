@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-02T11:20:51" hostname="e2b.local" time="0.006">
+  <properties/>
+  <testcase name="folderMatchIgnoresCaseAndExtraWhitespace" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.001"/>
+  <testcase name="sameFingerprintButDifferentNameIsADifferentFile" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.001"/>
+  <testcase name="sameFingerprintInAnotherFolderIsNotMerged" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.0"/>
+  <testcase name="blankFingerprintNeverMatches" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.001"/>
+  <testcase name="sizeOrExtensionMismatchNeverMerges" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.0"/>
+  <testcase name="existingFileWithSameFingerprintNameAndFolderSkipsUpload" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.0"/>
+  <testcase name="differentOrBlankFolderNameNeverMatches" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.0"/>
+  <testcase name="existingFolderWithSameNameAndParentIsMerged" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.0"/>
+  <testcase name="hashAndNameComparisonAreCaseInsensitive" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.001"/>
+  <testcase name="sameNameUnderDifferentParentDoesNotMatch" classname="com.unihub.app.data.cloud.CloudUploadMergeRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

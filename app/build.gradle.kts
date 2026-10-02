@@ -163,7 +163,7 @@ dependencies {
     // اختبارات الوحدة
     testImplementation(libs.junit)
     // JSON حقيقي لا بدائل android.jar الوهمية، لاختبارات منطق الفهرس وعميل R2 على JVM.
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 
     // أدوات التطوير

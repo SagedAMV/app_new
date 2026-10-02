@@ -1,11 +1,15 @@
 package com.unihub.app.notifications
 
+import android.Manifest
 import android.app.PendingIntent
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.unihub.app.MainActivity
 import com.unihub.app.R
 import com.unihub.app.core.common.Formatters
@@ -31,6 +35,14 @@ class CloudFileNotificationHelper @Inject constructor(
         if (files.isEmpty()) return false
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return false
+        // فحص صريح لإذن POST_NOTIFICATIONS على أندرويد 13+: الفحص أعلاه يغطي
+        // تعطيل المستخدم للإشعارات من الإعدادات، وهذا يغطي رفض الإذن وقت التشغيل
+        // فيمنع محاولة عرض مرفوضة أصلاً (سبب تحذير MissingPermission السابق).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
         if (manager.getNotificationChannel(NotificationChannels.CLOUD_FILES)?.importance == NotificationManager.IMPORTANCE_NONE) return false
 
         val openIntent = Intent(context, MainActivity::class.java).apply {

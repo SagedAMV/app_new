@@ -1,5 +1,6 @@
 package com.unihub.app.data.backup
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import com.unihub.app.core.common.DateFormats
@@ -33,10 +34,8 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -85,20 +84,26 @@ class BackupRepository @Inject constructor(
 
     /**
      * حارس ذري يشير إلى أن القاعدة تُحدَّث حالياً بسبب سحب/استيراد نسخة،
-     * مع طابع زمني لانتهاء العملية لامتصاص إشعارات Room غير المتزامنة،
      * فيتجاهل [AutoBackupChangeWatcher] هذا التحديث ولا يعيد رفعه في حلقة مفرغة.
+     * ضمان الترتيب يأتي من [finishRemoteApply]: يسلّم إشعارات Room كاملةً قبل
+     * إنهاء الحارس، فلا حاجة لطابع زمني لامتصاص إشعارات متأخرة.
      */
     val isApplyingRemoteSync = AtomicBoolean(false)
-    val lastRemoteApplyFinishedAt = AtomicLong(0L)
 
     fun shouldIgnoreInvalidation(): Boolean = isApplyingRemoteSync.get()
 
+    // refreshVersionsSync تُسلّم إشعارات المعاملة على الخيط الحالي قبل أن تُعيد
+    // التحكم، بخلاف refreshVersionsAsync التي تجدولها على queryExecutor وتعود
+    // فوراً — ولأن [AutoBackupChangeWatcher] يقرأ الحارس لحظة وصول الإشعار، فالنسخة
+    // المتزامنة هي الوحيدة التي تضمن التسليم داخل نافذة الحارس (منع حلقة الرفع).
+    // الواجهة مقيّدة بـ LIBRARY_GROUP_PREFIX في Room 2.6.1 فنتجاوز تحذير lint
+    // عمداً وتوثيقاً — الاستدعاء داخل تطبيق واحد والسلوك مقصود ومُختبَر بالدلالة
+    // (فحص المصدر: المتزامنة تُنفّذ refreshRunnable مباشرة، وغير المتزامنة تجدوله).
+    @SuppressLint("RestrictedApi")
     private fun finishRemoteApply() {
         try {
-            // تسليم إشعارات المعاملة قبل إنهاء الحارس، دون نافذة 3 ثوانٍ تبتلع تعديلات المستخدم.
             database.invalidationTracker.refreshVersionsSync()
         } finally {
-            lastRemoteApplyFinishedAt.set(System.currentTimeMillis())
             isApplyingRemoteSync.set(false)
         }
     }
@@ -342,16 +347,6 @@ class BackupRepository @Inject constructor(
     }
 
     /**
-     * تصدير البيانات والملفات المحلية إلى ملف على القرص (يُستخدم قبل الإرسال إلى خادم Cloudflare R2).
-     */
-    suspend fun exportToFile(targetFile: File): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching {
-            targetFile.parentFile?.mkdirs()
-            FileOutputStream(targetFile).use { exportToStream(it) }
-        }.onFailure { android.util.Log.e(TAG, "فشل تصدير النسخة إلى ملف مؤقت", it) }
-    }
-
-    /**
      * الكتابة إلى تدفق خارجي — مشتركة بين التصدير اليدوي (اختيار ملف عبر SAF)
      * والنسخ الاحتياطي التلقائي إلى مجلد المستخدم (انظر AutoBackupExporter).
      * يجب استدعاؤها من خيط إدخال/إخراج.
@@ -409,22 +404,6 @@ class BackupRepository @Inject constructor(
                 ?: throw IOException("تعذّر قراءة ملف النسخة الاحتياطية")
             importRawBytes(bytes)
         }.onFailure { android.util.Log.e(TAG, "فشل الاستيراد", it) }
-    }
-
-    /**
-     * استيراد البيانات والملفات المسحوبة من خادم Cloudflare R2 وتخزينها محلياً في التطبيق.
-     */
-    suspend fun importFromFile(sourceFile: File): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching {
-            if (!sourceFile.isFile) {
-                throw IOException("ملف النسخة المسحوبة من الخادم غير موجود")
-            }
-            if (sourceFile.length() > MAX_BACKUP_BYTES) {
-                throw IOException("ملف النسخة الاحتياطية أكبر من الحد المسموح")
-            }
-            val bytes = sourceFile.readBytes()
-            importRawBytes(bytes)
-        }.onFailure { android.util.Log.e(TAG, "فشل استيراد النسخة المسحوبة من الخادم", it) }
     }
 
     private suspend fun importRawBytes(bytes: ByteArray): Int {

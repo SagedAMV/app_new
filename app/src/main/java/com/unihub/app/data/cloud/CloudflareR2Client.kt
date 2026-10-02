@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -35,7 +34,6 @@ internal suspend fun <T> cloudAttempt(block: suspend () -> T): Result<T> = try {
 class CloudConflictException : IOException("تغيّرت النسخة على الخادم أثناء العملية؛ أعد الفحص والمحاولة")
 data class R2UploadedObject(val etag: String, val size: Long)
 data class R2TextObject(val text: String, val etag: String)
-data class RemoteBackupMeta(val updatedAt: Long, val itemCount: Int, val sha256: String, val sizeBytes: Long)
 
 /** نقل تدفقي ثابت الذاكرة، توقيع SigV4، وقوائم R2 متعددة الصفحات. */
 @Singleton
@@ -214,16 +212,6 @@ class CloudflareR2Client @Inject constructor() {
                 result
             }
         }
-
-    suspend fun fetchRemoteMeta(
-        credentials: R2Credentials,
-        metaObjectKey: String = CloudflareR2Config.REMOTE_META_OBJECT_KEY
-    ): Result<RemoteBackupMeta?> = downloadText(credentials, metaObjectKey).mapCatching { text ->
-        text?.let {
-            val json = JSONObject(it)
-            RemoteBackupMeta(json.optLong("updatedAt"), json.optInt("itemCount"), json.optString("sha256"), json.optLong("sizeBytes"))
-        }
-    }
 
     /** تنظيف مسموح فقط للكائنات المؤقتة التي تنشئها اختبارات هذا العميل. */
     internal suspend fun deleteTestObject(credentials: R2Credentials, objectKey: String): Result<Unit> =

@@ -58,6 +58,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -131,14 +134,14 @@ fun AudioRecorderSheet(
     var phase by remember { mutableStateOf(RecorderPhase.IDLE) }
     var recordedFile by remember { mutableStateOf<File?>(null) }
     var amplitudes by remember { mutableStateOf<List<Float>>(emptyList()) }
-    var elapsedMs by remember { mutableStateOf(0L) }
+    var elapsedMs by remember { mutableLongStateOf(0L) }
     var name by remember { mutableStateOf("") }
 
     // ── حالة المعاينة ──
     var isPlaying by remember { mutableStateOf(false) }
-    var positionMs by remember { mutableStateOf(0) }
-    var durationMs by remember { mutableStateOf(0) }
-    var speed by remember { mutableStateOf(1f) }
+    var positionMs by remember { mutableIntStateOf(0) }
+    var durationMs by remember { mutableIntStateOf(0) }
+    var speed by remember { mutableFloatStateOf(1f) }
 
     // مراجع مستقرة للموارد الأصلية — لا تُخزَّن في حالة قابلة لإعادة التركيب
     val recorderRef = remember { AtomicReference<MediaRecorder?>(null) }
