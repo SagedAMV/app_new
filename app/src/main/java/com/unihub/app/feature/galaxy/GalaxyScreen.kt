@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -65,64 +66,26 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * مجرّة «زخات الشهب» — التصميم المختار رقم 17 من استوديو التصاميم
- * (ملف اختيارات.MD) مع تحسينات الجلسة:
+ * مجرّة «النسيج الكوكبي وغبار الذهب النيزكي» — التصميمان المعتمدان (#1 و #10)
+ * من وثيقة اختيارات.MD المرفوعة في المستودع:
  *
- * 1) السماء: شهب ذهبية بطيئة ومتباعدة تعبر الخلفية (طبقة Canvas ثابتة)،
- *    مع نجوم تومض بهدوء — مشهد حي دون تشتيت وبلا استهلاك عالٍ للبطارية.
+ * 1) سماء OLED وغبار الذهب النيزكي (المقترح #10):
+ *    خلفية سوداء ناصعة عميقة توفر طاقة شاشات OLED وتحمي العين في الظلام،
+ *    تعبرها ذرات غبار ذهبي ونحاسي ناعمة تنجرف بهدوء وبطء فائق مع نجوم تومض
+ *    برقة — مشهد حي هادئ يزيل التوتر دون أي خطوط صاخبة أو استهلاك للبطارية.
  *
- * 2) العناقيد: كل مجلد جذر «كوكب أم» في مركز عنقوده:
- *    - بلا مجلدات فرعية: تحرسه حلقة واقية (كما في مقترح زخات الشهب).
- *    - بمجلدات فرعية: أبناؤه كواكب صغيرة موزّعة على مدار حوله بزوايا متساوية
- *      حسابياً (مسافة مضمونة بين الكواكب بلا تداخل مهما كثر عددها)،
- *      خيوط رفيعة تربط كل ابن بأمه، ودائرة حاضنة تحصر العائلة كلها بلون الأم.
+ * 2) النسيج الكوكبي الهادئ للعناقيد (المقترح #1):
+ *    مجلدات ثابتة في إحداثياتها المكانية كنجوم قطبية مستقرة، ترتبط بخيوط
+ *    نورانية منقطة [PathEffect.dashPathEffect] تنبض برقة باللون النجمي
+ *    لترسم مسارات المواد نحو الأبناء مع نقاط تقاطع نجمية، ودائرة حاضنة منقطة
+ *    تحصر العائلة، دون أي دوران مشتت أو دوار حركة.
  *
- * 3) المسافات (إعادة بناء هذه الجلسة — طلب تعليمات.md): التخطيط أصبح واعياً
- *    بأبعاد الشاشة وبععدد العناقيد فعلياً: عدد الأعمدة/الصفوف وحجم الخلية
- *    يُشتقان من المساحة المتاحة، فتكبر العناقيد عندما يقلّ عددها وتصغر عندما
- *    يكثر — وكل عنقود يُحجَّم بمعامل موحّد يحفظ النسب بين بنية الأم والأبناء.
+ * 3) ثبات تام للنصوص: اتجاه نصوص التسميات يظل أفقياً بزاوية 0° دائماً
+ *    (Orientation Locking) لضمان القراءة الفورية لأسماء المواد الأكاديمية.
  *
- * 4أ) إصلاح جلسة اليوم (تعليمات.md — «إذا كثرت مجلدات الأبناء تظهر ملفات
- *    خارج الدائرة»): حسابات الأنصاف كلها في مصدر واحد [GalaxyGeometry]،
- *    والدائرة الحاضنة تحصر العمود كاملاً بحدّ رياضي مضمون لأي زاوية.
- *    المحاكاة الرقمية في هذه الجلسة كشفت أن الحدّ السابق كان يستند إلى
- *    افتراض ارتفاع تسمية 36 نقطة فقط (هامش 6 فقط)، بينما النص العربي مع
- *    حشوة الخط الافتراضية وتكبير حجم الخط يتجاوز ذلك فيخترق النص الدائرة
- *    — وكلما كثر الأبناء ظهر الخرق أكثر. الإصلاح الجذري: كتلة التسمية في
- *    [PlanetColumn] صارت صندوقاً بارتفاع ثابت مقصوصاً ([GalaxyGeometry]
- *    .LABELS_BOX_DP) بنصّين بارتفاع سطر مثبت وبلا حشوة خط، فصار الارتفاع
- *    حقيقة مضمونة على أي جهاز — والحدّ الرياضي مضموناً فعلاً لا افتراضاً.
- *
- * 4) التنقل داخل المجرّة: قرص للتكبير/التصغير وسحب للتحرك،
- *    بتكبير مثبّت على مركز القرصة نفسه (لا قفزات لأماكن غريبة)، ونقرة مزدوجة
- *    لإعادة الملاءمة. أدنى تكبير مسموح = ملاءمة المحتوى كله للشاشة، فلا يضيع
- *    أي مجلد مهما كثرت البيانات. وإن فاق المحتوى الشاشة (بيانات كثيرة) تبدأ
- *    المجرة بملاءمة تلقائية مصغَّرة تظهر فيها كل العناقيد، ثم يقرّب المستخدم
- *    بإصبعيه ما يشاء — صغرٌ تلقائي يتناسب مع العدد كما طلبت تعليمات.md.
- *
- * 5) إصلاح جلسة اليوم (تعليمات.md — «تظهر أشكال المجلدات لكن ليس داخل
- *    دائرتها المخصصة، منزاحة عن المنتصف»): الثغرة ازدواجُ لغتين إحداثيتين
- *    في مشهد واحد. طبقة الرسم (Canvas) مطلقة لا تنعكس أبداً، بينما طبقة
- *    الوضع كانت تجمع نقطة أصل حسّاسة للاتجاه — Alignment.TopStart
- *    الافتراضية في Box، وهي BiasAlignment(-1,-1) تنقلب إلى أعلى-اليمين على
- *    RTL — مع إزاحة مطلقة فوقها. فينزاح الكوكب عن مركز دائرته بمقدار
- *    (عرض الحاوية − عرض العمود).
- *
- *    تصحيح توثيقي مهم: محاولة سابقة استبدلت offset بـ absoluteOffset وحدها
- *    ووثّقت ذلك كإصلاح كامل — وهو غير صحيح. absoluteOffset تثبّت مقدار
- *    الإزاحة فقط ولا تمسّ أصل الوضع الموروث من المحاذاة؛ بل إن النسخة
- *    الأقدم (offset مع TopStart) كانت سليمة عرَضاً لأن الانعكاسين كانا
- *    يُلغي أحدهما الآخر، فجاء التبديل الجزئي تراجعاً لا إصلاحاً.
- *
- *    الإصلاح المعتمد هنا — إزالة السبب لا موازنته: كل موضع يُحسب نسبةً إلى
- *    **مركز** حاويته مع Alignment.Center، لأن انحياز المركز صفر وصفرٌ لا
- *    ينقلب بالنفي فيصير محايداً رياضياً لأي اتجاه (انظر الاشتقاق في
- *    GalaxyGeometry). ويُستثنى من ذلك حاوية الإيماءات التي تضع لوح المحتوى:
- *    حصر السحب وأصل التحجيم TransformOrigin(0,0) مبنيان على أصل يساري
- *    علوي، فتُفرض عليها AbsoluteAlignment.TopLeft الفيزيائية. وتبقى النصوص
- *    داخل التسميات RTL طبيعية دون أي تأثير.
- *
- * كل الألوان من لوحة الشاشة/السمة الحالية — لا لون جديداً واحداً.
+ * 4) التخطيط المتجاوب والتنقل السلس: حساب أبعاد الخلايا بما يناسب الشاشة
+ *    [computeGalaxyLayout]، ودعم التكبير والتصغير المثبّت على مركز القرصة
+ *    والسحب المرن والنقر لفتح المجلدات.
  */
 @Composable
 fun GalaxyScreen(
@@ -137,16 +100,16 @@ fun GalaxyScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF101614),
-                        Color(0xFF182220),
-                        Color(0xFF101614)
+                        Color(0xFF07090E),
+                        Color(0xFF0D121C),
+                        Color(0xFF07090E)
                     )
                 )
             ),
         contentAlignment = Alignment.Center
     ) {
-        // سماء الشهب تُرى دائماً — حتى والمجرة فارغة تبقى السماء حيّة
-        MeteorBackground(Modifier.matchParentSize())
+        // سماء غبار الذهب النيزكي الداكن (#10) — سماء حية هادئة دائمة
+        GoldenStardustBackground(Modifier.matchParentSize())
 
         if (clusters.isEmpty()) {
             Column(
@@ -411,24 +374,37 @@ private fun FolderClusterView(
 
     // عرض عمود الكوكب مشتق من ثابت الهندسة (مصدر حقيقة واحد للأم كما للابن)
     val parentColumnWidth = (GalaxyGeometry.PARENT_COLUMN_HALF_WIDTH_DP * 2f).dp
-    // الإزاحة الرأسية الثابتة التي تجعل **قرص** الكوكب — لا عموده بتسميته —
-    // هو ما يتمركز على النقطة الهندسية المطلوبة.
     val discY = GalaxyGeometry.columnOffsetYDp(0f).dp
 
-    // contentAlignment = Center: نقطة أصل انحيازها صفر فلا تنقلب في RTL،
-    // فتتطابق طبقة التخطيط مع إحداثيات Canvas المطلقة على أي جهاز — جوهر
-    // إصلاح «الكواكب ليست في منتصف دائرتها» (التفصيل في GalaxyGeometry).
+    // نبض النسيج الكوكبي الهادئ (المقترح #1 المعتمد) — حركة نبض نورانية رقيقة في خيوط المسار
+    val transition = rememberInfiniteTransition(label = "ConstellationPulse")
+    val pulsePhase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3500, easing = LinearEasing)
+        ),
+        label = "pulsePhase"
+    )
+
     Box(modifier = modifier.size(sizeDp), contentAlignment = Alignment.Center) {
         if (cluster.children.isEmpty()) {
-            // مجلد بلا أبناء: كوكب تحرسه حلقة واقية — جوهر مقترح «زخات الشهب»
+            // مجلد بلا أبناء: كوكب تحرسه حلقة نسيج كوكبي منقطة ونابضة
             Canvas(Modifier.matchParentSize()) {
+                val ringRadius = GalaxyGeometry
+                    .guardianRingRadiusDp(cluster.parent.fileCount)
+                    .dp.toPx()
                 drawCircle(
-                    color = parentColor.copy(alpha = 0.32f),
-                    radius = GalaxyGeometry
-                        .guardianRingRadiusDp(cluster.parent.fileCount)
-                        .dp.toPx(),
+                    color = parentColor.copy(alpha = 0.35f),
+                    radius = ringRadius,
                     center = center,
-                    style = Stroke(width = 1.4.dp.toPx())
+                    style = Stroke(
+                        width = 1.4.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            floatArrayOf(6.dp.toPx(), 4.dp.toPx()),
+                            pulsePhase
+                        )
+                    )
                 )
             }
             PlanetColumn(
@@ -443,46 +419,57 @@ private fun FolderClusterView(
         } else {
             val count = cluster.children.size
             val maxChildFileCount = cluster.children.maxOf { it.fileCount }
-            // المدار: يتسع مع العدد وبحدّ يضمن تباعد الكواكب المتجاورة
-            // (انظر GalaxyGeometry.orbitRadiusDp)
             val orbitRadius = GalaxyGeometry.orbitRadiusDp(count).dp
-            // الدائرة الحاضنة — جوهر إصلاح جلسة اليوم: كانت تحسب قرص الكوكب
-            // فقط فيتدلى نص الأبناء خارجها؛ الآن تحصر العمود كاملاً (كوكب +
-            // تسمية) لأي زاوية على المدار (انظر GalaxyGeometry)
             val confinementRadius = GalaxyGeometry
                 .confinementRadiusDp(count, maxChildFileCount, cluster.parent.fileCount)
                 .dp
 
             Canvas(Modifier.matchParentSize()) {
                 val c = center
-                // الدائرة الحاضنة تحصر كل كواكب العائلة
+                // الدائرة الحاضنة الكوكبية: حدود العنقود منقطة بنعومة
                 drawCircle(
-                    color = parentColor.copy(alpha = 0.30f),
+                    color = parentColor.copy(alpha = 0.28f),
                     radius = confinementRadius.toPx(),
                     center = c,
-                    style = Stroke(width = 1.3.dp.toPx())
+                    style = Stroke(
+                        width = 1.2.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
+                            -pulsePhase * 0.5f
+                        )
+                    )
                 )
-                // مدار الأبناء — دليل بصري خفيف
+                // مسار المدار الهادئ
                 drawCircle(
-                    color = parentColor.copy(alpha = 0.12f),
+                    color = parentColor.copy(alpha = 0.10f),
                     radius = orbitRadius.toPx(),
                     center = c,
                     style = Stroke(width = 1.dp.toPx())
                 )
-                // خيوط تربط كل كوكب ابن بكوكب أمه
+                // خيوط النسيج الكوكبي الهادئ (Constellation Lattice): خيوط نورانية منقطة تنبض بلطف
+                val dashEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(8.dp.toPx(), 5.dp.toPx()),
+                    pulsePhase
+                )
                 for (i in cluster.children.indices) {
-                    // نفس دوال الهندسة التي يتموضع بها الكوكب نفسه أدناه —
-                    // مصدر حقيقة واحد للزاوية فلا ينفصل الخيط عن كوكبه.
                     val pos = Offset(
                         x = c.x + GalaxyGeometry.childCenterDxDp(i, count).dp.toPx(),
                         y = c.y + GalaxyGeometry.childCenterDyDp(i, count).dp.toPx()
                     )
+                    // الخيط النوراني النابض
                     drawLine(
-                        color = parentColor.copy(alpha = 0.22f),
+                        color = parentColor.copy(alpha = 0.38f),
                         start = c,
                         end = pos,
-                        strokeWidth = 1.dp.toPx(),
+                        strokeWidth = 1.3.dp.toPx(),
+                        pathEffect = dashEffect,
                         cap = StrokeCap.Round
+                    )
+                    // عقدة نجمية عند نقطة التقاطع مع الكوكب الابن
+                    drawCircle(
+                        color = parentColor.copy(alpha = 0.60f),
+                        radius = 2.dp.toPx(),
+                        center = pos
                     )
                 }
             }
@@ -609,112 +596,115 @@ private fun PlanetColumn(
     }
 }
 
-/** مواصفات شهاب واحد: مسار مُعيَّن (إحداثيات نسبية) ودورة وزمن بدء. */
-private class MeteorSpec(
-    val startX: Float,
-    val startY: Float,
-    val endX: Float,
-    val endY: Float,
-    val period: Float,
-    val offset: Float
-)
-
 /**
- * ثلاثة شهب فقط، متباعدة الدورات (11/13/17 ثانية) حتى يبقى المشهد هادئاً
- * ولا يتحول إلى ازدحام ضوئي. المسارات مائلة وقصيرة نسبياً — تعبر وتختفي.
+ * مواصفات ذرة غبار ذهبي نيزكي (المقترح #10 المعتمد):
+ * إحداثيات نسبية وسرعة انجراف متناهية البطء وحجم ناعم ونوع اللون.
  */
-private val METEORS = listOf(
-    MeteorSpec(0.08f, -0.04f, 0.52f, 0.50f, period = 13f, offset = 0f),
-    MeteorSpec(0.95f, -0.05f, 0.60f, 0.52f, period = 17f, offset = 5f),
-    MeteorSpec(0.38f, -0.06f, 0.06f, 0.44f, period = 11f, offset = 8f)
+private class StardustParticle(
+    val x: Float,
+    val y: Float,
+    val radiusPx: Float,
+    val speed: Float,
+    val phase: Float,
+    val colorIndex: Int
 )
 
 /**
- * سماء الشهب: طبقة Canvas واحدة للنجوم الثابتة (بذرة ثابتة حتى لا تتغير
- * مع كل إعادة تركيب) مع وميض بطيء، وللشهب الثلاثة بذيل ضوئي متدرج
- * وغلاف ظهور/اختفاء ناعم. الحركة بطيئة ومريحة — لا ومضات أسرع من ثانيتين.
+ * لوحة ألوان غبار الذهب النيزكي الداكن:
+ * درجات ذهبية وكهرمانية ونحاسية دافئة خالية من الوهج المشتت.
+ */
+private val STARDUST_COLORS = listOf(
+    Color(0xFFFFD54F), // ذهب مشرق ناعم
+    Color(0xFFFFE082), // ذهب دافئ فاتح
+    Color(0xFFE6C280), // نحاس كوني خافت
+    Color(0xFFFFF8E1)  // أبيض عاجي نجمي
+)
+
+/**
+ * سماء غبار الذهب النيزكي الداكن (المقترح #10 المعتمد في اختيارات.MD):
+ * طبقة Canvas خفيفة لسماء OLED عميقة يعبرها غبار ذهبي ينجرف بهدوء وبطء فائق،
+ * مع نجوم خافتة تومض برقة — مشهد تأملي مريح للأعصاب ويوفر استهلاك البطارية.
  */
 @Composable
-private fun MeteorBackground(modifier: Modifier = Modifier) {
-    // نجوم ثابتة (بذرة عشوائية ثابتة حتى لا تتغير مع كل إعادة تركيب)
+private fun GoldenStardustBackground(modifier: Modifier = Modifier) {
+    // نجوم ثابتة خافتة
     val stars = remember {
         val random = Random(42)
-        List(70) {
+        List(60) {
             Triple(random.nextFloat(), random.nextFloat(), random.nextFloat())
         }
     }
 
-    val transition = rememberInfiniteTransition(label = "galaxyMeteors")
-    // ساعة بطيئة جداً (دقيقة كاملة للدورة) تُشتق منها أطوار الشهب — قناة واحدة تكفي
-    val clock by transition.animateFloat(
+    // ذرات غبار الذهب النيزكي (بذرة عشوائية ثابتة)
+    val stardust = remember {
+        val random = Random(101)
+        List(45) {
+            StardustParticle(
+                x = random.nextFloat(),
+                y = random.nextFloat(),
+                radiusPx = 1.2f + random.nextFloat() * 2.2f,
+                speed = 0.4f + random.nextFloat() * 0.6f,
+                phase = random.nextFloat(),
+                colorIndex = random.nextInt(STARDUST_COLORS.size)
+            )
+        }
+    }
+
+    val transition = rememberInfiniteTransition(label = "goldenStardust")
+    // دورة انجراف هادئة جداً (50 ثانية) تحاكي انعدام الجاذبية الكونية
+    val driftClock by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(60_000, easing = LinearEasing)),
-        label = "meteorClock"
+        animationSpec = infiniteRepeatable(tween(50_000, easing = LinearEasing)),
+        label = "driftClock"
     )
     val twinkle by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(4_000, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(4_500, easing = LinearEasing)),
         label = "twinkle"
     )
 
     Canvas(modifier) {
-        // النجوم — نفس أسلوب النسخ السابقة
+        val w = size.width
+        val h = size.height
+
+        // 1) النجوم الخلفية الثابتة
         stars.forEach { star ->
             val (fx, fy, phase) = star
-            val alpha = 0.25f + 0.55f * kotlin.math.abs(
+            val alpha = 0.20f + 0.45f * kotlin.math.abs(
                 sin((twinkle + phase) * 2f * PI.toFloat())
             )
             drawCircle(
-                color = Color.White.copy(alpha = alpha * 0.8f),
-                radius = 1.2f + phase * 1.6f,
-                center = Offset(fx * size.width, fy * size.height)
+                color = Color.White.copy(alpha = alpha * 0.7f),
+                radius = 1.0f + phase * 1.4f,
+                center = Offset(fx * w, fy * h)
             )
         }
 
-        // الشهب — موضع كل شهاب دالة في الزمن، بلا حالة محفوظة
-        val seconds = clock * 60f
-        METEORS.forEach { meteor ->
-            val progress = ((seconds + meteor.offset) % meteor.period) / meteor.period
-            // غلاف ظهور/اختفاء ناعم: تلاشٍ تدريجي بلا قفزات
-            val fade = minOf(1f, progress / 0.12f, (1f - progress) / 0.22f).coerceAtLeast(0f)
+        // 2) ذرات غبار الذهب النيزكي البطيئة الانجراف
+        stardust.forEach { p ->
+            // حركة رأسية هادئة مع تموج أفقي متناهي الصغر
+            val currentProgress = (driftClock * p.speed + p.phase) % 1f
+            val py = (p.y + currentProgress) % 1f * h
+            val px = (p.x + sin((currentProgress + p.phase) * 2f * PI.toFloat()) * 0.025f) * w
 
-            val headX = (meteor.startX + (meteor.endX - meteor.startX) * progress) * size.width
-            val headY = (meteor.startY + (meteor.endY - meteor.startY) * progress) * size.height
-            val dirX = (meteor.endX - meteor.startX) * size.width
-            val dirY = (meteor.endY - meteor.startY) * size.height
-            val length = sqrt(dirX * dirX + dirY * dirY)
-            if (length <= 0f || fade <= 0f) return@forEach
-            val unitX = dirX / length
-            val unitY = dirY / length
-            val tailLength = 44.dp.toPx()
-            val head = Offset(headX, headY)
-            val tail = Offset(headX - unitX * tailLength, headY - unitY * tailLength)
+            val baseColor = STARDUST_COLORS[p.colorIndex]
+            val pulseAlpha = 0.25f + 0.50f * kotlin.math.abs(
+                sin((twinkle + p.phase) * 2f * PI.toFloat())
+            )
 
-            // الذيل الضوئي المتدرج
-            drawLine(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFE8D9A0).copy(alpha = 0f),
-                        Color(0xFFE8D9A0).copy(alpha = 0.55f * fade)
-                    )
-                ),
-                start = tail,
-                end = head,
-                strokeWidth = 2.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-            // توهج الرأس ثم الرأس نفسه
+            // توهج خفيف للذرة
             drawCircle(
-                color = Color(0xFFC79A4B).copy(alpha = 0.18f * fade),
-                radius = 8.dp.toPx(),
-                center = head
+                color = baseColor.copy(alpha = pulseAlpha * 0.20f),
+                radius = p.radiusPx * 2.5f,
+                center = Offset(px, py)
             )
+            // مركز الذرة الذهبية
             drawCircle(
-                color = Color(0xFFE8D9A0).copy(alpha = 0.85f * fade),
-                radius = 2.4.dp.toPx(),
-                center = head
+                color = baseColor.copy(alpha = pulseAlpha * 0.85f),
+                radius = p.radiusPx,
+                center = Offset(px, py)
             )
         }
     }
