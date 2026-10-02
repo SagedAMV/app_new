@@ -10,6 +10,7 @@ import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.cloud.CloudFolderLink
 import com.unihub.app.data.cloud.CloudDownloadPlacement
+import com.unihub.app.data.cloud.CloudUploadMergeRules
 import com.unihub.app.data.local.UniHubDatabase
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.ExamType
@@ -127,26 +128,17 @@ class BackupRepository @Inject constructor(
             try {
                 database.withTransaction {
                     val dao = database.folderDao()
-                    val linked = link?.let { dao.getById(it.localId) }?.takeIf { it.createdAt == link?.localCreatedAt }
-                    if (linked != null) linked else {
-                        val validParent = parentId?.takeIf { dao.getById(it) != null }
-                        val legacy = remote.legacyId?.let { dao.getById(it) }?.takeIf {
-                            it.name == remote.name && it.createdAt == remote.createdAt && it.parentId == parentId
-                        }
-                        if (legacy != null) legacy else {
-                            val safeName = InputValidator.sanitizeName(remote.name).ifBlank { "مجلد سحابي" }
-                            val existing = CloudDownloadPlacement.findExistingLocalFolder(
-                                dao.getAllOnce(), safeName, validParent
-                            )
-                            existing ?: run {
-                                val row = FolderEntity(
-                                    name = safeName,
-                                    parentId = validParent,
-                                    createdAt = remote.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
-                                )
-                                row.copy(id = dao.insert(row))
-                            }
-                        }
+                    val allFolders = dao.getAllOnce()
+                    val existing = CloudDownloadPlacement.resolveLocalFolder(allFolders, remote, parentId, link)
+                    if (existing != null) existing else {
+                        val validParent = parentId?.takeIf { pid -> allFolders.any { it.id == pid } }
+                        val safeName = InputValidator.sanitizeName(remote.name).ifBlank { "مجلد سحابي" }
+                        val row = FolderEntity(
+                            name = safeName,
+                            parentId = validParent,
+                            createdAt = remote.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
+                        )
+                        row.copy(id = dao.insert(row))
                     }
                 }
             } finally { finishRemoteApply() }
@@ -267,7 +259,13 @@ class BackupRepository @Inject constructor(
                 database.withTransaction {
                     val validFolder = remoteFile.folderId?.takeIf { id ->
                         val folder = database.folderDao().getById(id)
-                        folder != null && (remoteFile.folderName == null || folder.name == remoteFile.folderName)
+                        folder != null && (
+                            remoteFile.folderName == null ||
+                                CloudUploadMergeRules.sameName(
+                                    InputValidator.sanitizeName(folder.name),
+                                    InputValidator.sanitizeName(remoteFile.folderName)
+                                )
+                            )
                     }
                     val existing = targetLocalId?.let { id -> database.fileDao().getAllOnce().firstOrNull { it.id == id } }
                     val row = FileEntity(

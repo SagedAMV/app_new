@@ -239,14 +239,21 @@ class CloudSyncManager @Inject constructor(
         val folderKeys = selectedFolderKeys.flatMap { CloudFolderTree.descendants(scan.state.folders, it) }.toSet()
         suspend fun resolveDestination(key: String?): com.unihub.app.data.local.entity.FolderEntity? {
             return when (destination.location) {
-                CloudDownloadLocation.ORIGINAL_CLOUD_TREE -> ensureFolderPath(key)
+                CloudDownloadLocation.ORIGINAL_CLOUD_TREE -> ensureFolderPath(key, scan.state.folders)
                 CloudDownloadLocation.LOCAL_FOLDER -> chosenLocal
                 CloudDownloadLocation.FOLDER_INSIDE_LOCAL -> {
                     var parent = chosenLocal
-                    val relative = CloudDownloadPlacement.relativeFolders(_remoteFolders.value, key, anchor)
+                    val relative = CloudDownloadPlacement.relativeFolders(scan.state.folders, key, anchor)
                     for ((position, folder) in relative.withIndex()) {
                         val localName = if (position == 0) CloudDownloadPlacement.localRootName(destination, folder) else folder.name
                         val placementKey = "placement:${destination.localFolderId}:${destination.localFolderCreatedAt}:${anchor ?: relative.firstOrNull()?.key}:${destination.rootFolderName}:${folder.key}"
+                        if (position == 0 && CloudDownloadPlacement.shouldReuseChosenFolderAsRoot(chosenLocal, localName)) {
+                            val reused = chosenLocal ?: continue
+                            parent = reused
+                            catalog.update(activeConnection) { it.copy(folderLinks = it.folderLinks.filterNot { old -> old.remoteKey == placementKey } +
+                                CloudFolderLink(reused.id, reused.createdAt, placementKey)) }
+                            continue
+                        }
                         val state = catalog.snapshot(activeConnection)
                         val link = state.folderLinks.firstOrNull { it.remoteKey == placementKey }
                         parent = backupRepository.ensureDownloadedFolder(folder.copy(key = placementKey, name = localName, legacyId = null), parent?.id, link)
@@ -258,6 +265,73 @@ class CloudSyncManager @Inject constructor(
                 }
             }
         }
+        val jobContext = currentCoroutineContext()
+        suspend fun matchExistingInDestination(
+            target: RemoteCloudFile,
+            folderId: Long?,
+            expectedSha256: String
+        ): FileEntity? {
+            val existingLocalFiles = backupRepository.getExistingLocalFiles()
+            val candidateWithoutHash = CloudDownloadPlacement.findExistingLocalFile(
+                localFiles = existingLocalFiles,
+                name = target.name,
+                extension = target.extension,
+                size = target.size,
+                targetFolderId = folderId
+            ) ?: return null
+            val hasStrongSha = CloudPresenceMatcher.strongHash(expectedSha256)
+            val matched = if (!hasStrongSha) {
+                candidateWithoutHash
+            } else {
+                val state = catalog.snapshot(activeConnection)
+                val sameFolderCandidates = existingLocalFiles.filter {
+                    it.folderId == folderId && it.size == target.size
+                }
+                val localHashes = mutableMapOf<Long, String>()
+                for (candidate in sameFolderCandidates) {
+                    val disk = File(candidate.filePath)
+                    if (!disk.isFile) continue
+                    val stat = CloudLocalFileStat(candidate.id, candidate.createdAt, candidate.filePath, disk.length(), disk.lastModified())
+                    val cachedFp = state.localFingerprints.firstOrNull { CloudPresenceMatcher.validFingerprint(it, stat) }
+                    val sha = cachedFp?.sha256 ?: r2Client.sha256Hex(disk) { jobContext.ensureActive() }.also { computed ->
+                        val fp = CloudLocalFingerprint(stat.id, stat.createdAt, stat.path, stat.size, stat.modifiedAt, computed)
+                        catalog.update(activeConnection) { current ->
+                            current.copy(localFingerprints = current.localFingerprints.filterNot { old -> old.localId == stat.id } + fp)
+                        }
+                    }
+                    localHashes[candidate.id] = sha
+                }
+                CloudDownloadPlacement.findExistingLocalFile(
+                    localFiles = existingLocalFiles,
+                    name = target.name,
+                    extension = target.extension,
+                    size = target.size,
+                    targetFolderId = folderId,
+                    remoteSha256 = expectedSha256,
+                    localSha256ById = localHashes
+                )
+            } ?: return null
+            val disk = File(matched.filePath)
+            val linkSha = expectedSha256.takeIf { it.isNotBlank() }
+                ?: catalog.snapshot(activeConnection).localFingerprints.firstOrNull { it.localId == matched.id }?.sha256.orEmpty()
+            val link = CloudFileLink(
+                localId = matched.id,
+                remoteKey = target.remoteKey,
+                remoteVersion = target.versionToken,
+                sha256 = linkSha,
+                localSize = disk.length(),
+                localModifiedAt = disk.lastModified(),
+                localCreatedAt = matched.createdAt
+            )
+            catalog.update(activeConnection) {
+                it.copy(
+                    links = it.links.filterNot { old -> old.localId == matched.id || old.remoteKey == target.remoteKey } + link,
+                    notifiedVersions = it.notifiedVersions + target.notificationToken
+                )
+            }
+            refreshAvailable(catalog.snapshot(activeConnection))
+            return matched
+        }
         val choices = selectedFiles.distinctBy { it.remoteKey }
         val totalBytes = choices.filter { choice -> scan.available.any { it.remoteKey == choice.remoteKey && it.versionToken == choice.versionToken } }.fold(0L) { total, file -> Math.addExact(total, file.size.coerceAtLeast(0)) }
         if (context.filesDir.usableSpace - RESERVE_BYTES < totalBytes) {
@@ -265,7 +339,6 @@ class CloudSyncManager @Inject constructor(
         }
         if (CloudDownloadPlacement.shouldCreateCloudFolders(destination)) for (key in folderKeys) resolveDestination(key)
         _lastDownloadReport.value = null
-        val jobContext = currentCoroutineContext()
         downloadJob = jobContext.job
         val failed = mutableListOf<String>()
         var completed = 0
@@ -274,17 +347,30 @@ class CloudSyncManager @Inject constructor(
                 currentCoroutineContext().ensureActive()
                 val remote = scan.available.firstOrNull { it.remoteKey == chosen.remoteKey }
                 if (remote == null) {
+                    val serverFile = scan.state.files.firstOrNull {
+                        it.remoteKey == chosen.remoteKey && it.versionToken == chosen.versionToken
+                    }
+                    if (serverFile != null) {
+                        val preParent = resolveDestination(serverFile.cloudFolderKey)
+                        if (matchExistingInDestination(serverFile, preParent?.id, serverFile.sha256) != null) {
+                            continue
+                        }
+                    }
                     // الملف قد اكتمل تنزيله من واجهة أخرى؛ لا ننزله مرتين.
                     if (chosen.remoteKey in _verifyingKeys.value) {
                         failed += chosen.fullDisplayName + " (لم تكتمل مقارنة النسخة المحلية بعد)"
                         continue
                     }
-                    if (scan.state.files.any { it.remoteKey == chosen.remoteKey && it.versionToken == chosen.versionToken }) continue
+                    if (serverFile != null) continue
                     failed += chosen.fullDisplayName
                     continue
                 }
                 if (remote.versionToken != chosen.versionToken) {
                     failed += chosen.fullDisplayName + " (تغيّرت نسخته؛ أعد الاختيار)"
+                    continue
+                }
+                val parent = resolveDestination(remote.cloudFolderKey)
+                if (matchExistingInDestination(remote, parent?.id, remote.sha256) != null) {
                     continue
                 }
                 val staging = File(context.filesDir, "cloud-downloads").apply { mkdirs() }
@@ -306,16 +392,20 @@ class CloudSyncManager @Inject constructor(
                     val hash = downloadedHash.takeIf { it.isNotBlank() }
                         ?: throw IOException("لم تكتمل بصمة التنزيل")
                     if (remote.sha256.isNotBlank() && hash != remote.sha256) throw IOException("بصمة الملف لا تطابق الفهرس")
+                    if (matchExistingInDestination(remote, parent?.id, hash) != null) {
+                        continue
+                    }
                     val state = catalog.snapshot(activeConnection)
                     val previous = state.links.firstOrNull { it.remoteKey == remote.remoteKey }
-                    val local = backupRepository.getExistingLocalFiles().firstOrNull { it.id == previous?.localId }
+                    val local = backupRepository.getExistingLocalFiles().firstOrNull {
+                        it.id == previous?.localId && it.folderId == parent?.id
+                    }
                     // إن عُدّلت النسخة المحلية، نحتفظ بها ونضيف السحابية كنسخة مستقلة.
                     val targetId = local?.takeIf {
                         val disk = File(it.filePath)
                         previous != null && it.createdAt == previous.localCreatedAt && disk.length() == previous.localSize &&
                             r2Client.sha256Hex(disk) { jobContext.ensureActive() } == previous.sha256
                     }?.id
-                    val parent = resolveDestination(remote.cloudFolderKey)
                     // وجهة محلية صريحة، حتى عندما تكون المستوى الرئيسي (null)، لا ترجع إلى folderId البعيد.
                     val localRemote = remote.copy(folderId = parent?.id, folderName = parent?.name)
                     val saved = backupRepository.saveSelectedRemoteFile(localRemote, temp, targetId).getOrThrow()
@@ -770,10 +860,13 @@ class CloudSyncManager @Inject constructor(
         report
     }
 
-    private suspend fun ensureFolderPath(key: String?): com.unihub.app.data.local.entity.FolderEntity? {
+    private suspend fun ensureFolderPath(
+        key: String?,
+        folders: List<RemoteCloudFolder> = _remoteFolders.value
+    ): com.unihub.app.data.local.entity.FolderEntity? {
         if (key == null) return null
         var parent: com.unihub.app.data.local.entity.FolderEntity? = null
-        for (folder in CloudFolderTree.ancestors(_remoteFolders.value, key)) {
+        for (folder in CloudFolderTree.ancestors(folders, key)) {
             val state = catalog.snapshot(activeConnection)
             val link = state.folderLinks.firstOrNull { it.remoteKey == folder.key }
             parent = backupRepository.ensureDownloadedFolder(folder, parent?.id, link)
