@@ -44,7 +44,8 @@ object CloudDeleteRules {
         objectKey.isNotBlank() && !objectKey.endsWith("/") &&
             objectKey != CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY &&
             objectKey != CloudflareR2Config.REMOTE_META_OBJECT_KEY &&
-            objectKey != CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY
+            objectKey != CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY &&
+            objectKey != CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
 
     /** الملفات المكتشفة فعلاً والمطابقة للمفاتيح المطلوبة — وبدون تكرار، وبترتيب الطلب. */
     fun targets(files: List<RemoteCloudFile>, requestedKeys: Collection<String>): List<RemoteCloudFile> =

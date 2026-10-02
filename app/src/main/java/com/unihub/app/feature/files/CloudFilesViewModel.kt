@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
+import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.RemoteCloudFile
@@ -24,9 +25,13 @@ import javax.inject.Inject
  * محصوراً في زرّي الشريط العلوي (الرئيسية والملفات) بقرار توحيد نقاط الدخول.
  */
 @HiltViewModel
-class CloudFilesViewModel @Inject constructor(private val manager: CloudSyncManager) : ViewModel() {
+class CloudFilesViewModel @Inject constructor(
+    private val manager: CloudSyncManager,
+    private val authManager: CloudAuthManager
+) : ViewModel() {
 
     val messenger = UiMessenger()
+    val authSession = authManager.sessionState
 
     val files = manager.allRemoteFiles
     val localFolders = manager.localFolders
@@ -44,11 +49,17 @@ class CloudFilesViewModel @Inject constructor(private val manager: CloudSyncMana
     }
 
     fun download(files: List<RemoteCloudFile>, destination: CloudDownloadDestination) {
-        viewModelScope.launch { manager.downloadSelectedFiles(files, destination = destination) }
+        viewModelScope.launch {
+            manager.downloadSelectedFiles(files, destination = destination)
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر التنزيل من السحابة") }
+        }
     }
 
     fun downloadFolder(key: String, destination: CloudDownloadDestination) {
-        viewModelScope.launch { manager.downloadFolder(key, destination) }
+        viewModelScope.launch {
+            manager.downloadFolder(key, destination)
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر تنزيل المجلد من السحابة") }
+        }
     }
 
     fun cancel() = manager.cancelDownloads()

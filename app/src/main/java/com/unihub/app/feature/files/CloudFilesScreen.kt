@@ -209,6 +209,10 @@ fun CloudFilesScreen(
     val isOnline by viewModel.online.collectAsStateWithLifecycle()
     val downloadReport by viewModel.report.collectAsStateWithLifecycle()
     val availableFiles by viewModel.available.collectAsStateWithLifecycle()
+    val authSession by viewModel.authSession.collectAsStateWithLifecycle()
+    val effectivePerms = (authSession as? com.unihub.app.data.auth.AuthSessionState.Authenticated)?.user?.effectivePermissions
+    val canDownloadPerm = effectivePerms?.canDownload ?: false
+    val canModifyPerm = effectivePerms?.canModify ?: false
     val downloadableKeys = remember(availableFiles) {
         availableFiles.mapTo(mutableSetOf()) { it.remoteKey }
     }
@@ -278,8 +282,8 @@ fun CloudFilesScreen(
     fileMenu?.let { file ->
         CloudFileMenuSheet(
             file = file,
-            canDownload = isOnline && canChoose && file.remoteKey in downloadableKeys,
-            canDelete = isOnline && canChoose,
+            canDownload = isOnline && canChoose && canDownloadPerm && file.remoteKey in downloadableKeys,
+            canModify = isOnline && canChoose && canModifyPerm,
             onRename = { renameFileTarget = file; fileMenu = null },
             onMove = { moveTargets = listOf(file); fileMenu = null },
             onDownload = { requestFiles = listOf(file); fileMenu = null },
@@ -290,10 +294,11 @@ fun CloudFilesScreen(
     folderMenu?.let { folder ->
         CloudFolderMenuSheet(
             folder = folder,
-            deleteBlockReason = if (isOnline && canChoose) {
-                CloudDeleteRules.folderDeletionBlockReason(folder, remoteFiles, folders)
-            } else {
-                "الحذف متاح عندما يكون الاتصال متوفراً ولا توجد عملية نقل جارية"
+            canModify = isOnline && canChoose && canModifyPerm,
+            deleteBlockReason = when {
+                !canModifyPerm -> "صلاحية التعديل أو الحذف في الحساب السحابي موقوفة من قِبل المشرف"
+                !isOnline || !canChoose -> "الحذف متاح عندما يكون الاتصال متوفراً ولا توجد عملية نقل جارية"
+                else -> CloudDeleteRules.folderDeletionBlockReason(folder, remoteFiles, folders)
             },
             onRename = { renameFolderTarget = folder; folderMenu = null },
             onDelete = { deleteFolderTarget = folder; folderMenu = null },
@@ -372,6 +377,17 @@ fun CloudFilesScreen(
             Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!canDownloadPerm || !canModifyPerm) {
+                val blockedLabels = buildList {
+                    if (!canDownloadPerm) add("السحب/التنزيل")
+                    if (!canModifyPerm) add("التعديل/الحذف")
+                }.joinToString(" و")
+                Text(
+                    "تنبيه صلاحيات الحساب: ($blockedLabels) موقوف حالياً من قِبل المشرف",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
             if (scanState.phase == CloudScanPhase.SCANNING) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (localVerification.active) Text("جارٍ التحقق من النسخ المحلية (${localVerification.completed}/${localVerification.total}): ${localVerification.fileName}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -401,7 +417,7 @@ fun CloudFilesScreen(
                     if (current != null) Text(CloudFolderTree.ancestors(folders, key).joinToString(" / ") { it.name },
                         style = MaterialTheme.typography.bodySmall)
                 }
-                if (key != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && key in foldersWithMissing &&
+                if (key != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && canDownloadPerm && key in foldersWithMissing &&
                     CloudFolderTree.filesWithin(remoteFiles, folders, key).none { it.remoteKey in verifyingKeys }) {
                     Text("تنزيل المجلد")
                 }
@@ -425,8 +441,8 @@ fun CloudFilesScreen(
                 ) {
                     Row {
                         TextButton(onClick = { selectedKeys = emptySet() }, enabled = canChoose) { Text("إلغاء التحديد") }
-                        TextButton(onClick = { moveTargets = selected }, enabled = isOnline && canChoose) { Text("نقل المحدد") }
-                        TextButton(onClick = { deleteFileTargets = selected }, enabled = isOnline && canChoose) {
+                        TextButton(onClick = { moveTargets = selected }, enabled = isOnline && canChoose && canModifyPerm) { Text("نقل المحدد") }
+                        TextButton(onClick = { deleteFileTargets = selected }, enabled = isOnline && canChoose && canModifyPerm) {
                             Text("حذف المحدد", color = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -504,7 +520,7 @@ fun CloudFilesScreen(
                             IconButton(onClick = { folderMenu = folder }) {
                                 Icon(Icons.Filled.MoreVert, contentDescription = "إجراءات ${folder.name}")
                             }
-                            IconButton(onClick = { requestFolder = folder }, enabled = isOnline && canChoose && verifying == 0 &&
+                            IconButton(onClick = { requestFolder = folder }, enabled = isOnline && canChoose && canDownloadPerm && verifying == 0 &&
                                 (pending.isNotEmpty() || (all.isEmpty() && !missingOnly))) {
                                 Icon(Icons.Filled.CloudDownload, contentDescription = "تنزيل ${folder.name}")
                             }
@@ -543,7 +559,7 @@ fun CloudFilesScreen(
                 exit = fadeOut(tween(160)) + shrinkVertically(shrinkTowards = Alignment.Bottom, animationSpec = tween(160))
             ) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.End) {
-                    Button(onClick = { requestFiles = selected }, enabled = isOnline && canChoose) {
+                    Button(onClick = { requestFiles = selected }, enabled = isOnline && canChoose && canDownloadPerm) {
                         Icon(Icons.Filled.CloudDownload, contentDescription = null)
                         Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
                     }
@@ -558,7 +574,7 @@ fun CloudFilesScreen(
 private fun CloudFileMenuSheet(
     file: RemoteCloudFile,
     canDownload: Boolean,
-    canDelete: Boolean,
+    canModify: Boolean,
     onRename: () -> Unit,
     onMove: () -> Unit,
     onDownload: () -> Unit,
@@ -571,12 +587,18 @@ private fun CloudFileMenuSheet(
         actions = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية الملف", onClick = onRename)
-            CloudMenuActionRow(icon = Icons.AutoMirrored.Filled.DriveFileMove, text = "نقل إلى مجلد", onClick = onMove)
+            CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية الملف", enabled = canModify, onClick = onRename)
+            CloudMenuActionRow(icon = Icons.AutoMirrored.Filled.DriveFileMove, text = "نقل إلى مجلد", enabled = canModify, onClick = onMove)
             CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل", enabled = canDownload, onClick = onDownload)
-            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف من السحابة", enabled = canDelete, danger = true, onClick = onDelete)
+            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف من السحابة", enabled = canModify, danger = true, onClick = onDelete)
             if (!canDownload) Text(
-                "التنزيل متاح عندما يكون الملف غير موجود على جهازك والاتصال متوفراً",
+                "التنزيل متاح عندما يكون الملف غير موجود على جهازك، والاتصال متوفراً، وصلاحية التنزيل مفعّلة",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+            )
+            if (!canModify) Text(
+                "التعديل أو الحذف في الحساب السحابي متاح عند توفر الاتصال وتفعيل صلاحية التعديل لحسابك",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp)
@@ -594,12 +616,13 @@ private fun CloudFileMenuSheet(
 @Composable
 private fun CloudFolderMenuSheet(
     folder: RemoteCloudFolder,
+    canModify: Boolean,
     deleteBlockReason: String?,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val canRename = folder.key.startsWith("folder:")
+    val canRename = folder.key.startsWith("folder:") && canModify
     AppSheet(
         title = folder.name,
         onDismiss = onDismiss,
@@ -607,8 +630,8 @@ private fun CloudFolderMenuSheet(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية المجلد", enabled = canRename, onClick = onRename)
-            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد من السحابة", enabled = deleteBlockReason == null, danger = true, onClick = onDelete)
-            if (!canRename) Text(
+            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد من السحابة", enabled = deleteBlockReason == null && canModify, danger = true, onClick = onDelete)
+            if (!folder.key.startsWith("folder:")) Text(
                 "هذا المجلد مبني على مسار التخزين أو على مجلد محلي؛ إعادة التسمية متاحة للمجلدات التي أنشأها التطبيق في السحابة",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

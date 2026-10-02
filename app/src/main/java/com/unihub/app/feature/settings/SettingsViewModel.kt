@@ -12,6 +12,10 @@ import com.unihub.app.core.prefs.AutoBackupPreferences
 import com.unihub.app.core.prefs.AutoBackupSettings
 import com.unihub.app.core.prefs.ThemeMode
 import com.unihub.app.core.prefs.ThemePreferenceManager
+import com.unihub.app.data.auth.CloudAuthManager
+import com.unihub.app.data.auth.CloudUserAccount
+import com.unihub.app.data.auth.DeviceChangeRequest
+import com.unihub.app.data.auth.UserPermissions
 import com.unihub.app.data.backup.AutoBackupExporter
 import com.unihub.app.data.backup.AutoBackupScheduler
 import com.unihub.app.data.repository.DataMaintenanceRepository
@@ -29,10 +33,15 @@ class SettingsViewModel @Inject constructor(
     private val dataMaintenanceRepository: DataMaintenanceRepository,
     private val autoBackupPreferences: AutoBackupPreferences,
     private val autoBackupScheduler: AutoBackupScheduler,
-    private val autoBackupExporter: AutoBackupExporter
+    private val autoBackupExporter: AutoBackupExporter,
+    private val authManager: CloudAuthManager
 ) : ViewModel() {
 
     val messenger = UiMessenger()
+
+    val authSession = authManager.sessionState
+    val authRegistry = authManager.registryState
+    val authBusy = authManager.isBusy
 
     val themeMode: StateFlow<ThemeMode> = themePreferenceManager.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
@@ -170,6 +179,99 @@ class SettingsViewModel @Inject constructor(
                 .onFailure { messenger.notifyError("فشل مسح البيانات") }
         }
     }
+
+    // ─── إدارة الحساب والمستخدمين والصلاحيات السحابية ────────────────────
+
+    fun refreshAuthRegistry() {
+        viewModelScope.launch {
+            authManager.verifyActiveSessionWithCloud()
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authManager.logout()
+        }
+    }
+
+    fun changeOwnPassword(currentPassword: String, newPassword: String) {
+        viewModelScope.launch {
+            authManager.userChangeOwnPassword(currentPassword, newPassword)
+                .onSuccess { messenger.notify("تم تحديث كلمة المرور في السحابة بنجاح ✓") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر تغيير كلمة المرور") }
+        }
+    }
+
+    fun addUser(username: String, password: String, permissions: UserPermissions) {
+        viewModelScope.launch {
+            authManager.addUser(username, password, permissions)
+                .onSuccess { messenger.notify("تمت إضافة المستخدم «$username» في السحابة ✓") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّرت إضافة المستخدم") }
+        }
+    }
+
+    fun deleteUser(username: String) {
+        viewModelScope.launch {
+            authManager.deleteUser(username)
+                .onSuccess { messenger.notify("حُذف المستخدم «$username» من السحابة") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر حذف المستخدم") }
+        }
+    }
+
+    fun setUserActive(username: String, active: Boolean) {
+        viewModelScope.launch {
+            authManager.setUserActive(username, active)
+                .onSuccess {
+                    messenger.notify(if (active) "تم تفعيل المستخدم «$username»" else "تم إيقاف المستخدم «$username»")
+                }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث حالة المستخدم") }
+        }
+    }
+
+    fun updateUserPermissions(username: String, permissions: UserPermissions) {
+        viewModelScope.launch {
+            authManager.updateUserPermissions(username, permissions)
+                .onSuccess { messenger.notify("تم تحديث صلاحيات «$username» في السحابة") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث الصلاحيات") }
+        }
+    }
+
+    fun adminChangeUserPassword(username: String, newPassword: String) {
+        viewModelScope.launch {
+            authManager.adminChangeUserPassword(username, newPassword)
+                .onSuccess { messenger.notify("تم تغيير رمز المستخدم «$username» في السحابة ✓") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر تغيير رمز المستخدم") }
+        }
+    }
+
+    fun resolveDeviceChangeRequest(request: DeviceChangeRequest, approve: Boolean) {
+        viewModelScope.launch {
+            val result = if (approve) {
+                authManager.approveDeviceRequest(request.requestId)
+            } else {
+                authManager.rejectDeviceRequest(request.requestId)
+            }
+            result
+                .onSuccess {
+                    messenger.notify(
+                        if (approve) "تم السماح للمستخدم «${request.username}» بالدخول من جهازه الجديد ✓"
+                        else "تم رفض طلب الجهاز الجديد للمستخدم «${request.username}»"
+                    )
+                }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّرت معالجة الطلب") }
+        }
+    }
+
+    fun resetUserBoundDevice(username: String) {
+        viewModelScope.launch {
+            authManager.resetUserBoundDevice(username)
+                .onSuccess { messenger.notify("تم فك ربط الجهاز للمستخدم «$username»؛ سيرتبط تلقائياً بأول جهاز يسجل منه") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر فك ربط الجهاز") }
+        }
+    }
+
+    fun revealUserPassword(account: CloudUserAccount): String =
+        authManager.revealUserPasswordForAdmin(account)
 
     private companion object {
         private const val TAG = "SettingsViewModel"

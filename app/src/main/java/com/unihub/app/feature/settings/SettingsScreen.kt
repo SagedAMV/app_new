@@ -70,6 +70,9 @@ fun SettingsScreen(
 
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val useDynamicColor by viewModel.useDynamicColor.collectAsStateWithLifecycle()
+    val authSession by viewModel.authSession.collectAsStateWithLifecycle()
+    val authRegistry by viewModel.authRegistry.collectAsStateWithLifecycle()
+    val authBusy by viewModel.authBusy.collectAsStateWithLifecycle()
 
     var showClearConfirm by remember { mutableStateOf(false) }
 
@@ -101,6 +104,13 @@ fun SettingsScreen(
                 .padding(horizontal = 18.dp)
                 .padding(bottom = 24.dp)
         ) {
+            UserManagementSection(
+                authSession = authSession,
+                authRegistry = authRegistry,
+                authBusy = authBusy,
+                viewModel = viewModel
+            )
+
             SectionHeader(title = "المظهر")
 
             ThemeMode.entries.forEach { mode ->
@@ -344,7 +354,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "الإصدار 1.0.0",
+                text = "الإصدار 1.3.1",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

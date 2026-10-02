@@ -74,10 +74,12 @@ class CloudDeleteRulesTest {
         val system = listOf(
             remote(CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY),
             remote(CloudflareR2Config.REMOTE_META_OBJECT_KEY),
-            remote(CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY)
+            remote(CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY),
+            remote(CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY)
         )
         assertTrue(CloudDeleteRules.targets(system, system.map { it.remoteKey }).isEmpty())
         assertFalse(CloudDeleteRules.isDeletableObjectKey(CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY))
+        assertFalse(CloudDeleteRules.isDeletableObjectKey(CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY))
         assertFalse(CloudDeleteRules.isDeletableObjectKey("مجلد/"))
         assertFalse(CloudDeleteRules.isDeletableObjectKey(""))
         assertTrue(CloudDeleteRules.isDeletableObjectKey("files/a.pdf"))

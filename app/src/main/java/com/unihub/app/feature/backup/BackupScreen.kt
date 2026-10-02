@@ -70,6 +70,10 @@ fun BackupScreen(
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val cloudSettings by viewModel.cloudSettings.collectAsStateWithLifecycle()
+    val authSession by viewModel.authSession.collectAsStateWithLifecycle()
+    val currentUser = (authSession as? com.unihub.app.data.auth.AuthSessionState.Authenticated)?.user
+    val isAdmin = currentUser?.isAdmin == true
+    val canPushMetadata = currentUser?.effectivePermissions?.let { it.canUpload && it.canModify } ?: false
     // جولة تعليمات.md: أزيلت نقاط فتح السحابة من هذه الشاشة (الزر العلوي والبانر
     // وزر الاختيار) — التصفح والتنزيل والتحكم محصورة في شاشة السحابة المستقلة
     // CloudFilesScreen، وتُفتح من زرّي الشريط العلوي في الرئيسية والملفات فقط.
@@ -187,7 +191,7 @@ fun BackupScreen(
                     ) {
                         FilledTonalButton(
                             onClick = viewModel::pushToCloud,
-                            enabled = !isWorking
+                            enabled = !isWorking && canPushMetadata
                         ) {
                             Icon(Icons.Outlined.CloudUpload, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
@@ -220,61 +224,63 @@ fun BackupScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { showServerFields = !showServerFields }) {
-                        Icon(Icons.Outlined.Settings, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (showServerFields) "إخفاء إعدادات Cloudflare R2" else "إعدادات اتصال Cloudflare R2")
-                    }
+                    if (isAdmin) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { showServerFields = !showServerFields }) {
+                            Icon(Icons.Outlined.Settings, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (showServerFields) "إخفاء إعدادات Cloudflare R2" else "إعدادات اتصال Cloudflare R2")
+                        }
 
-                    if (showServerFields) {
-                        Spacer(Modifier.height(8.dp))
-                        Field(
-                            label = "Account ID (معرّف حساب Cloudflare)",
-                            value = accountId,
-                            onValueChange = { accountId = it }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Field(
-                            label = "Endpoint URL",
-                            value = endpointUrl,
-                            onValueChange = { endpointUrl = it }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Field(
-                            label = "Bucket Name (اسم الحاوية)",
-                            value = bucketName,
-                            onValueChange = { bucketName = it }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Field(
-                            label = "Access Key ID",
-                            value = accessKeyId,
-                            onValueChange = { accessKeyId = it }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Secret Access Key") },
-                            value = secretAccessKey,
-                            onValueChange = { secretAccessKey = it },
-                            visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                viewModel.saveCloudCredentials(
-                                    accountId = accountId,
-                                    endpointUrl = endpointUrl,
-                                    bucketName = bucketName,
-                                    accessKeyId = accessKeyId,
-                                    secretAccessKey = secretAccessKey
-                                )
-                            },
-                            enabled = !isWorking
-                        ) {
-                            Text("حفظ إعدادات الخادم")
+                        if (showServerFields) {
+                            Spacer(Modifier.height(8.dp))
+                            Field(
+                                label = "Account ID (معرّف حساب Cloudflare)",
+                                value = accountId,
+                                onValueChange = { accountId = it }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Field(
+                                label = "Endpoint URL",
+                                value = endpointUrl,
+                                onValueChange = { endpointUrl = it }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Field(
+                                label = "Bucket Name (اسم الحاوية)",
+                                value = bucketName,
+                                onValueChange = { bucketName = it }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Field(
+                                label = "Access Key ID",
+                                value = accessKeyId,
+                                onValueChange = { accessKeyId = it }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Secret Access Key") },
+                                value = secretAccessKey,
+                                onValueChange = { secretAccessKey = it },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.saveCloudCredentials(
+                                        accountId = accountId,
+                                        endpointUrl = endpointUrl,
+                                        bucketName = bucketName,
+                                        accessKeyId = accessKeyId,
+                                        secretAccessKey = secretAccessKey
+                                    )
+                                },
+                                enabled = !isWorking
+                            ) {
+                                Text("حفظ إعدادات الخادم")
+                            }
                         }
                     }
                 }

@@ -48,6 +48,7 @@ class ShareReceiverActivity : ComponentActivity() {
 
     @Inject lateinit var shareInbox: ShareInbox
     @Inject lateinit var backupRepository: BackupRepository
+    @Inject lateinit var authManager: com.unihub.app.data.auth.CloudAuthManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +61,14 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val backupFile = uris.firstOrNull { isBackupFile(it) }
         if (backupFile != null) {
+            if (!authManager.isAuthenticatedNow()) {
+                startActivity(
+                    Intent(this@ShareReceiverActivity, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                )
+                finish()
+                return
+            }
             showBackupImportDialog(backupFile)
         } else {
             ingestAndOpenApp(uris)

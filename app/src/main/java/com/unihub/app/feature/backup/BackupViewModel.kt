@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unihub.app.core.prefs.CloudSyncPreferences
+import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.R2Credentials
@@ -19,7 +20,8 @@ import kotlinx.coroutines.launch
 class BackupViewModel @Inject constructor(
     private val backupRepository: BackupRepository,
     private val cloudSyncManager: CloudSyncManager,
-    private val cloudSyncPreferences: CloudSyncPreferences
+    private val cloudSyncPreferences: CloudSyncPreferences,
+    private val authManager: CloudAuthManager
 ) : ViewModel() {
     private val _status = MutableStateFlow<String?>(null)
     val status = _status.asStateFlow()
@@ -27,6 +29,7 @@ class BackupViewModel @Inject constructor(
     val busy = _busy.asStateFlow()
     val isOnline = cloudSyncManager.isOnline
     val isSyncing = cloudSyncManager.isSyncing
+    val authSession = authManager.sessionState
     // السحابة هنا: ما تحتاجه هذه الشاشة (حالة الاتصال/المزامنة وإعدادات الخادم
     // وعدد الملفات الجديدة للزر والبانر) — التصفح والتنزيل انتقلا إلى الشاشة
     // المستقلة CloudFilesScreen.
@@ -64,6 +67,10 @@ class BackupViewModel @Inject constructor(
 
     fun saveCloudCredentials(accountId: String, endpointUrl: String, bucketName: String, accessKeyId: String, secretAccessKey: String) {
         viewModelScope.launch {
+            authManager.requireAdmin().getOrElse {
+                _status.value = it.message ?: "تعديل إعدادات الخادم السحابي متاح للمشرف فقط"
+                return@launch
+            }
             val creds = R2Credentials(accountId.trim(), endpointUrl.trim(), bucketName.trim(), accessKeyId.trim(), secretAccessKey.trim())
             cloudSyncPreferences.saveCredentials(creds)
             _status.value = if (creds.isConfigured) "تم حفظ إعدادات R2" else "أكمل بيانات R2؛ التطبيق يعمل محلياً"

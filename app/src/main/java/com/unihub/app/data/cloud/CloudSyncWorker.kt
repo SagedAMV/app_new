@@ -16,10 +16,15 @@ import dagger.assisted.AssistedInject
 class CloudSyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    private val cloudSyncManager: CloudSyncManager
+    private val cloudSyncManager: CloudSyncManager,
+    private val authManager: com.unihub.app.data.auth.CloudAuthManager
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        authManager.verifyActiveSessionWithCloud()
+        if (!authManager.isAuthenticatedNow()) {
+            return Result.success()
+        }
         val mode = inputData.getString(KEY_MODE) ?: MODE_AUTO_SYNC
         val outcome = when (mode) {
             MODE_PUSH -> cloudSyncManager.syncWithServer(isManual = false)
@@ -31,8 +36,10 @@ class CloudSyncWorker @AssistedInject constructor(
             onSuccess = { Result.success() },
             onFailure = { error ->
                 val msg = error.message.orEmpty()
-                // إذا كانت بيانات الخادم غير مضبوطة بعد، ننهي العمل بهدوء دون إعادة محاولة عبثية
-                if (msg.contains("غير مكتملة") || msg.contains("غير مضبوط")) {
+                // إذا كانت بيانات الخادم غير مضبوطة بعد أو المستخدم غير مصرح له، ننهي العمل بهدوء دون إعادة محاولة عبثية
+                if (msg.contains("غير مكتملة") || msg.contains("غير مضبوط") ||
+                    msg.contains("تسجيل الدخول") || msg.contains("صلاحية") || msg.contains("موقوف")
+                ) {
                     Result.success()
                 } else {
                     Result.retry()

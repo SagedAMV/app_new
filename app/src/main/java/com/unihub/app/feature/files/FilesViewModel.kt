@@ -10,6 +10,8 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidationException
 import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.data.auth.AuthPermission
+import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.CloudUploadPlan
 import com.unihub.app.data.cloud.RemoteCloudFile
@@ -56,6 +58,7 @@ class FilesViewModel @Inject constructor(
     private val fileRepository: FileRepository,
     private val shareInbox: ShareInbox,
     private val cloudSyncManager: CloudSyncManager,
+    private val authManager: CloudAuthManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -79,11 +82,19 @@ class FilesViewModel @Inject constructor(
 
     fun previewSelectedUpload(files: List<FileEntity>) {
         viewModelScope.launch {
+            authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
+                messenger.notifyError(it.message ?: "ليس لديك صلاحية الرفع إلى السحابة")
+                return@launch
+            }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(fileIds = files.mapTo(mutableSetOf()) { it.id }, title = "رفع الملفات المحددة")
         }
     }
     fun previewFolderUpload(id: Long, name: String) {
         viewModelScope.launch {
+            authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
+                messenger.notifyError(it.message ?: "ليس لديك صلاحية الرفع إلى السحابة")
+                return@launch
+            }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته")
         }
     }

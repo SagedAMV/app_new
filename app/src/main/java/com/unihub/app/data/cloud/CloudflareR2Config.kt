@@ -41,6 +41,9 @@ object CloudflareR2Config {
     /** اسم ملف البيانات الوصفية الخفيف لفحص أحدث نسخة على الخادم بسرعة */
     const val REMOTE_META_OBJECT_KEY: String = "unihub_cloud_meta.json"
 
+    /** اسم ملف سجل المصادقة والمستخدمين والأجهزة والصلاحيات المحمي على السحابة */
+    const val REMOTE_AUTH_OBJECT_KEY: String = "unihub_auth_registry.json"
+
     /** بادئة مسار الملفات الفيزيائية المستقلة على الخادم للسحب الانتقائي */
     const val REMOTE_FILES_PREFIX: String = "files/"
 

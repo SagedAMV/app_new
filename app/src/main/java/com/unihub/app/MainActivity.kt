@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.unihub.app.feature.auth.AuthGateScreen
 import com.unihub.app.feature.settings.ThemeViewModel
 import com.unihub.app.ui.navigation.AppNavHost
 import com.unihub.app.ui.theme.UniHubTheme
@@ -72,6 +73,8 @@ fun UniHubApp(themeViewModel: ThemeViewModel = hiltViewModel()) {
     val useDynamicColor by themeViewModel.useDynamicColor.collectAsStateWithLifecycle()
 
     UniHubTheme(mode = themeMode, useDynamicColor = useDynamicColor) {
-        AppNavHost()
+        AuthGateScreen {
+            AppNavHost()
+        }
     }
 }

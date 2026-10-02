@@ -8,6 +8,8 @@ import android.util.Log
 import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.prefs.CloudSyncPreferences
 import com.unihub.app.core.prefs.CloudSyncSettings
+import com.unihub.app.data.auth.AuthPermission
+import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FileKind
@@ -70,7 +72,8 @@ class CloudSyncManager @Inject constructor(
     private val preferences: CloudSyncPreferences,
     private val scheduler: CloudSyncScheduler,
     private val notificationHelper: CloudFileNotificationHelper,
-    private val catalog: CloudCatalogStore
+    private val catalog: CloudCatalogStore,
+    private val authManager: CloudAuthManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -160,7 +163,12 @@ class CloudSyncManager @Inject constructor(
         pulseJob = scope.launch {
             while (isActive) {
                 val settings = preferences.snapshot()
-                if (settings.autoSyncEnabled && settings.isConfigured && checkIsOnline()) syncWithServer()
+                if (settings.isConfigured && checkIsOnline()) {
+                    authManager.verifyActiveSessionWithCloud()
+                    if (settings.autoSyncEnabled && authManager.isAuthenticatedNow()) {
+                        syncWithServer()
+                    }
+                }
                 delay(if (scanState.value.phase == CloudScanPhase.EMPTY) EMPTY_PULSE_INTERVAL_MS else LIVE_PULSE_INTERVAL_MS)
             }
         }
@@ -169,7 +177,7 @@ class CloudSyncManager @Inject constructor(
     suspend fun onLocalDataChanged() {
         preferences.markLocalChange()
         val settings = preferences.snapshot()
-        if (!settings.autoSyncEnabled || !settings.isConfigured) return
+        if (!settings.autoSyncEnabled || !settings.isConfigured || !authManager.isAuthenticatedNow()) return
         scheduler.enqueueSyncWhenConnected()
         if (foreground && checkIsOnline()) syncWithServer()
     }
@@ -186,6 +194,10 @@ class CloudSyncManager @Inject constructor(
         try {
             val settings = preferences.snapshot()
             requireConnection(settings)
+            authManager.verifyActiveSessionWithCloud()
+            if (!authManager.isAuthenticatedNow()) {
+                throw IOException("يجب تسجيل الدخول أولاً للوصول إلى السحابة")
+            }
             scanLocked(settings, notifyOnScan)
         } finally { _isSyncing.value = false; mutex.unlock() }
     }
@@ -197,7 +209,11 @@ class CloudSyncManager @Inject constructor(
         notifyOnScan = true
         val result = scanController.execute(showLoading = isManual)
         val scan = result.getOrElse { return Result.failure(it) }
-        if (settings.pendingUpload || needsLightweightUpload(scan.state)) {
+        val currentUser = authManager.currentAuthenticatedUser()
+        val canAutoPushMetadata = currentUser != null &&
+            currentUser.effectivePermissions.canUpload &&
+            currentUser.effectivePermissions.canModify
+        if (canAutoPushMetadata && (settings.pendingUpload || needsLightweightUpload(scan.state))) {
             val sent = pushLightweightMetadata(scan)
             if (sent.isFailure && sent.exceptionOrNull() !is CloudBusyException) {
                 _lastScanError.value = sent.exceptionOrNull()?.message
@@ -208,6 +224,9 @@ class CloudSyncManager @Inject constructor(
 
     /** الاسم القديم يحتفظ بتوافق واجهة النسخ الاحتياطي؛ يرسل النصوص فقط الآن. */
     suspend fun pushToServer(allowEmptyUpload: Boolean = false): Result<Int> {
+        authManager.verifyActiveSessionWithCloud()
+        authManager.requirePermission(AuthPermission.UPLOAD).getOrElse { return Result.failure(it) }
+        authManager.requirePermission(AuthPermission.MODIFY).getOrElse { return Result.failure(it) }
         val scan = scanController.execute().getOrElse { return Result.failure(it) }
         return pushLightweightMetadata(scan)
     }
@@ -229,6 +248,8 @@ class CloudSyncManager @Inject constructor(
         if (selectedFiles.isEmpty() && selectedFolderKeys.isEmpty()) return@operation CloudDownloadReport(0, emptyList())
         val settings = preferences.snapshot()
         requireConnection(settings)
+        authManager.verifyActiveSessionWithCloud()
+        authManager.requirePermission(AuthPermission.DOWNLOAD).getOrThrow()
         val scan = boundedScanLocked(settings, false)
         val chosenLocal = if (destination.location == CloudDownloadLocation.ORIGINAL_CLOUD_TREE || destination.localFolderId == null) null else {
             backupRepository.getLocalFolders().firstOrNull { it.id == destination.localFolderId &&
@@ -457,7 +478,13 @@ class CloudSyncManager @Inject constructor(
         if (!mutex.tryLock()) return@withContext Result.failure(CloudBusyException())
         _isSyncing.value = true
         try {
-            withTimeout(METADATA_EDIT_TIMEOUT_MS) { cloudAttempt(block) }
+            withTimeout(METADATA_EDIT_TIMEOUT_MS) {
+                cloudAttempt {
+                    authManager.verifyActiveSessionWithCloud()
+                    authManager.requirePermission(AuthPermission.MODIFY).getOrThrow()
+                    block()
+                }
+            }
         } catch (_: TimeoutCancellationException) { Result.failure(CloudScanTimeoutException()) }
         finally { _isSyncing.value = false; mutex.unlock() }
     }
@@ -673,7 +700,8 @@ class CloudSyncManager @Inject constructor(
         val conflicts = CloudManifestTools.conflicts(local, remote, baseline)
         val merged = CloudManifestTools.mergeMetadata(local, remote, baseline)
             .put("folders", local.optJSONArray("folders") ?: JSONArray())
-        if (!CloudManifestTools.metadataEqual(local, merged)) {
+        val canPull = authManager.currentAuthenticatedUser()?.effectivePermissions?.canDownload == true
+        if (canPull && !CloudManifestTools.metadataEqual(local, merged)) {
             backupRepository.syncLightweightMetadataFromManifest(merged.toString(), local.toString()).getOrThrow()
         }
         val discovered = discoverFiles(objects, remote)
@@ -690,7 +718,7 @@ class CloudSyncManager @Inject constructor(
             links = current.links, folderLinks = current.folderLinks, localFingerprints = current.localFingerprints,
             notifiedVersions = current.notifiedVersions.intersect(tokens)) }
         refreshAvailable(catalog.snapshot(activeConnection))
-        if (notify) {
+        if (notify && canPull) {
             val newFiles = CloudFileRules.newNotifications(_availableRemoteFiles.value, newState.notifiedVersions)
             // لا نضع «أُشعِر» إذا كان الإذن أو القناة معطلاً أو فشل عرض الإشعار.
             if (notificationHelper.notifyNewRemoteFiles(newFiles)) catalog.update(activeConnection) {
@@ -713,6 +741,8 @@ class CloudSyncManager @Inject constructor(
         try { cloudAttempt {
             withTimeout(SCAN_TIMEOUT_MS) {
                 val settings = preferences.snapshot(); requireConnection(settings)
+                authManager.requirePermission(AuthPermission.UPLOAD).getOrThrow()
+                authManager.requirePermission(AuthPermission.MODIFY).getOrThrow()
                 if (scan.metadataConflicts.isNotEmpty()) throw IOException("تعارض في البيانات النصية؛ لم نستبدل النسختين. رفع الملفات المختارة متاح.")
                 val generation = settings.lastLocalChangeAt
                 val local = JSONObject(backupRepository.buildCloudManifestJson())
@@ -740,6 +770,8 @@ class CloudSyncManager @Inject constructor(
     /** يرفع لقطة الاختيار المحددة فقط؛ folderIds بنية لازمة ولا توسع اختيار الملفات بعد التأكيد. */
     suspend fun uploadSelected(plan: CloudUploadPlan): Result<CloudUploadReport> = operation(CloudTransferKind.UPLOAD) {
         val settings = preferences.snapshot(); requireConnection(settings)
+        authManager.verifyActiveSessionWithCloud()
+        authManager.requirePermission(AuthPermission.UPLOAD).getOrThrow()
         val scan = boundedScanLocked(settings, false)
         val records = backupRepository.getLocalFileRecords().associateBy { it.id }
         val localFolders = backupRepository.getLocalFolders().associateBy { it.id }
@@ -941,7 +973,8 @@ class CloudSyncManager @Inject constructor(
                 if (activeConnection == id) {
                     refreshAvailable(catalog.snapshot(id), startVerification = false)
                     val settings = preferences.snapshot()
-                    if (settings.autoSyncEnabled) {
+                    val canPull = authManager.currentAuthenticatedUser()?.effectivePermissions?.canDownload == true
+                    if (settings.autoSyncEnabled && canPull) {
                         val current = catalog.snapshot(id)
                         val newFiles = CloudFileRules.newNotifications(_availableRemoteFiles.value, current.notifiedVersions)
                         if (notificationHelper.notifyNewRemoteFiles(newFiles)) catalog.update(id) {
@@ -974,8 +1007,12 @@ class CloudSyncManager @Inject constructor(
             }
             remoteFileFromJson(row)
         }.associateBy { it.remoteKey }
-        val system = setOf(CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY,
-            CloudflareR2Config.REMOTE_META_OBJECT_KEY, CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY)
+        val system = setOf(
+            CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY,
+            CloudflareR2Config.REMOTE_META_OBJECT_KEY,
+            CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY,
+            CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+        )
         return objects.filterNot { it.key in system || it.key.endsWith('/') || it.key.startsWith("unihub-tests/") }.map { obj ->
             val known = metadata[obj.key]
             if (known != null) known.copy(
