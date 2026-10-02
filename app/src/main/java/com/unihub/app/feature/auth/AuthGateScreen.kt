@@ -125,6 +125,7 @@ fun AuthGateScreen(
                 username = current.username,
                 deviceLabel = current.requestedDevice.summaryLabel,
                 message = statusMessage ?: current.message,
+                statusNote = current.statusNote,
                 errorMessage = errorMessage,
                 isBusy = isBusy,
                 onCheckNow = { viewModel.checkPendingStatus(silent = false) },
@@ -358,6 +359,7 @@ private fun PendingAdminApprovalScreen(
     username: String,
     deviceLabel: String,
     message: String,
+    statusNote: String?,
     errorMessage: String?,
     isBusy: Boolean,
     onCheckNow: () -> Unit,
@@ -417,6 +419,15 @@ private fun PendingAdminApprovalScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+
+                    if (!statusNote.isNullOrBlank()) {
+                        Text(
+                            text = statusNote,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
                     if (!errorMessage.isNullOrBlank()) {
                         Surface(

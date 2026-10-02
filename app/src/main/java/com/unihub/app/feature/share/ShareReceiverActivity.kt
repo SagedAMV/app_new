@@ -61,15 +61,18 @@ class ShareReceiverActivity : ComponentActivity() {
 
         val backupFile = uris.firstOrNull { isBackupFile(it) }
         if (backupFile != null) {
-            if (!authManager.isAuthenticatedNow()) {
-                startActivity(
-                    Intent(this@ShareReceiverActivity, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                )
-                finish()
-                return
+            lifecycleScope.launch {
+                authManager.initializeIfNeeded()
+                if (!authManager.isAuthenticatedNow()) {
+                    startActivity(
+                        Intent(this@ShareReceiverActivity, MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    )
+                    finish()
+                    return@launch
+                }
+                showBackupImportDialog(backupFile)
             }
-            showBackupImportDialog(backupFile)
         } else {
             ingestAndOpenApp(uris)
         }

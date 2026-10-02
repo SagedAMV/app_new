@@ -39,6 +39,7 @@ class CloudAuthManager @Inject constructor(
     private val deviceFingerprintProvider: DeviceFingerprintProvider
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val initMutex = Mutex()
     private val mutex = Mutex()
     private val initialized = AtomicBoolean(false)
 
@@ -62,52 +63,57 @@ class CloudAuthManager @Inject constructor(
      * - إن كان الجهاز غريباً أو لم يسجل الدخول من قبل، يوجّه المستخدم لشاشة تسجيل الدخول السحابية.
      */
     suspend fun initializeIfNeeded() = withContext(Dispatchers.IO) {
-        if (!initialized.compareAndSet(false, true)) return@withContext
-        val device = deviceFingerprintProvider.getDeviceInfo()
-        val snap = authPreferences.snapshot()
-        val cachedRegistry = CloudAuthRules.fromJson(snap.cachedRegistryJson)
-        _registryState.value = cachedRegistry
+        if (initialized.get()) return@withContext
+        initMutex.withLock {
+            if (initialized.get()) return@withLock
+            val device = deviceFingerprintProvider.getDeviceInfo()
+            val snap = authPreferences.snapshot()
+            val cachedRegistry = CloudAuthRules.fromJson(snap.cachedRegistryJson)
+            _registryState.value = cachedRegistry
 
-        if (snap.hasAuthenticatedSession) {
-            if (snap.boundDeviceFingerprint != device.fingerprint) {
-                authPreferences.clearSession()
-                _sessionState.value = AuthSessionState.Unauthenticated(
-                    "تم اكتشاف جهاز غير معرف لهذا الحساب؛ يرجى تسجيل الدخول عبر السحابة"
-                )
-                return@withContext
-            }
-            val validation = CloudAuthRules.validateExistingSession(
-                registry = cachedRegistry,
-                username = snap.loggedInUsername,
-                currentDevice = device
-            )
-            validation.fold(
-                onSuccess = { account ->
-                    _sessionState.value = AuthSessionState.Authenticated(
-                        user = account,
-                        currentDevice = device,
-                        pendingAdminRequests = if (account.isAdmin) cachedRegistry.pendingDeviceRequests else emptyList()
-                    )
-                    if (isOnline()) {
-                        scope.launch { verifyActiveSessionWithCloud() }
-                    }
-                },
-                onFailure = { error ->
+            if (snap.hasAuthenticatedSession) {
+                if (snap.boundDeviceFingerprint != device.fingerprint) {
                     authPreferences.clearSession()
-                    _sessionState.value = AuthSessionState.Unauthenticated(error.message)
+                    _sessionState.value = AuthSessionState.Unauthenticated(
+                        "تم اكتشاف جهاز غير معرف لهذا الحساب؛ يرجى تسجيل الدخول عبر السحابة"
+                    )
+                    initialized.set(true)
+                    return@withLock
                 }
-            )
-        } else if (snap.pendingUsername.isNotBlank()) {
-            _sessionState.value = AuthSessionState.WaitingAdminApproval(
-                username = snap.pendingUsername,
-                requestedDevice = device,
-                message = CloudAuthRules.PENDING_APPROVAL_MESSAGE
-            )
-            if (isOnline()) {
-                scope.launch { checkPendingApprovalStatus() }
+                val validation = CloudAuthRules.validateExistingSession(
+                    registry = cachedRegistry,
+                    username = snap.loggedInUsername,
+                    currentDevice = device
+                )
+                validation.fold(
+                    onSuccess = { account ->
+                        _sessionState.value = AuthSessionState.Authenticated(
+                            user = account,
+                            currentDevice = device,
+                            pendingAdminRequests = if (account.isAdmin) cachedRegistry.pendingDeviceRequests else emptyList()
+                        )
+                        if (isOnline()) {
+                            scope.launch { verifyActiveSessionWithCloud() }
+                        }
+                    },
+                    onFailure = { error ->
+                        authPreferences.clearSession()
+                        _sessionState.value = AuthSessionState.Unauthenticated(error.message)
+                    }
+                )
+            } else if (snap.pendingUsername.isNotBlank()) {
+                _sessionState.value = AuthSessionState.WaitingAdminApproval(
+                    username = snap.pendingUsername,
+                    requestedDevice = device,
+                    message = CloudAuthRules.PENDING_APPROVAL_MESSAGE
+                )
+                if (isOnline()) {
+                    scope.launch { checkPendingApprovalStatus() }
+                }
+            } else {
+                _sessionState.value = AuthSessionState.Unauthenticated()
             }
-        } else {
-            _sessionState.value = AuthSessionState.Unauthenticated()
+            initialized.set(true)
         }
     }
 
@@ -136,7 +142,7 @@ class CloudAuthManager @Inject constructor(
     /** فك تشفير كلمة المرور الحالية للمستخدم لعرضها للمشرف (حتى لو غيّرها المستخدم). */
     fun revealUserPasswordForAdmin(account: CloudUserAccount): String =
         CloudAuthRules.decryptPasswordForAdmin(account.encryptedPassword)
-            ?.takeIf { it.isNotBlank() }
+            .takeIf { it.isNotBlank() }
             ?: "غير متاح"
 
     /**
@@ -334,6 +340,7 @@ class CloudAuthManager @Inject constructor(
      * أو إبطال الجلسة فوراً إذا أوقف المشرف الحساب أو غيّر الجهاز المعتمد.
      */
     suspend fun verifyActiveSessionWithCloud(): Result<CloudAuthRegistry> = withContext(Dispatchers.IO) {
+        initializeIfNeeded()
         if (!isOnline()) return@withContext Result.failure(IOException("غير متصل بالإنترنت"))
         mutex.withLock {
             runCatching {
