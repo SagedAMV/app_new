@@ -9,6 +9,7 @@ import com.unihub.app.data.cloud.CloudManifestTools
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.cloud.CloudFolderLink
+import com.unihub.app.data.cloud.CloudDownloadPlacement
 import com.unihub.app.data.local.UniHubDatabase
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.ExamType
@@ -119,7 +120,7 @@ class BackupRepository @Inject constructor(
     suspend fun getLocalFileRecords(): List<FileEntity> = withContext(Dispatchers.IO) { database.fileDao().getAllOnce() }
     suspend fun getLocalFolders(): List<FolderEntity> = withContext(Dispatchers.IO) { database.folderDao().getAllOnce() }
 
-    /** إنشاء مجلد سحابي محلياً دون تصادم id أو حذف أي مجلد موجود. */
+    /** إعادة استخدام مجلد سحابي محلي مطابق قبل إنشاء صف جديد، دون حذف أو إعادة تسمية مجلد المستخدم. */
     suspend fun ensureDownloadedFolder(remote: RemoteCloudFolder, parentId: Long?, link: CloudFolderLink?): FolderEntity =
         withContext(Dispatchers.IO) {
             isApplyingRemoteSync.set(true)
@@ -128,14 +129,23 @@ class BackupRepository @Inject constructor(
                     val dao = database.folderDao()
                     val linked = link?.let { dao.getById(it.localId) }?.takeIf { it.createdAt == link?.localCreatedAt }
                     if (linked != null) linked else {
+                        val validParent = parentId?.takeIf { dao.getById(it) != null }
                         val legacy = remote.legacyId?.let { dao.getById(it) }?.takeIf {
                             it.name == remote.name && it.createdAt == remote.createdAt && it.parentId == parentId
                         }
                         if (legacy != null) legacy else {
-                            val validParent = parentId?.takeIf { dao.getById(it) != null }
-                            val row = FolderEntity(name = InputValidator.sanitizeName(remote.name).ifBlank { "مجلد سحابي" },
-                                parentId = validParent, createdAt = remote.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis())
-                            row.copy(id = dao.insert(row))
+                            val safeName = InputValidator.sanitizeName(remote.name).ifBlank { "مجلد سحابي" }
+                            val existing = CloudDownloadPlacement.findExistingLocalFolder(
+                                dao.getAllOnce(), safeName, validParent
+                            )
+                            existing ?: run {
+                                val row = FolderEntity(
+                                    name = safeName,
+                                    parentId = validParent,
+                                    createdAt = remote.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
+                                )
+                                row.copy(id = dao.insert(row))
+                            }
                         }
                     }
                 }

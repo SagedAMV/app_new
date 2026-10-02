@@ -1,5 +1,6 @@
 package com.unihub.app.data.cloud
 
+import com.unihub.app.data.local.entity.FolderEntity
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -33,6 +34,28 @@ class CloudDownloadPlacementTest {
     @Test fun defaultNameIsUsedOnlyForNewSubfolderNotUserParent() {
         val target = CloudDownloadDestination(CloudDownloadLocation.FOLDER_INSIDE_LOCAL, 7)
         assertEquals("صور", CloudDownloadPlacement.localRootName(target, folders[1]))
+    }
+    @Test fun existingLocalFolderIsMatchedOnlyAtTheSameParentIncludingRoot() {
+        val localFolders = listOf(
+            FolderEntity(id = 1, name = "علوم"),
+            FolderEntity(id = 2, name = "علوم", parentId = 7),
+            FolderEntity(id = 3, name = "علوم", parentId = 8)
+        )
+
+        assertEquals(2L, CloudDownloadPlacement.findExistingLocalFolder(localFolders, "علوم", 7)?.id)
+        assertEquals(1L, CloudDownloadPlacement.findExistingLocalFolder(localFolders, "علوم", null)?.id)
+        assertNull(CloudDownloadPlacement.findExistingLocalFolder(localFolders, "علوم", 9))
+    }
+    @Test fun localFolderMatchNormalizesNameAndPreservesTheOldestFolder() {
+        val newest = FolderEntity(id = 9, name = "projects", parentId = 7)
+        val original = FolderEntity(id = 4, name = "  Projects  ", parentId = 7)
+
+        val matched = CloudDownloadPlacement.findExistingLocalFolder(
+            listOf(newest, original), "  PROJECTS  ", 7
+        )
+
+        assertEquals(4L, matched?.id)
+        assertEquals("  Projects  ", matched?.name)
     }
     @Test fun defaultLocationIsTheRecommendedCloudTreeFromSingleSource() {
         // جولة تعليمات.md: «ترتيب تلقائي .. موصى بة» مفعّل افتراضياً — المصدر الوحيد
