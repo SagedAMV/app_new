@@ -873,11 +873,12 @@
                     card.classList.add('selected');
                 }
 
-                // Register with Intersection Observer to save power
+                // Start animation immediately so it's visible even without scroll event
+                startCanvasAnimation(item.id, item.renderType);
+
+                // Register with Intersection Observer to save power on long scrolls
                 if (window.IntersectionObserver) {
                     cardObserver.observe(card);
-                } else {
-                    startCanvasAnimation(item.id, item.renderType);
                 }
             });
 
@@ -992,17 +993,21 @@
 
             function resize() {
                 const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width * (window.devicePixelRatio || 1);
-                canvas.height = rect.height * (window.devicePixelRatio || 1);
+                const w = (rect.width && rect.width > 30) ? rect.width : 340;
+                const h = (rect.height && rect.height > 30) ? rect.height : 220;
+                canvas.width = w * (window.devicePixelRatio || 1);
+                canvas.height = h * (window.devicePixelRatio || 1);
                 ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
             }
             resize();
+            window.addEventListener('resize', resize);
 
             let time = Math.random() * 100;
 
             function draw() {
-                const w = canvas.getBoundingClientRect().width;
-                const h = canvas.getBoundingClientRect().height;
+                const rect = canvas.getBoundingClientRect();
+                const w = (rect.width && rect.width > 30) ? rect.width : 340;
+                const h = (rect.height && rect.height > 30) ? rect.height : 220;
                 ctx.clearRect(0, 0, w, h);
 
                 time += 0.02;
@@ -1221,10 +1226,18 @@
             ctx.restore();
         }
 
-        // Run on load
-        window.addEventListener('DOMContentLoaded', () => {
+        // Safe Direct Execution (Fixing race condition where DOMContentLoaded already fired)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initGallery);
+        } else {
             initGallery();
-        });
+        }
+        // Fallback safety invocation
+        setTimeout(() => {
+            if (grid.children.length === 0) {
+                initGallery();
+            }
+        }, 100);
     </script>
 </body>
 </html>
