@@ -1,5 +1,27 @@
 package com.unihub.app.feature.auth
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +44,6 @@ import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
@@ -45,10 +67,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,7 +91,8 @@ import kotlinx.coroutines.delay
 
 /**
  * البوابة الأمنية الرئيسية للتطبيق:
- * - عند أول تشغيل أو عدم وجود جلسة موثقة: تعرض شاشة تسجيل الدخول السحابي.
+ * - عند أول تشغيل أو عدم وجود جلسة موثقة: تعرض شاشة تسجيل الدخول السحابي بأنيميشن متكامل
+ *   ودون إظهار نص نوع الجهاز أو إصدار الأندرويد.
  * - عند تسجيل الدخول من جهاز مختلف: تعرض شاشة انتظار المشرف مع الرسالة النصية
  *   المطلوبة حرفياً («سيرد لك مشرف») وفحص تلقائي ويدوي لرد المشرف.
  * - عند توثيق الجلسة والجهاز: تفتح التطبيق تلقائياً وتعرض للمشرف (saged)
@@ -79,90 +106,121 @@ fun AuthGateScreen(
     val session by viewModel.sessionState.collectAsStateWithLifecycle()
     val registry by viewModel.registry.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
-    val deviceLabel by viewModel.currentDeviceLabel.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val dismissedIds by viewModel.dismissedRequestIds.collectAsStateWithLifecycle()
 
-    when (val current = session) {
-        AuthSessionState.Initializing -> {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            "جارٍ التحقق من الجلسة وبصمة الجهاز…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+    AnimatedContent(
+        targetState = session,
+        contentKey = { state ->
+            when (state) {
+                AuthSessionState.Initializing -> "Initializing"
+                is AuthSessionState.Unauthenticated -> "Unauthenticated"
+                is AuthSessionState.WaitingAdminApproval -> "WaitingAdminApproval"
+                is AuthSessionState.Authenticated -> "Authenticated"
+            }
+        },
+        transitionSpec = {
+            (fadeIn(animationSpec = tween(380, easing = FastOutSlowInEasing)) +
+                slideInVertically(
+                    animationSpec = tween(380, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it / 14 }
+                ) +
+                scaleIn(
+                    animationSpec = tween(380, easing = FastOutSlowInEasing),
+                    initialScale = 0.96f
+                )).togetherWith(
+                fadeOut(animationSpec = tween(260)) +
+                    slideOutVertically(
+                        animationSpec = tween(260),
+                        targetOffsetY = { -it / 18 }
+                    ) +
+                    scaleOut(
+                        animationSpec = tween(260),
+                        targetScale = 0.98f
+                    )
+            )
+        },
+        label = "AuthGateTransition"
+    ) { current ->
+        when (current) {
+            AuthSessionState.Initializing -> {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                "جارٍ التحقق من الجلسة السحابية…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        is AuthSessionState.Unauthenticated -> {
-            CloudLoginScreen(
-                deviceLabel = deviceLabel,
-                isBusy = isBusy,
-                initialError = errorMessage ?: current.message,
-                statusMessage = statusMessage,
-                onLogin = viewModel::login
-            )
-        }
-
-        is AuthSessionState.WaitingAdminApproval -> {
-            LaunchedEffect(current.username) {
-                while (true) {
-                    delay(8_000L)
-                    viewModel.checkPendingStatus(silent = true)
-                }
-            }
-            PendingAdminApprovalScreen(
-                username = current.username,
-                deviceLabel = current.requestedDevice.summaryLabel,
-                message = statusMessage ?: current.message,
-                statusNote = current.statusNote,
-                errorMessage = errorMessage,
-                isBusy = isBusy,
-                onCheckNow = { viewModel.checkPendingStatus(silent = false) },
-                onSwitchAccount = viewModel::cancelPendingAndBackToLogin
-            )
-        }
-
-        is AuthSessionState.Authenticated -> {
-            val isAdmin = current.user.isAdmin
-            val pendingForAdmin = if (isAdmin) {
-                registry.pendingDeviceRequests
-                    .firstOrNull {
-                        it.status == DeviceApprovalStatus.PENDING &&
-                            it.requestId !in dismissedIds
-                    }
-            } else {
-                null
-            }
-
-            if (pendingForAdmin != null) {
-                AdminDeviceApprovalDialog(
-                    request = pendingForAdmin,
+            is AuthSessionState.Unauthenticated -> {
+                CloudLoginScreen(
                     isBusy = isBusy,
-                    onApprove = { viewModel.approveDeviceRequest(pendingForAdmin) },
-                    onReject = { viewModel.rejectDeviceRequest(pendingForAdmin) },
-                    onDismiss = { viewModel.dismissDeviceRequestPopup(pendingForAdmin.requestId) }
+                    initialError = errorMessage ?: current.message,
+                    statusMessage = statusMessage,
+                    onLogin = viewModel::login
                 )
             }
 
-            content()
+            is AuthSessionState.WaitingAdminApproval -> {
+                LaunchedEffect(current.username) {
+                    while (true) {
+                        delay(8_000L)
+                        viewModel.checkPendingStatus(silent = true)
+                    }
+                }
+                PendingAdminApprovalScreen(
+                    username = current.username,
+                    deviceLabel = current.requestedDevice.summaryLabel,
+                    message = statusMessage ?: current.message,
+                    statusNote = current.statusNote,
+                    errorMessage = errorMessage,
+                    isBusy = isBusy,
+                    onCheckNow = { viewModel.checkPendingStatus(silent = false) },
+                    onSwitchAccount = viewModel::cancelPendingAndBackToLogin
+                )
+            }
+
+            is AuthSessionState.Authenticated -> {
+                val isAdmin = current.user.isAdmin
+                val pendingForAdmin = if (isAdmin) {
+                    registry.pendingDeviceRequests
+                        .firstOrNull {
+                            it.status == DeviceApprovalStatus.PENDING &&
+                                it.requestId !in dismissedIds
+                        }
+                } else {
+                    null
+                }
+
+                if (pendingForAdmin != null) {
+                    AdminDeviceApprovalDialog(
+                        request = pendingForAdmin,
+                        isBusy = isBusy,
+                        onApprove = { viewModel.approveDeviceRequest(pendingForAdmin) },
+                        onReject = { viewModel.rejectDeviceRequest(pendingForAdmin) },
+                        onDismiss = { viewModel.dismissDeviceRequestPopup(pendingForAdmin.requestId) }
+                    )
+                }
+
+                content()
+            }
         }
     }
 }
 
 @Composable
 private fun CloudLoginScreen(
-    deviceLabel: String,
     isBusy: Boolean,
     initialError: String?,
     statusMessage: String?,
@@ -171,6 +229,63 @@ private fun CloudLoginScreen(
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+
+    // أنيميشن الدخول المتدرج (Staggered Entrance) لعناصر واجهة تسجيل الدخول
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        entered = true
+    }
+
+    val headerProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "LoginHeaderProgress"
+    )
+    val cardProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 580, delayMillis = 110, easing = FastOutSlowInEasing),
+        label = "LoginCardProgress"
+    )
+    val buttonScale by animateFloatAsState(
+        targetValue = if (isBusy) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "LoginButtonScale"
+    )
+
+    // أنيميشن نبض وهالة مستمرة حول أيقونة درع الحماية
+    val infiniteTransition = rememberInfiniteTransition(label = "LoginHeroPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ShieldPulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ShieldPulseAlpha"
+    )
+    val floatOffsetY by infiniteTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ShieldFloatOffsetY"
+    )
+
+    val canSubmit = !isBusy && username.isNotBlank() && password.isNotBlank()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -189,46 +304,97 @@ private fun CloudLoginScreen(
                     .padding(horizontal = 24.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(72.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(36.dp)
-                        )
+                // قسم الشعار والترحيب المتحرك
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = headerProgress
+                        translationY = (1f - headerProgress) * -36f
+                        scaleX = 0.9f + (0.1f * headerProgress)
+                        scaleY = 0.9f + (0.1f * headerProgress)
                     }
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(104.dp)
+                            .graphicsLayer {
+                                translationY = floatOffsetY
+                            }
+                    ) {
+                        // هالة خارجية نابضة
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .graphicsLayer {
+                                    scaleX = pulseScale
+                                    scaleY = pulseScale
+                                    alpha = pulseAlpha
+                                }
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
+                                        )
+                                    )
+                                )
+                        )
+
+                        Surface(
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.size(74.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Security,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "تسجيل الدخول إلى UniHub",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "أدخل بيانات حسابك السحابي للمتابعة إلى مساحة عملك الجامعية",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
                 }
 
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "تسجيل الدخول إلى UniHub",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "توثيق سحابي محمي ببصمة الجهاز — يتطلب الاتصال بالإنترنت عند أول تسجيل دخول",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+                Spacer(Modifier.height(24.dp))
 
-                Spacer(Modifier.height(22.dp))
-
+                // بطاقة حقول الإدخال المتحركة (بدون أي نص يعرض نوع الجهاز أو إصدار الأندرويد)
                 ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = cardProgress
+                            translationY = (1f - cardProgress) * 44f
+                            scaleX = 0.95f + (0.05f * cardProgress)
+                            scaleY = 0.95f + (0.05f * cardProgress)
+                        },
+                    shape = MaterialTheme.shapes.large,
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         OutlinedTextField(
                             value = username,
@@ -252,10 +418,16 @@ private fun CloudLoginScreen(
                             leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                             trailingIcon = {
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                        contentDescription = if (passwordVisible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
-                                    )
+                                    Crossfade(
+                                        targetState = passwordVisible,
+                                        animationSpec = tween(220),
+                                        label = "PasswordVisibilityIcon"
+                                    ) { visible ->
+                                        Icon(
+                                            imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                            contentDescription = if (visible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
+                                        )
+                                    }
                                 }
                             },
                             visualTransformation = if (passwordVisible) {
@@ -271,39 +443,25 @@ private fun CloudLoginScreen(
                             ),
                             keyboardActions = KeyboardActions(
                                 onDone = {
-                                    if (!isBusy && username.isNotBlank() && password.isNotBlank()) {
+                                    if (canSubmit) {
                                         onLogin(username, password)
                                     }
                                 }
                             )
                         )
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 2.dp)
+                        AnimatedVisibility(
+                            visible = !initialError.isNullOrBlank(),
+                            enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
+                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.PhoneAndroid,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "الجهاز الحالي: $deviceLabel",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        if (!initialError.isNullOrBlank()) {
                             Surface(
                                 color = MaterialTheme.colorScheme.errorContainer,
                                 shape = MaterialTheme.shapes.small,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = initialError,
+                                    text = initialError.orEmpty(),
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(12.dp)
@@ -311,14 +469,18 @@ private fun CloudLoginScreen(
                             }
                         }
 
-                        if (!statusMessage.isNullOrBlank()) {
+                        AnimatedVisibility(
+                            visible = !statusMessage.isNullOrBlank(),
+                            enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
+                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
+                        ) {
                             Surface(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                                 shape = MaterialTheme.shapes.small,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = statusMessage,
+                                    text = statusMessage.orEmpty(),
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(12.dp)
@@ -328,23 +490,41 @@ private fun CloudLoginScreen(
 
                         Button(
                             onClick = { onLogin(username, password) },
-                            enabled = !isBusy && username.isNotBlank() && password.isNotBlank(),
+                            enabled = canSubmit,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(50.dp)
+                                .graphicsLayer {
+                                    scaleX = buttonScale
+                                    scaleY = buttonScale
+                                }
                         ) {
-                            if (isBusy) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Text("جارٍ التحقق من السحابة…")
-                            } else {
-                                Icon(Icons.Filled.CloudQueue, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("تسجيل الدخول")
+                            AnimatedContent(
+                                targetState = isBusy,
+                                transitionSpec = {
+                                    (fadeIn(tween(220)) + scaleIn(initialScale = 0.92f))
+                                        .togetherWith(fadeOut(tween(180)) + scaleOut(targetScale = 0.92f))
+                                },
+                                label = "LoginButtonContent"
+                            ) { busy ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    if (busy) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("جارٍ التحقق من السحابة…")
+                                    } else {
+                                        Icon(Icons.Filled.CloudQueue, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("تسجيل الدخول")
+                                    }
+                                }
                             }
                         }
                     }
@@ -365,6 +545,17 @@ private fun PendingAdminApprovalScreen(
     onCheckNow: () -> Unit,
     onSwitchAccount: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "PendingApprovalPulse")
+    val iconPulse by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "HourglassPulse"
+    )
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
@@ -393,7 +584,12 @@ private fun PendingAdminApprovalScreen(
                     Surface(
                         shape = MaterialTheme.shapes.extraLarge,
                         color = MaterialTheme.colorScheme.tertiaryContainer,
-                        modifier = Modifier.size(68.dp)
+                        modifier = Modifier
+                            .size(68.dp)
+                            .graphicsLayer {
+                                scaleX = iconPulse
+                                scaleY = iconPulse
+                            }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -420,23 +616,23 @@ private fun PendingAdminApprovalScreen(
                         textAlign = TextAlign.Center
                     )
 
-                    if (!statusNote.isNullOrBlank()) {
+                    AnimatedVisibility(visible = !statusNote.isNullOrBlank()) {
                         Text(
-                            text = statusNote,
+                            text = statusNote.orEmpty(),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.tertiary,
                             textAlign = TextAlign.Center
                         )
                     }
 
-                    if (!errorMessage.isNullOrBlank()) {
+                    AnimatedVisibility(visible = !errorMessage.isNullOrBlank()) {
                         Surface(
                             color = MaterialTheme.colorScheme.errorContainer,
                             shape = MaterialTheme.shapes.small,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = errorMessage,
+                                text = errorMessage.orEmpty(),
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(12.dp),

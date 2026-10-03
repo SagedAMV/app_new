@@ -117,10 +117,6 @@ class CloudAuthManager @Inject constructor(
         }
     }
 
-    /** الحصول على بيانات الجهاز الحالي وبصمته. */
-    suspend fun getCurrentDeviceInfo(): BoundDeviceInfo =
-        deviceFingerprintProvider.getDeviceInfo()
-
     /** هل توجد جلسة مستخدم مصادق عليها حالياً على هذا الجهاز؟ */
     fun isAuthenticatedNow(): Boolean =
         _sessionState.value is AuthSessionState.Authenticated

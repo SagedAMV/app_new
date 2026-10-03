@@ -23,9 +23,6 @@ class AuthViewModel @Inject constructor(
     val registry = authManager.registryState
     val isBusy: StateFlow<Boolean> = authManager.isBusy
 
-    private val _currentDeviceLabel = MutableStateFlow("جارٍ قراءة بصمة الجهاز…")
-    val currentDeviceLabel: StateFlow<String> = _currentDeviceLabel.asStateFlow()
-
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
@@ -35,12 +32,6 @@ class AuthViewModel @Inject constructor(
     /** معرّف الطلبات التي أغلق المشرف نافذتها المنبثقة مؤقتاً في هذه الجلسة */
     private val _dismissedRequestIds = MutableStateFlow<Set<String>>(emptySet())
     val dismissedRequestIds: StateFlow<Set<String>> = _dismissedRequestIds.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            _currentDeviceLabel.value = authManager.getCurrentDeviceInfo().summaryLabel
-        }
-    }
 
     private fun clearMessages() {
         _statusMessage.value = null
