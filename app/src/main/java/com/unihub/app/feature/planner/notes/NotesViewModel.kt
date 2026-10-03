@@ -26,19 +26,27 @@ class NotesViewModel @Inject constructor(
     private val query = MutableStateFlow("")
     val searchQuery: StateFlow<String> = query.asStateFlow()
 
+    private val filter = MutableStateFlow(NoteFilter.ALL)
+    val currentFilter: StateFlow<NoteFilter> = filter.asStateFlow()
+
     private val allNotes = noteRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** الملاحظات المعروضة بعد البحث — البحث يشمل العنوان والمحتوى */
+    /**
+     * الملاحظات المعروضة بعد تطبيق مرشح النوع والبحث الذكي.
+     * يبحث في العنوان والملخص والنصوص الفعلية داخل الفقرات والبطاقات والجداول والمهام
+     * دون مطابقة مفاتيح JSON الداخلية أو نقاط الرسم.
+     */
     val notes: StateFlow<List<NoteEntity>> =
-        combine(allNotes, query) { notes, q ->
-            // القص عند الاستخدام لا أثناء الكتابة (انظر setSearchQuery) حتى
-            // تبقى مسافة لوحة المفاتيح قابلة للكتابة في البحث متعدد الكلمات
-            val trimmed = q.trim()
-            if (trimmed.isBlank()) notes
-            else notes.filter {
-                it.title.contains(trimmed, ignoreCase = true) ||
-                    it.content.contains(trimmed, ignoreCase = true)
+        combine(allNotes, query, filter) { notes, q, currentFilter ->
+            notes.filter { note ->
+                NoteWorkspaceCodec.matchesFilterAndQuery(
+                    title = note.title,
+                    rawContent = note.content,
+                    isPinned = note.isPinned,
+                    filter = currentFilter,
+                    query = q
+                )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -47,42 +55,85 @@ class NotesViewModel @Inject constructor(
         query.value = value
     }
 
-    fun save(editing: NoteEntity?, title: String, content: String) {
+    fun setFilter(value: NoteFilter) {
+        filter.value = value
+    }
+
+    /**
+     * حفظ وثيقة ملاحظة غنية (إنشاء أو تعديل).
+     * يعيد `true` إذا قُبل الحفظ، و`false` إذا كانت الملاحظة فارغة تماماً.
+     */
+    fun saveDocument(
+        editing: NoteEntity?,
+        title: String,
+        isPinned: Boolean,
+        document: NoteWorkspaceDocument
+    ): Boolean {
+        val hasTitle = title.isNotBlank()
+        val hasContent = document.hasMeaningfulContent()
+        if (!hasTitle && !hasContent) {
+            messenger.notifyError("اكتب عنواناً أو أضف محتوى للملاحظة أولاً")
+            return false
+        }
+
+        val candidateTitle = title.trim().ifBlank { document.suggestedFallbackTitle() }
+        val validTitle = InputValidator.validateTitle(candidateTitle)
+            .getOrElse { candidateTitle.take(InputValidator.MAX_TITLE_LENGTH).ifBlank { "ملاحظة بلا عنوان" } }
+
+        val encodedContent = NoteWorkspaceCodec.encode(document)
+
         viewModelScope.launch {
-            // ملاحظة فارغة تماماً = خطأ مستخدم — نرفضها بلطف بدل حفظ ورقة بيضاء
-            if (editing == null && title.isBlank() && content.isBlank()) {
-                messenger.notifyError("اكتب عنواناً أو محتوى للملاحظة أولاً")
-                return@launch
-            }
-
-            val validTitle = InputValidator.validateTitle(title.ifBlank { "ملاحظة بلا عنوان" })
-                .getOrElse { "ملاحظة بلا عنوان" }
-
             runCatching {
                 if (editing == null) {
                     noteRepository.create(
                         NoteEntity(
                             title = validTitle,
-                            content = InputValidator.sanitizeText(content)
+                            content = encodedContent,
+                            isPinned = isPinned
                         )
                     )
                 } else {
                     noteRepository.update(
                         editing.copy(
                             title = validTitle,
-                            content = InputValidator.sanitizeText(content)
+                            content = encodedContent,
+                            isPinned = isPinned
                         )
                     )
                 }
-            }.onSuccess { messenger.notify(if (editing == null) "أُضيفت الملاحظة" else "تم الحفظ") }
-                .onFailure { messenger.notifyError("تعذّر حفظ الملاحظة") }
+            }.onSuccess {
+                messenger.notify(if (editing == null) "أُضيفت الملاحظة" else "تم حفظ التعديلات")
+            }.onFailure {
+                messenger.notifyError("تعذّر حفظ الملاحظة")
+            }
         }
+        return true
     }
 
     fun togglePin(note: NoteEntity) {
         viewModelScope.launch {
             runCatching { noteRepository.togglePinned(note) }
                 .onFailure { messenger.notifyError("تعذّر تحديث التثبيت") }
+        }
+    }
+
+    fun duplicate(note: NoteEntity) {
+        viewModelScope.launch {
+            val copyTitle = InputValidator.validateTitle("${note.title} (نسخة)")
+                .getOrElse { note.title.take(InputValidator.MAX_TITLE_LENGTH) }
+            runCatching {
+                noteRepository.create(
+                    NoteEntity(
+                        title = copyTitle,
+                        content = note.content,
+                        isPinned = note.isPinned
+                    )
+                )
+            }.onSuccess {
+                messenger.notify("تم نسخ الملاحظة")
+            }.onFailure {
+                messenger.notifyError("تعذّر نسخ الملاحظة")
+            }
         }
     }
 
