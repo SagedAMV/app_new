@@ -518,4 +518,117 @@ class NoteWorkspaceTest {
 
         assertTrue(doc.hasMeaningfulContent())
     }
+
+    // ========================================================================
+    // S11: بطاقات الورقة الموحدة متعددة الأشكال والإحداثيات القابلة للتحريك
+    // ========================================================================
+    @Test
+    fun s11_multiShapedDraggableCards_preservesShapesPositionsAndColors() {
+        // Arrange: 5 بطاقات بالأشكال الخمسة المطلوبة مع إحداثيات نسبية وألوان باستيل
+        val cards = listOf(
+            IdeaCardItem(
+                id = "card-rounded",
+                title = "ملاحظة دائرية",
+                details = "مستطيل مدور الحواف",
+                colorHex = "#FEF3C7",
+                xPercent = 0.15f,
+                yPercent = 0.20f,
+                shape = IdeaCardShape.ROUNDED
+            ),
+            IdeaCardItem(
+                id = "card-sticky",
+                title = "ورقة لاصقة",
+                details = "زاوية مطوية 3D",
+                colorHex = "#D1FAE5",
+                xPercent = 0.55f,
+                yPercent = 0.25f,
+                shape = IdeaCardShape.FOLDED_STICKY
+            ),
+            IdeaCardItem(
+                id = "card-capsule",
+                title = "فكرة كبسولية",
+                details = "شكل بيضاوي ناعم",
+                colorHex = "#DBEAFE",
+                xPercent = 0.30f,
+                yPercent = 0.60f,
+                shape = IdeaCardShape.CAPSULE
+            ),
+            IdeaCardItem(
+                id = "card-cut",
+                title = "نوتة مشطوفة",
+                details = "شكل هندسي زاوي",
+                colorHex = "#FFE4E6",
+                xPercent = 0.70f,
+                yPercent = 0.65f,
+                shape = IdeaCardShape.CUT_CORNER
+            ),
+            IdeaCardItem(
+                id = "card-badge",
+                title = "شارة أفكار",
+                details = "وسم مميز",
+                colorHex = "#EDE9FE",
+                xPercent = 0.40f,
+                yPercent = 0.85f,
+                shape = IdeaCardShape.BADGE
+            )
+        )
+
+        val doc = NoteWorkspaceDocument(
+            colorTag = NoteColorTag.IDEA,
+            summary = "عصف ذهني على الورقة الموحدة",
+            blocks = listOf(NoteBlock.IdeaBoard(boardTitle = "أفكار الورقة", cards = cards))
+        )
+
+        // Act
+        val encoded = NoteWorkspaceCodec.encode(doc)
+        val decoded = NoteWorkspaceCodec.decode(encoded)
+        val decodedBoard = decoded.blocks.first() as NoteBlock.IdeaBoard
+
+        // Assert: التحقق من دقة استرجاع الأشكال والإحداثيات والألوان
+        assertEquals(5, decodedBoard.cards.size)
+        assertEquals(IdeaCardShape.ROUNDED, decodedBoard.cards[0].shape)
+        assertEquals(0.15f, decodedBoard.cards[0].xPercent, 0.001f)
+        assertEquals(0.20f, decodedBoard.cards[0].yPercent, 0.001f)
+        assertEquals("#FEF3C7", decodedBoard.cards[0].colorHex)
+
+        assertEquals(IdeaCardShape.FOLDED_STICKY, decodedBoard.cards[1].shape)
+        assertEquals(0.55f, decodedBoard.cards[1].xPercent, 0.001f)
+
+        assertEquals(IdeaCardShape.CAPSULE, decodedBoard.cards[2].shape)
+        assertEquals(IdeaCardShape.CUT_CORNER, decodedBoard.cards[3].shape)
+        assertEquals(IdeaCardShape.BADGE, decodedBoard.cards[4].shape)
+    }
+
+    // ========================================================================
+    // S12: تنسيق الخطوط المتقدم (تكبير، تصغير، عريض، ولون النص)
+    // ========================================================================
+    @Test
+    fun s12_richTextFormatting_preservesFontSizeBoldAndColor() {
+        // Arrange: فقرة نصية بتنسيقات مخصصة
+        val section = NoteBlock.TextSection(
+            id = "txt-formatted",
+            heading = "عنوان رئيسي مكبّر",
+            body = "نص عريض بخط ملون مميز على الورقة البيضاء",
+            style = TextSectionStyle.HEADING,
+            fontSizeSp = 24f,
+            isBold = true,
+            colorHex = "#1E40AF"
+        )
+
+        val doc = NoteWorkspaceDocument(
+            summary = "",
+            blocks = listOf(section)
+        )
+
+        // Act
+        val encoded = NoteWorkspaceCodec.encode(doc)
+        val decoded = NoteWorkspaceCodec.decode(encoded)
+        val decodedSection = decoded.blocks.first() as NoteBlock.TextSection
+
+        // Assert: التحقق من الحفاظ على حجم الخط وسماكته ولونه
+        assertEquals(24f, decodedSection.fontSizeSp, 0.001f)
+        assertTrue(decodedSection.isBold)
+        assertEquals("#1E40AF", decodedSection.colorHex)
+        assertEquals("عنوان رئيسي مكبّر", decodedSection.heading)
+    }
 }

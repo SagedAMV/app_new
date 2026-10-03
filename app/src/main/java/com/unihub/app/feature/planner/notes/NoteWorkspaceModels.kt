@@ -72,13 +72,30 @@ enum class CanvasBackground(val label: String) {
     }
 }
 
-/** بطاقة فكرة واحدة داخل لوحة ترتيب الأفكار */
+/** أشكال بطاقات الأفكار والملاحظات الحرة على ورقة الملاحظة */
+enum class IdeaCardShape(val label: String) {
+    ROUNDED("مستطيل مدور"),
+    FOLDED_STICKY("ورقة لاصقة"),
+    CAPSULE("كبسولة"),
+    CUT_CORNER("زاوية مشطوفة"),
+    BADGE("شارة");
+
+    companion object {
+        fun fromNameOrDefault(name: String?): IdeaCardShape =
+            entries.firstOrNull { it.name == name } ?: ROUNDED
+    }
+}
+
+/** بطاقة فكرة واحدة داخل لوحة ترتيب الأفكار ومساحة الورقة الموحدة */
 data class IdeaCardItem(
     val id: String = newItemId(),
     val title: String = "",
     val details: String = "",
     val tag: String = "فكرة",
-    val colorHex: String = "#4E7D6E"
+    val colorHex: String = "#4E7D6E",
+    val xPercent: Float = 0.5f,
+    val yPercent: Float = 0.5f,
+    val shape: IdeaCardShape = IdeaCardShape.ROUNDED
 )
 
 /** عنصر واحد داخل قائمة مراجعة/مهام الملاحظة */
@@ -116,12 +133,15 @@ data class DrawingStroke(
 sealed interface NoteBlock {
     val id: String
 
-    /** كتلة كتابة نصية منسقة */
+    /** كتلة كتابة نصية منسقة مع خيارات حجم الخط وسماكته ولونه */
     data class TextSection(
         override val id: String = newItemId(),
         val heading: String = "",
         val body: String = "",
-        val style: TextSectionStyle = TextSectionStyle.PARAGRAPH
+        val style: TextSectionStyle = TextSectionStyle.PARAGRAPH,
+        val fontSizeSp: Float = 16f,
+        val isBold: Boolean = false,
+        val colorHex: String = "#222222"
     ) : NoteBlock
 
     /** لوحة بطاقات لترتيب الأفكار والعصف الذهني */
@@ -806,6 +826,9 @@ object NoteWorkspaceCodec {
             .put("heading", InputValidator.sanitizeName(block.heading))
             .put("body", InputValidator.sanitizeText(block.body))
             .put("style", block.style.name)
+            .put("fontSizeSp", block.fontSizeSp.toDouble())
+            .put("isBold", block.isBold)
+            .put("colorHex", sanitizeColorHex(block.colorHex))
 
         is NoteBlock.IdeaBoard -> {
             val cardsArray = JSONArray()
@@ -817,6 +840,9 @@ object NoteWorkspaceCodec {
                         .put("details", InputValidator.sanitizeText(card.details))
                         .put("tag", InputValidator.sanitizeName(card.tag).ifBlank { "فكرة" })
                         .put("colorHex", sanitizeColorHex(card.colorHex))
+                        .put("xPercent", card.xPercent.toDouble())
+                        .put("yPercent", card.yPercent.toDouble())
+                        .put("shape", card.shape.name)
                 )
             }
             JSONObject()
@@ -900,7 +926,10 @@ object NoteWorkspaceCodec {
                 id = id,
                 heading = InputValidator.sanitizeName(obj.optString("heading", "")),
                 body = InputValidator.sanitizeText(obj.optString("body", "")),
-                style = TextSectionStyle.fromNameOrDefault(obj.optString("style"))
+                style = TextSectionStyle.fromNameOrDefault(obj.optString("style")),
+                fontSizeSp = obj.optDouble("fontSizeSp", 16.0).toFloat().coerceIn(10f, 48f),
+                isBold = obj.optBoolean("isBold", false),
+                colorHex = sanitizeColorHex(obj.optString("colorHex", "#222222"))
             )
 
             BLOCK_IDEA_BOARD -> {
@@ -914,7 +943,10 @@ object NoteWorkspaceCodec {
                                 title = InputValidator.sanitizeName(c.optString("title", "")),
                                 details = InputValidator.sanitizeText(c.optString("details", "")),
                                 tag = InputValidator.sanitizeName(c.optString("tag", "فكرة")).ifBlank { "فكرة" },
-                                colorHex = sanitizeColorHex(c.optString("colorHex", "#4E7D6E"))
+                                colorHex = sanitizeColorHex(c.optString("colorHex", "#4E7D6E")),
+                                xPercent = c.optDouble("xPercent", 0.5).toFloat().coerceIn(0f, 1f),
+                                yPercent = c.optDouble("yPercent", 0.5).toFloat().coerceIn(0f, 1f),
+                                shape = IdeaCardShape.fromNameOrDefault(c.optString("shape"))
                             )
                         )
                     }

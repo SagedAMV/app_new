@@ -2,11 +2,36 @@ package com.unihub.app.feature.planner.notes
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
+import kotlin.math.hypot
+import kotlin.math.roundToInt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -59,8 +84,9 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.AutoAwesomeMotion
-import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -636,1220 +662,17 @@ private fun MiniDrawingPreview(
     }
 }
 
-/**
- * محرر مساحة عمل الملاحظة (Note Studio) في نافذة ملء الشاشة.
- * يعزل حركات اللمس والجدول عن `HorizontalPager` في `PlannerScreen`،
- * ويطبق الإفصاح التدريجي للأدوات.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun NoteWorkspaceDialog(
-    session: NoteEditorSession,
-    onDismiss: () -> Unit,
-    onSave: (title: String, isPinned: Boolean, document: NoteWorkspaceDocument) -> Unit,
-    onDelete: (() -> Unit)?
-) {
-    var title by remember(session) { mutableStateOf(session.initialTitle) }
-    var isPinned by remember(session) { mutableStateOf(session.initialPinned) }
-    var colorTag by remember(session) { mutableStateOf(session.initialDocument.colorTag) }
-    var summary by remember(session) { mutableStateOf(session.initialDocument.summary) }
-    var showSummaryField by remember(session) {
-        mutableStateOf(session.initialDocument.summary.isNotBlank())
-    }
-    var blocks by remember(session) { mutableStateOf(session.initialDocument.blocks) }
-    var activeDrawingBlockId by remember(session) {
-        mutableStateOf(
-            session.initialDocument.blocks
-                .filterIsInstance<NoteBlock.DrawingBoard>()
-                .firstOrNull { it.strokes.isEmpty() }
-                ?.id
-        )
-    }
-    var showDiscardDialog by remember { mutableStateOf(false) }
 
-    val currentDocument = remember(colorTag, summary, blocks) {
-        NoteWorkspaceDocument(
-            colorTag = colorTag,
-            summary = summary,
-            blocks = blocks
-        )
-    }
-
-    val hasUnsavedChanges = remember(title, isPinned, currentDocument, session) {
-        title != session.initialTitle ||
-            isPinned != session.initialPinned ||
-            NoteWorkspaceCodec.encode(currentDocument) != NoteWorkspaceCodec.encode(session.initialDocument)
-    }
-
-    val handleCloseRequest = {
-        if (hasUnsavedChanges && (title.isNotBlank() || currentDocument.hasMeaningfulContent())) {
-            showDiscardDialog = true
-        } else {
-            onDismiss()
-        }
-    }
-
-    Dialog(
-        onDismissRequest = handleCloseRequest,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = true
-        )
-    ) {
-        BackHandler(onBack = handleCloseRequest)
-
-        val scrollState = rememberScrollState()
-
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            topBar = {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = handleCloseRequest) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
-                        }
-                        Text(
-                            text = if (session.editing == null) "ملاحظة جديدة" else "تحرير الملاحظة",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { isPinned = !isPinned }) {
-                            Icon(
-                                imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                contentDescription = if (isPinned) "إلغاء التثبيت" else "تثبيت",
-                                tint = if (isPinned) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (onDelete != null) {
-                            IconButton(onClick = onDelete) {
-                                Icon(
-                                    imageVector = Icons.Filled.DeleteOutline,
-                                    contentDescription = "حذف الملاحظة",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        FilledTonalButton(
-                            onClick = { onSave(title, isPinned, currentDocument) }
-                        ) {
-                            Text("حفظ")
-                        }
-                    }
-                }
-            },
-            bottomBar = {
-                EditorAddToolBar(
-                    onAddText = {
-                        blocks = blocks + NoteBlock.TextSection()
-                    },
-                    onAddIdeaBoard = {
-                        blocks = blocks + NoteBlock.IdeaBoard(
-                            boardTitle = "ترتيب الأفكار",
-                            cards = listOf(
-                                IdeaCardItem(title = "", details = "", tag = "فكرة", colorHex = "#4E7D6E")
-                            )
-                        )
-                    },
-                    onAddTable = {
-                        blocks = blocks + NoteBlock.TableBlock()
-                    },
-                    onAddDrawing = {
-                        val newBoard = NoteBlock.DrawingBoard()
-                        blocks = blocks + newBoard
-                        activeDrawingBlockId = newBoard.id
-                    },
-                    onAddChecklist = {
-                        blocks = blocks + NoteBlock.ChecklistBlock(
-                            title = "نقاط المراجعة",
-                            items = listOf(ChecklistItem(text = ""))
-                        )
-                    }
-                )
-            }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    // تعطيل التمرير العمودي مؤقتاً أثناء تفعيل القلم على لوحة الرسم لمنع تعارض السحب
-                    .verticalScroll(scrollState, enabled = activeDrawingBlockId == null)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // العنوان الرئيسي
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("عنوان الملاحظة") },
-                    placeholder = { Text("مثال: ملخص الفصل الثالث - الفيزياء…") },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.small
-                )
-
-                // شريط وسم/لون الملاحظة + زر إظهار الملخص السريع (إفصاح تدريجي)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    LazyRow(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(NoteColorTag.entries) { tag ->
-                            val selected = tag == colorTag
-                            val chipColor = tag.colorHex.toComposeColor()
-                            FilterChip(
-                                selected = selected,
-                                onClick = { colorTag = tag },
-                                label = { Text(tag.label) },
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(chipColor)
-                                    )
-                                }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { showSummaryField = !showSummaryField }) {
-                        Text(if (showSummaryField) "إخفاء الملخص" else "+ ملخص سريع")
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = showSummaryField,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    OutlinedTextField(
-                        value = summary,
-                        onValueChange = { summary = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("الملخص السريع (الخلاصة الأساسية للملاحظة)") },
-                        maxLines = 4,
-                        shape = MaterialTheme.shapes.small
-                    )
-                }
-
-                // عرض وتحرير الكتل التفاعلية بالترتيب
-                blocks.forEachIndexed { index, block ->
-                    val canMoveUp = index > 0
-                    val canMoveDown = index < blocks.lastIndex
-                    val canDeleteBlock = blocks.size > 1
-
-                    when (block) {
-                        is NoteBlock.TextSection -> TextSectionEditorCard(
-                            block = block,
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            canDelete = canDeleteBlock,
-                            onMoveUp = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, -1) },
-                            onMoveDown = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, 1) },
-                            onDelete = { blocks = blocks.filterIndexed { i, _ -> i != index } },
-                            onUpdate = { updated ->
-                                blocks = blocks.mapIndexed { i, b -> if (i == index) updated else b }
-                            }
-                        )
-
-                        is NoteBlock.IdeaBoard -> IdeaBoardEditorCard(
-                            block = block,
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            canDelete = canDeleteBlock,
-                            onMoveUp = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, -1) },
-                            onMoveDown = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, 1) },
-                            onDelete = { blocks = blocks.filterIndexed { i, _ -> i != index } },
-                            onUpdate = { updated ->
-                                blocks = blocks.mapIndexed { i, b -> if (i == index) updated else b }
-                            }
-                        )
-
-                        is NoteBlock.TableBlock -> TableBlockEditorCard(
-                            block = block,
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            canDelete = canDeleteBlock,
-                            onMoveUp = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, -1) },
-                            onMoveDown = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, 1) },
-                            onDelete = { blocks = blocks.filterIndexed { i, _ -> i != index } },
-                            onUpdate = { updated ->
-                                blocks = blocks.mapIndexed { i, b -> if (i == index) updated else b }
-                            }
-                        )
-
-                        is NoteBlock.DrawingBoard -> DrawingBoardEditorCard(
-                            block = block,
-                            isDrawingActive = activeDrawingBlockId == block.id,
-                            onToggleDrawingActive = {
-                                activeDrawingBlockId =
-                                    if (activeDrawingBlockId == block.id) null else block.id
-                            },
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            canDelete = canDeleteBlock,
-                            onMoveUp = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, -1) },
-                            onMoveDown = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, 1) },
-                            onDelete = {
-                                if (activeDrawingBlockId == block.id) activeDrawingBlockId = null
-                                blocks = blocks.filterIndexed { i, _ -> i != index }
-                            },
-                            onUpdate = { updated ->
-                                blocks = blocks.mapIndexed { i, b -> if (i == index) updated else b }
-                            }
-                        )
-
-                        is NoteBlock.ChecklistBlock -> ChecklistBlockEditorCard(
-                            block = block,
-                            canMoveUp = canMoveUp,
-                            canMoveDown = canMoveDown,
-                            canDelete = canDeleteBlock,
-                            onMoveUp = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, -1) },
-                            onMoveDown = { blocks = NoteWorkspaceOperations.moveBlock(blocks, index, 1) },
-                            onDelete = { blocks = blocks.filterIndexed { i, _ -> i != index } },
-                            onUpdate = { updated ->
-                                blocks = blocks.mapIndexed { i, b -> if (i == index) updated else b }
-                            }
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(40.dp))
-            }
-        }
-
-        if (showDiscardDialog) {
-            ConfirmDialog(
-                title = "تجاهل التعديلات؟",
-                message = "لديك تعديلات غير محفوظة في هذه الملاحظة. هل تريد الخروج دون حفظ؟",
-                confirmLabel = "خروج دون حفظ",
-                onConfirm = {
-                    showDiscardDialog = false
-                    onDismiss()
-                },
-                onDismiss = { showDiscardDialog = false }
-            )
-        }
-    }
-}
-
-/** شريط الأدوات السفلي لإضافة الكتل والأقسام الجديدة إلى الملاحظة */
-@Composable
-private fun EditorAddToolBar(
-    onAddText: () -> Unit,
-    onAddIdeaBoard: () -> Unit,
-    onAddTable: () -> Unit,
-    onAddDrawing: () -> Unit,
-    onAddChecklist: () -> Unit
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp
-    ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    AssistChip(
-                        onClick = onAddText,
-                        label = { Text("+ نص") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.TextFields, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    )
-                }
-                item {
-                    AssistChip(
-                        onClick = onAddIdeaBoard,
-                        label = { Text("+ بطاقات أفكار") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    )
-                }
-                item {
-                    AssistChip(
-                        onClick = onAddTable,
-                        label = { Text("+ جدول") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    )
-                }
-                item {
-                    AssistChip(
-                        onClick = onAddDrawing,
-                        label = { Text("+ رسم حر") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Draw, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    )
-                }
-                item {
-                    AssistChip(
-                        onClick = onAddChecklist,
-                        label = { Text("+ مهام") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Checklist, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** ترويسة موحدة لكل كتلة في المحرر مع أزرار الترتيب والحذف */
-@Composable
-private fun BlockHeaderBar(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    trailingContent: (@Composable () -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f)
-        )
-        trailingContent?.invoke()
-        if (canMoveUp) {
-            IconButton(onClick = onMoveUp, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Filled.ArrowUpward, contentDescription = "تحريك للأعلى", modifier = Modifier.size(16.dp))
-            }
-        }
-        if (canMoveDown) {
-            IconButton(onClick = onMoveDown, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Filled.ArrowDownward, contentDescription = "تحريك للأسفل", modifier = Modifier.size(16.dp))
-            }
-        }
-        if (canDelete) {
-            IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.DeleteOutline,
-                    contentDescription = "حذف القسم",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
 
 // ============================================================================
-// 1) كتلة الكتابة المنسقة والملخصات النصية
+// الدوال المساعدة للرسم وأشكال البطاقات المخصصة في مساحة الورقة الموحدة
 // ============================================================================
-@Composable
-private fun TextSectionEditorCard(
-    block: NoteBlock.TextSection,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    onUpdate: (NoteBlock.TextSection) -> Unit
-) {
-    val containerColor = when (block.style) {
-        TextSectionStyle.CALLOUT -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
-        else -> MaterialTheme.colorScheme.surface
-    }
 
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        colors = CardDefaults.outlinedCardColors(containerColor = containerColor)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BlockHeaderBar(
-                icon = Icons.Filled.TextFields,
-                label = "كتابة وتلخيص",
-                canMoveUp = canMoveUp,
-                canMoveDown = canMoveDown,
-                canDelete = canDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onDelete = onDelete
-            )
-
-            ChoiceChips(
-                labels = TextSectionStyle.entries.map { it.label },
-                selectedIndex = TextSectionStyle.entries.indexOf(block.style),
-                onSelect = { idx -> onUpdate(block.copy(style = TextSectionStyle.entries[idx])) }
-            )
-
-            OutlinedTextField(
-                value = block.heading,
-                onValueChange = { onUpdate(block.copy(heading = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان الفقرة (اختياري)") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.small
-            )
-
-            OutlinedTextField(
-                value = block.body,
-                onValueChange = { onUpdate(block.copy(body = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text(
-                        when (block.style) {
-                            TextSectionStyle.PARAGRAPH -> "النص أو الشرح"
-                            TextSectionStyle.HEADING -> "النص الرئيسي تحت العنوان"
-                            TextSectionStyle.CALLOUT -> "نص الإضاءة أو التنبيه المهم"
-                            TextSectionStyle.BULLETS -> "النقاط الملخصة (كل نقطة في سطر)"
-                        }
-                    )
-                },
-                minLines = 3,
-                maxLines = 12,
-                shape = MaterialTheme.shapes.small
-            )
-        }
-    }
-}
-
-// ============================================================================
-// 2) كتلة لوحة بطاقات ترتيب الأفكار (Idea Cards Board)
-// ============================================================================
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun IdeaBoardEditorCard(
-    block: NoteBlock.IdeaBoard,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    onUpdate: (NoteBlock.IdeaBoard) -> Unit
-) {
-    val ideaTags = remember { listOf("فكرة", "سؤال", "خطة", "مفهوم", "خلاصة") }
-
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize()
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            BlockHeaderBar(
-                icon = Icons.Filled.Lightbulb,
-                label = "بطاقات ترتيب الأفكار (${block.cards.size})",
-                canMoveUp = canMoveUp,
-                canMoveDown = canMoveDown,
-                canDelete = canDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onDelete = onDelete,
-                trailingContent = {
-                    TextButton(
-                        onClick = {
-                            val nextColor = FolderPalette[block.cards.size % FolderPalette.size]
-                            onUpdate(
-                                block.copy(
-                                    cards = block.cards + IdeaCardItem(
-                                        title = "",
-                                        details = "",
-                                        tag = "فكرة",
-                                        colorHex = nextColor
-                                    )
-                                )
-                            )
-                        }
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("بطاقة")
-                    }
-                }
-            )
-
-            OutlinedTextField(
-                value = block.boardTitle,
-                onValueChange = { onUpdate(block.copy(boardTitle = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان لوحة الأفكار") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.small
-            )
-
-            block.cards.forEachIndexed { cardIndex, card ->
-                val cardColor = card.colorHex.toComposeColor()
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = cardColor.copy(alpha = 0.10f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = cardColor.copy(alpha = 0.45f),
-                                shape = MaterialTheme.shapes.medium
-                            )
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            TintChip(
-                                text = "#${cardIndex + 1} ${card.tag}",
-                                containerColor = cardColor.copy(alpha = 0.22f),
-                                contentColor = cardColor
-                            )
-                            Spacer(Modifier.weight(1f))
-                            // تبديل وسم البطاقة بضغطة سريعة
-                            TextButton(
-                                onClick = {
-                                    val nextTag = ideaTags[(ideaTags.indexOf(card.tag) + 1) % ideaTags.size]
-                                    val updatedCards = block.cards.mapIndexed { idx, c ->
-                                        if (idx == cardIndex) c.copy(tag = nextTag) else c
-                                    }
-                                    onUpdate(block.copy(cards = updatedCards))
-                                }
-                            ) {
-                                Text("نوع: ${card.tag}", style = MaterialTheme.typography.labelSmall)
-                            }
-                            if (cardIndex > 0) {
-                                IconButton(
-                                    onClick = {
-                                        onUpdate(
-                                            block.copy(
-                                                cards = NoteWorkspaceOperations.moveIdeaCard(
-                                                    block.cards,
-                                                    cardIndex,
-                                                    -1
-                                                )
-                                            )
-                                        )
-                                    },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.ArrowUpward,
-                                        contentDescription = "تقديم الفكرة",
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
-                            }
-                            if (cardIndex < block.cards.lastIndex) {
-                                IconButton(
-                                    onClick = {
-                                        onUpdate(
-                                            block.copy(
-                                                cards = NoteWorkspaceOperations.moveIdeaCard(
-                                                    block.cards,
-                                                    cardIndex,
-                                                    1
-                                                )
-                                            )
-                                        )
-                                    },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.ArrowDownward,
-                                        contentDescription = "تأخير الفكرة",
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
-                            }
-                            if (block.cards.size > 1) {
-                                IconButton(
-                                    onClick = {
-                                        onUpdate(
-                                            block.copy(
-                                                cards = block.cards.filterIndexed { idx, _ -> idx != cardIndex }
-                                            )
-                                        )
-                                    },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "حذف البطاقة",
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // دوائر اختيار لون البطاقة
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FolderPalette.take(6).forEach { hex ->
-                                val swatch = hex.toComposeColor()
-                                val isSelected = hex.equals(card.colorHex, ignoreCase = true)
-                                Box(
-                                    modifier = Modifier
-                                        .size(if (isSelected) 22.dp else 18.dp)
-                                        .clip(CircleShape)
-                                        .background(swatch)
-                                        .border(
-                                            width = if (isSelected) 2.dp else 0.5.dp,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                                            else Color.Transparent,
-                                            shape = CircleShape
-                                        )
-                                        .clickable {
-                                            val updatedCards = block.cards.mapIndexed { idx, c ->
-                                                if (idx == cardIndex) c.copy(colorHex = hex) else c
-                                            }
-                                            onUpdate(block.copy(cards = updatedCards))
-                                        }
-                                )
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = card.title,
-                            onValueChange = { newTitle ->
-                                val updatedCards = block.cards.mapIndexed { idx, c ->
-                                    if (idx == cardIndex) c.copy(title = newTitle) else c
-                                }
-                                onUpdate(block.copy(cards = updatedCards))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("عنوان الفكرة") },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.small
-                        )
-
-                        OutlinedTextField(
-                            value = card.details,
-                            onValueChange = { newDetails ->
-                                val updatedCards = block.cards.mapIndexed { idx, c ->
-                                    if (idx == cardIndex) c.copy(details = newDetails) else c
-                                }
-                                onUpdate(block.copy(cards = updatedCards))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("تفاصيل الفكرة أو الروابط المرتبطة") },
-                            minLines = 2,
-                            maxLines = 5,
-                            shape = MaterialTheme.shapes.small
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ============================================================================
-// 3) كتلة الجداول المرتبة (Structured Table Block)
-// ============================================================================
-@Composable
-private fun TableBlockEditorCard(
-    block: NoteBlock.TableBlock,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    onUpdate: (NoteBlock.TableBlock) -> Unit
-) {
-    val normalized = remember(block) { NoteWorkspaceOperations.normalizeTable(block) }
-    val horizontalScrollState = rememberScrollState()
-
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize()
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BlockHeaderBar(
-                icon = Icons.Filled.TableChart,
-                label = "جدول مرتب (${normalized.rows.size}×${normalized.headers.size})",
-                canMoveUp = canMoveUp,
-                canMoveDown = canMoveDown,
-                canDelete = canDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onDelete = onDelete
-            )
-
-            OutlinedTextField(
-                value = normalized.caption,
-                onValueChange = { onUpdate(normalized.copy(caption = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان الجدول (اختياري)") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.small
-            )
-
-            // أزرار التحكم بأبعاد الجدول (صفوف وأعمدة)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                AssistChip(
-                    onClick = { onUpdate(NoteWorkspaceOperations.addTableRow(normalized)) },
-                    label = { Text("+ صف") }
-                )
-                AssistChip(
-                    onClick = { onUpdate(NoteWorkspaceOperations.removeLastTableRow(normalized)) },
-                    enabled = normalized.rows.size > NoteWorkspaceOperations.MIN_TABLE_ROWS,
-                    label = { Text("- صف") }
-                )
-                AssistChip(
-                    onClick = { onUpdate(NoteWorkspaceOperations.addTableColumn(normalized)) },
-                    enabled = normalized.headers.size < NoteWorkspaceOperations.MAX_TABLE_COLUMNS,
-                    label = { Text("+ عمود") }
-                )
-                AssistChip(
-                    onClick = { onUpdate(NoteWorkspaceOperations.removeLastTableColumn(normalized)) },
-                    enabled = normalized.headers.size > NoteWorkspaceOperations.MIN_TABLE_COLUMNS,
-                    label = { Text("- عمود") }
-                )
-            }
-
-            // شبكة الجدول القابلة للتمرير الأفقي
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(horizontalScrollState)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .clip(RoundedCornerShape(10.dp))
-            ) {
-                // صف ترويسة الأعمدة
-                Row(
-                    modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f))
-                ) {
-                    normalized.headers.forEachIndexed { colIndex, headerText ->
-                        OutlinedTextField(
-                            value = headerText,
-                            onValueChange = { newHeader ->
-                                onUpdate(
-                                    NoteWorkspaceOperations.updateTableHeader(
-                                        normalized,
-                                        colIndex,
-                                        newHeader
-                                    )
-                                )
-                            },
-                            modifier = Modifier
-                                .width(150.dp)
-                                .padding(4.dp),
-                            label = { Text("عمود ${colIndex + 1}") },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.extraSmall
-                        )
-                    }
-                }
-
-                // صفوف البيانات
-                normalized.rows.forEachIndexed { rowIndex, rowCells ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Row {
-                        rowCells.forEachIndexed { colIndex, cellText ->
-                            OutlinedTextField(
-                                value = cellText,
-                                onValueChange = { newValue ->
-                                    onUpdate(
-                                        NoteWorkspaceOperations.updateTableCell(
-                                            normalized,
-                                            rowIndex,
-                                            colIndex,
-                                            newValue
-                                        )
-                                    )
-                                },
-                                modifier = Modifier
-                                    .width(150.dp)
-                                    .padding(4.dp),
-                                placeholder = { Text("صف ${rowIndex + 1}") },
-                                singleLine = false,
-                                maxLines = 3,
-                                shape = MaterialTheme.shapes.extraSmall
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ============================================================================
-// 4) كتلة لوحة الرسم الحر على الملاحظة (Freehand Drawing Canvas)
-// ============================================================================
-private enum class DrawingToolMode(val label: String) {
-    PEN("قلم"),
-    HIGHLIGHTER("تظليل"),
-    ERASER("ممحاة")
-}
-
-@Composable
-private fun DrawingBoardEditorCard(
-    block: NoteBlock.DrawingBoard,
-    isDrawingActive: Boolean,
-    onToggleDrawingActive: () -> Unit,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    onUpdate: (NoteBlock.DrawingBoard) -> Unit
-) {
-    val penColors = remember {
-        listOf(
-            "#232B27", // حبر داكن
-            "#3E6B5E", // أخضر بحيري
-            "#5B7FA6", // أزرق هادئ
-            "#C25E52", // أحمر طوبي
-            "#C79A4B", // كهرماني للتظليل
-            "#7D5A7A"  // بنفسجي هادئ
-        )
-    }
-    var toolMode by remember { mutableStateOf(DrawingToolMode.PEN) }
-    var selectedColorHex by remember { mutableStateOf(penColors[1]) }
-    var strokeWidthDp by remember { mutableFloatStateOf(4f) }
-    val currentPoints = remember { mutableStateListOf<NormalizedPoint>() }
-
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize()
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BlockHeaderBar(
-                icon = Icons.Filled.Draw,
-                label = "لوحة الرسم والتخطيط",
-                canMoveUp = canMoveUp,
-                canMoveDown = canMoveDown,
-                canDelete = canDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onDelete = onDelete,
-                trailingContent = {
-                    FilterChip(
-                        selected = isDrawingActive,
-                        onClick = onToggleDrawingActive,
-                        label = { Text(if (isDrawingActive) "وضع الرسم مفعل" else "تفعيل الرسم") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.Brush,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    )
-                }
-            )
-
-            OutlinedTextField(
-                value = block.title,
-                onValueChange = { onUpdate(block.copy(title = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان الرسم التوضيحي") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.small
-            )
-
-            // إفصاح تدريجي: لا تظهر أدوات القلم والألوان والممحاة إلا عند تفعيل الرسم
-            AnimatedVisibility(
-                visible = isDrawingActive,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // السطر الأول: أداة الرسم (قلم / تظليل / ممحاة) + تراجع + مسح الكل
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        DrawingToolMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = toolMode == mode,
-                                onClick = {
-                                    toolMode = mode
-                                    if (mode == DrawingToolMode.HIGHLIGHTER) {
-                                        strokeWidthDp = 14f
-                                    } else if (strokeWidthDp > 10f) {
-                                        strokeWidthDp = 4f
-                                    }
-                                },
-                                label = { Text(mode.label) }
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        IconButton(
-                            onClick = {
-                                onUpdate(
-                                    block.copy(
-                                        strokes = NoteWorkspaceOperations.undoLastStroke(block.strokes)
-                                    )
-                                )
-                            },
-                            enabled = block.strokes.isNotEmpty()
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "تراجع")
-                        }
-                        IconButton(
-                            onClick = { onUpdate(block.copy(strokes = emptyList())) },
-                            enabled = block.strokes.isNotEmpty()
-                        ) {
-                            Icon(Icons.Outlined.DeleteSweep, contentDescription = "مسح اللوحة")
-                        }
-                    }
-
-                    // السطر الثاني: الألوان + السماكة + نمط الورقة
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        penColors.forEach { hex ->
-                            val color = hex.toComposeColor()
-                            val selected = selectedColorHex.equals(hex, ignoreCase = true)
-                            Box(
-                                modifier = Modifier
-                                    .size(if (selected) 26.dp else 20.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (selected) 2.dp else 0.5.dp,
-                                        color = if (selected) MaterialTheme.colorScheme.onSurface
-                                        else Color.Transparent,
-                                        shape = CircleShape
-                                    )
-                                    .clickable {
-                                        selectedColorHex = hex
-                                        if (toolMode == DrawingToolMode.ERASER) {
-                                            toolMode = DrawingToolMode.PEN
-                                        }
-                                    }
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        AssistChip(
-                            onClick = {
-                                val nextBg = CanvasBackground.entries[
-                                    (CanvasBackground.entries.indexOf(block.background) + 1) %
-                                        CanvasBackground.entries.size
-                                ]
-                                onUpdate(block.copy(background = nextBg))
-                            },
-                            label = { Text("ورق: ${block.background.label}") },
-                            leadingIcon = {
-                                Icon(Icons.Filled.GridOn, contentDescription = null, modifier = Modifier.size(15.dp))
-                            }
-                        )
-                    }
-                }
-            }
-
-            // مساحة الرسم الفعلية
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PaperSurface)
-                    .border(
-                        width = if (isDrawingActive) 1.5.dp else 1.dp,
-                        color = if (isDrawingActive) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-            ) {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(
-                            if (isDrawingActive) {
-                                Modifier
-                                    .pointerInput(block.id, toolMode, selectedColorHex, strokeWidthDp, block.strokes) {
-                                        detectTapGestures { offset ->
-                                            if (size.width <= 0 || size.height <= 0) return@detectTapGestures
-                                            val nx = (offset.x / size.width).coerceIn(0f, 1f)
-                                            val ny = (offset.y / size.height).coerceIn(0f, 1f)
-                                            if (toolMode == DrawingToolMode.ERASER) {
-                                                onUpdate(
-                                                    block.copy(
-                                                        strokes = NoteWorkspaceOperations.eraseStrokesNear(
-                                                            block.strokes,
-                                                            nx,
-                                                            ny
-                                                        )
-                                                    )
-                                                )
-                                            } else {
-                                                val dotPoint = NormalizedPoint(nx, ny).clamped()
-                                                val dotStroke = DrawingStroke(
-                                                    colorHex = selectedColorHex,
-                                                    widthDp = strokeWidthDp,
-                                                    isHighlighter = toolMode == DrawingToolMode.HIGHLIGHTER,
-                                                    points = listOf(dotPoint, dotPoint)
-                                                )
-                                                onUpdate(block.copy(strokes = block.strokes + dotStroke))
-                                            }
-                                        }
-                                    }
-                                    .pointerInput(block.id, toolMode, selectedColorHex, strokeWidthDp, block.strokes) {
-                                        detectDragGestures(
-                                            onDragStart = { startOffset ->
-                                                currentPoints.clear()
-                                                if (size.width > 0 && size.height > 0) {
-                                                    val nx = (startOffset.x / size.width).coerceIn(0f, 1f)
-                                                    val ny = (startOffset.y / size.height).coerceIn(0f, 1f)
-                                                    if (toolMode == DrawingToolMode.ERASER) {
-                                                        onUpdate(
-                                                            block.copy(
-                                                                strokes = NoteWorkspaceOperations.eraseStrokesNear(
-                                                                    block.strokes,
-                                                                    nx,
-                                                                    ny
-                                                                )
-                                                            )
-                                                        )
-                                                    } else {
-                                                        currentPoints.add(NormalizedPoint(nx, ny).clamped())
-                                                    }
-                                                }
-                                            },
-                                            onDrag = { change, _ ->
-                                                change.consume()
-                                                if (size.width > 0 && size.height > 0) {
-                                                    val nx = (change.position.x / size.width).coerceIn(0f, 1f)
-                                                    val ny = (change.position.y / size.height).coerceIn(0f, 1f)
-                                                    if (toolMode == DrawingToolMode.ERASER) {
-                                                        onUpdate(
-                                                            block.copy(
-                                                                strokes = NoteWorkspaceOperations.eraseStrokesNear(
-                                                                    block.strokes,
-                                                                    nx,
-                                                                    ny
-                                                                )
-                                                            )
-                                                        )
-                                                    } else {
-                                                        currentPoints.add(NormalizedPoint(nx, ny).clamped())
-                                                    }
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                if (toolMode != DrawingToolMode.ERASER && currentPoints.isNotEmpty()) {
-                                                    val simplified = NoteWorkspaceOperations.simplifyPoints(
-                                                        currentPoints.toList()
-                                                    )
-                                                    if (simplified.isNotEmpty()) {
-                                                        val newStroke = DrawingStroke(
-                                                            colorHex = selectedColorHex,
-                                                            widthDp = strokeWidthDp,
-                                                            isHighlighter = toolMode == DrawingToolMode.HIGHLIGHTER,
-                                                            points = simplified
-                                                        )
-                                                        onUpdate(block.copy(strokes = block.strokes + newStroke))
-                                                    }
-                                                }
-                                                currentPoints.clear()
-                                            },
-                                            onDragCancel = {
-                                                currentPoints.clear()
-                                            }
-                                        )
-                                    }
-                            } else {
-                                Modifier
-                            }
-                        )
-                ) {
-                    drawCanvasPaperBackground(block.background)
-                    block.strokes.forEach { stroke ->
-                        drawNormalizedStroke(stroke)
-                    }
-                    if (currentPoints.isNotEmpty()) {
-                        drawNormalizedStroke(
-                            DrawingStroke(
-                                colorHex = selectedColorHex,
-                                widthDp = strokeWidthDp,
-                                isHighlighter = toolMode == DrawingToolMode.HIGHLIGHTER,
-                                points = currentPoints
-                            )
-                        )
-                    }
-                }
-
-                if (block.strokes.isEmpty() && currentPoints.isEmpty()) {
-                    Text(
-                        text = if (isDrawingActive) "ارسم بإصبعك هنا…" else "اضغط «تفعيل الرسم» للبدء بالرسم على اللوحة",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF55605A),
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** رسم خلفية الورقة (سادة / مسطر / شبكة) داخل لوحة الرسم */
+/** رسم خلفية الورقة (سادة / مسطر / شبكة) داخل مساحة الملاحظة */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCanvasPaperBackground(
     background: CanvasBackground
 ) {
-    val lineColor = Color(0xFFB9C2BB).copy(alpha = 0.45f)
+    val lineColor = Color(0xFFCBD5E1).copy(alpha = 0.45f)
     when (background) {
         CanvasBackground.PLAIN -> Unit
         CanvasBackground.RULED -> {
@@ -1891,7 +714,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCanvasPaperBack
     }
 }
 
-/** رسم مسار واحد مطبّع على لوحة Canvas */
+/** رسم مسار رسم واحد مطبّع على لوحة Canvas بانسيابية Bézier تامة */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNormalizedStroke(
     stroke: DrawingStroke
 ) {
@@ -1940,110 +763,1333 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNormalizedStrok
     )
 }
 
-// ============================================================================
-// 5) كتلة قائمة المراجعة والمهام (Checklist Block)
-// ============================================================================
+/** شكل ورقة ملاحظات لاصقة مع زاوية مطوية ثلاثية الأبعاد كالستيكي نوت الشهيرة */
+class FoldedStickyShape(private val foldSizePx: Float = 36f) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val fold = foldSizePx.coerceAtMost(size.width * 0.3f).coerceAtMost(size.height * 0.3f)
+        val path = Path().apply {
+            moveTo(14f, 0f)
+            lineTo(size.width - fold, 0f)
+            lineTo(size.width, fold)
+            lineTo(size.width, size.height - 14f)
+            quadraticTo(size.width, size.height, size.width - 14f, size.height)
+            lineTo(14f, size.height)
+            quadraticTo(0f, size.height, 0f, size.height - 14f)
+            lineTo(0f, 14f)
+            quadraticTo(0f, 0f, 14f, 0f)
+            close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
+/** تحويل نمط شكل البطاقة إلى Shape مخصص في Jetpack Compose */
+private fun resolveCardShape(shape: IdeaCardShape, foldPx: Float): Shape = when (shape) {
+    IdeaCardShape.ROUNDED -> RoundedCornerShape(16.dp)
+    IdeaCardShape.FOLDED_STICKY -> FoldedStickyShape(foldPx)
+    IdeaCardShape.CAPSULE -> RoundedCornerShape(percent = 40)
+    IdeaCardShape.CUT_CORNER -> CutCornerShape(16.dp)
+    IdeaCardShape.BADGE -> RoundedCornerShape(topStart = 20.dp, bottomEnd = 20.dp, topEnd = 4.dp, bottomStart = 4.dp)
+}
+
+/** خلفية حركية هادئة تتنفس وتتحرك من الجوانب والأطراف محيطة بورقة الملاحظة */
 @Composable
-private fun ChecklistBlockEditorCard(
-    block: NoteBlock.ChecklistBlock,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    canDelete: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-    onUpdate: (NoteBlock.ChecklistBlock) -> Unit
+private fun AmbientLivingEdgeBackground(
+    modifier: Modifier = Modifier
 ) {
-    val checkedCount = block.items.count { it.isChecked && it.text.isNotBlank() }
-    val totalCount = block.items.count { it.text.isNotBlank() }
+    val transition = rememberInfiniteTransition(label = "ambientEdgeTransition")
+    val phase1 by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ambientPhase1"
+    )
+    val phase2 by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ambientPhase2"
+    )
 
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize()
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        // تموجات أفقية ناعمة جداً على الحواف
+        drawRect(
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color(0xFF4E7D6E).copy(alpha = 0.12f + 0.08f * phase1),
+                    Color.Transparent,
+                    Color.Transparent,
+                    Color(0xFF5B7FA6).copy(alpha = 0.10f + 0.07f * phase2)
+                )
+            ),
+            size = size
+        )
+        // تموجات رأسية ناعمة جداً على الحواف
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFFC79A4B).copy(alpha = 0.08f + 0.06f * (1f - phase1)),
+                    Color.Transparent,
+                    Color.Transparent,
+                    Color(0xFF4E7D6E).copy(alpha = 0.09f + 0.06f * phase2)
+                )
+            ),
+            size = size
+        )
+
+        // إشراقة ناعمة في الزوايا تتنفس وتتحرك بهدوء
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color(0xFF5B7FA6).copy(alpha = 0.15f + 0.06f * phase1),
+                    Color.Transparent
+                ),
+                center = Offset(w * 0.10f + (w * 0.06f * phase2), h * 0.06f),
+                radius = w * 0.45f
+            )
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color(0xFFC79A4B).copy(alpha = 0.13f + 0.05f * (1f - phase2)),
+                    Color.Transparent
+                ),
+                center = Offset(w * 0.90f - (w * 0.06f * phase1), h * 0.94f),
+                radius = w * 0.45f
+            )
+        )
+    }
+}
+
+/** أنماط الأدوات المتاحة في شريط الملاحظات السفلي */
+private enum class NoteToolMode(val label: String) {
+    NONE("تصفح"),
+    TEXT("كتابة"),
+    DRAW("رسم حر"),
+    CARDS("بطاقات"),
+    FORMAT("تنسيق الخط")
+}
+
+private enum class DrawingToolMode(val label: String) {
+    PEN("قلم"),
+    HIGHLIGHTER("تظليل"),
+    ERASER("ممحاة")
+}
+
+// ============================================================================
+// محرر ورقة الملاحظات الموحد (Unified Note Studio)
+// يجمع الكتابة، والرسم المباشر فوق النص، والبطاقات الحرة المتحركة في ورقة بيضاء واحدة
+// ============================================================================
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NoteWorkspaceDialog(
+    session: NoteEditorSession,
+    onDismiss: () -> Unit,
+    onSave: (title: String, isPinned: Boolean, document: NoteWorkspaceDocument) -> Unit,
+    onDelete: (() -> Unit)?
+) {
+    var title by remember(session) { mutableStateOf(session.initialTitle) }
+    var isPinned by remember(session) { mutableStateOf(session.initialPinned) }
+    var colorTag by remember(session) { mutableStateOf(session.initialDocument.colorTag) }
+    var summary by remember(session) { mutableStateOf(session.initialDocument.summary) }
+    var showSummaryField by remember(session) {
+        mutableStateOf(session.initialDocument.summary.isNotBlank())
+    }
+
+    // استخراج واستعادة الكتل الحالية: نصوص، بطاقات، رسومات
+    val initialTexts = remember(session) {
+        session.initialDocument.blocks
+            .filterIsInstance<NoteBlock.TextSection>()
+            .ifEmpty { listOf(NoteBlock.TextSection()) }
+    }
+    var textSections by remember(session) { mutableStateOf(initialTexts) }
+    var activeSectionIndex by remember(session) { mutableStateOf(0) }
+
+    val initialCards = remember(session) {
+        session.initialDocument.blocks
+            .filterIsInstance<NoteBlock.IdeaBoard>()
+            .flatMap { it.cards }
+    }
+    var cards by remember(session) { mutableStateOf(initialCards) }
+    var selectedCardId by remember(session) { mutableStateOf<String?>(null) }
+
+    val initialStrokes = remember(session) {
+        session.initialDocument.blocks
+            .filterIsInstance<NoteBlock.DrawingBoard>()
+            .flatMap { it.strokes }
+    }
+    var drawingStrokes by remember(session) { mutableStateOf(initialStrokes) }
+    var inProgressStroke by remember { mutableStateOf<DrawingStroke?>(null) }
+    var liveTouchPoint by remember { mutableStateOf<Offset?>(null) }
+
+    // حالات الأدوات وشريط التحكم
+    var activeToolMode by remember { mutableStateOf(NoteToolMode.NONE) }
+    var drawingMode by remember { mutableStateOf(DrawingToolMode.PEN) }
+    var strokeWidthDp by remember { mutableFloatStateOf(4f) }
+    var strokeColorHex by remember { mutableStateOf("#3E6B5E") }
+
+    // خيارات تنسيق الخط للنصوص
+    var currentFontSizeSp by remember { mutableFloatStateOf(16f) }
+    var currentIsBold by remember { mutableStateOf(false) }
+    var currentTextColorHex by remember { mutableStateOf("#1E293B") }
+
+    // خيارات إضافة البطاقات الحرة
+    var cardShapeChoice by remember { mutableStateOf(IdeaCardShape.ROUNDED) }
+    var cardColorChoice by remember { mutableStateOf("#FEF3C7") }
+
+    var showDiscardDialog by remember { mutableStateOf(false) }
+
+    // تجميع الوثيقة الكاملة للحفظ
+    val currentDocument = remember(colorTag, summary, textSections, cards, drawingStrokes) {
+        val blocks = buildList {
+            addAll(textSections)
+            if (cards.isNotEmpty()) {
+                add(NoteBlock.IdeaBoard(boardTitle = "أفكار الورقة", cards = cards))
+            }
+            if (drawingStrokes.isNotEmpty()) {
+                add(NoteBlock.DrawingBoard(title = "رسم الملاحظة", strokes = drawingStrokes))
+            }
+        }.ifEmpty { listOf(NoteBlock.TextSection()) }
+
+        NoteWorkspaceDocument(
+            colorTag = colorTag,
+            summary = summary,
+            blocks = blocks
+        )
+    }
+
+    val hasUnsavedChanges = remember(title, isPinned, currentDocument, session) {
+        title != session.initialTitle ||
+            isPinned != session.initialPinned ||
+            NoteWorkspaceCodec.encode(currentDocument) != NoteWorkspaceCodec.encode(session.initialDocument)
+    }
+
+    val handleCloseRequest = {
+        if (hasUnsavedChanges && (title.isNotBlank() || currentDocument.hasMeaningfulContent())) {
+            showDiscardDialog = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = handleCloseRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = true
+        )
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BlockHeaderBar(
-                icon = Icons.Filled.Checklist,
-                label = if (totalCount > 0) "نقاط المراجعة ($checkedCount/$totalCount)" else "نقاط المراجعة",
-                canMoveUp = canMoveUp,
-                canMoveDown = canMoveDown,
-                canDelete = canDelete,
-                onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown,
-                onDelete = onDelete,
-                trailingContent = {
-                    TextButton(
-                        onClick = {
-                            onUpdate(block.copy(items = block.items + ChecklistItem(text = "")))
-                        }
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("عنصر")
-                    }
-                }
-            )
+        BackHandler(onBack = handleCloseRequest)
 
-            OutlinedTextField(
-                value = block.title,
-                onValueChange = { onUpdate(block.copy(title = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان القائمة") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.small
-            )
-
-            block.items.forEachIndexed { itemIdx, item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+        Scaffold(
+            containerColor = Color(0xFFF1F5F9),
+            topBar = {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 2.dp
                 ) {
-                    Checkbox(
-                        checked = item.isChecked,
-                        onCheckedChange = { checked ->
-                            val updatedItems = block.items.mapIndexed { idx, itItem ->
-                                if (idx == itemIdx) itItem.copy(isChecked = checked) else itItem
-                            }
-                            onUpdate(block.copy(items = updatedItems))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = handleCloseRequest) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                         }
-                    )
-                    OutlinedTextField(
-                        value = item.text,
-                        onValueChange = { newText ->
-                            val updatedItems = block.items.mapIndexed { idx, itItem ->
-                                if (idx == itemIdx) itItem.copy(text = newText) else itItem
-                            }
-                            onUpdate(block.copy(items = updatedItems))
-                        },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("بند مراجعة ${itemIdx + 1}…") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
-                        ),
-                        shape = MaterialTheme.shapes.extraSmall
-                    )
-                    if (block.items.size > 1) {
-                        IconButton(
-                            onClick = {
-                                onUpdate(
-                                    block.copy(
-                                        items = block.items.filterIndexed { idx, _ -> idx != itemIdx }
-                                    )
+
+                        // حقل العنوان المباشر النظيف في الشريط العلوي
+                        Box(modifier = Modifier.weight(1f).padding(horizontal = 6.dp)) {
+                            BasicTextField(
+                                value = title,
+                                onValueChange = { title = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                decorationBox = { innerTextField ->
+                                    if (title.isEmpty()) {
+                                        Text(
+                                            text = "عنوان الملاحظة…",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                        }
+
+                        // وسم/لون الملاحظة
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(colorTag.colorHex.toComposeColor())
+                                .clickable {
+                                    val nextIdx = (colorTag.ordinal + 1) % NoteColorTag.entries.size
+                                    colorTag = NoteColorTag.entries[nextIdx]
+                                }
+                        )
+
+                        IconButton(onClick = { isPinned = !isPinned }) {
+                            Icon(
+                                imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = if (isPinned) "إلغاء التثبيت" else "تثبيت",
+                                tint = if (isPinned) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (onDelete != null) {
+                            IconButton(onClick = onDelete) {
+                                Icon(
+                                    imageVector = Icons.Filled.DeleteOutline,
+                                    contentDescription = "حذف الملاحظة",
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                             }
+                        }
+
+                        Spacer(Modifier.width(4.dp))
+                        FilledTonalButton(
+                            onClick = { onSave(title, isPinned, currentDocument) },
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Remove,
-                                contentDescription = "حذف البند",
-                                modifier = Modifier.size(18.dp)
+                            Text("حفظ", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            bottomBar = {
+                // شريط الأدوات السفلي المدمج والعصري
+                ModernNoteBottomToolbar(
+                    activeToolMode = activeToolMode,
+                    onToggleTool = { mode ->
+                        activeToolMode = if (activeToolMode == mode) NoteToolMode.NONE else mode
+                    },
+                    drawingMode = drawingMode,
+                    onSelectDrawingMode = { drawingMode = it },
+                    strokeWidthDp = strokeWidthDp,
+                    onSelectStrokeWidth = { strokeWidthDp = it },
+                    strokeColorHex = strokeColorHex,
+                    onSelectStrokeColor = { strokeColorHex = it },
+                    onClearDrawings = {
+                        drawingStrokes = emptyList()
+                        inProgressStroke = null
+                    },
+                    currentFontSizeSp = currentFontSizeSp,
+                    onChangeFontSize = { delta ->
+                        val newSize = (currentFontSizeSp + delta).coerceIn(12f, 36f)
+                        currentFontSizeSp = newSize
+                        if (activeSectionIndex in textSections.indices) {
+                            textSections = textSections.mapIndexed { idx, sec ->
+                                if (idx == activeSectionIndex) sec.copy(fontSizeSp = newSize) else sec
+                            }
+                        }
+                    },
+                    currentIsBold = currentIsBold,
+                    onToggleBold = {
+                        val newBold = !currentIsBold
+                        currentIsBold = newBold
+                        if (activeSectionIndex in textSections.indices) {
+                            textSections = textSections.mapIndexed { idx, sec ->
+                                if (idx == activeSectionIndex) sec.copy(isBold = newBold) else sec
+                            }
+                        }
+                    },
+                    currentTextColorHex = currentTextColorHex,
+                    onSelectTextColor = { hex ->
+                        currentTextColorHex = hex
+                        if (activeSectionIndex in textSections.indices) {
+                            textSections = textSections.mapIndexed { idx, sec ->
+                                if (idx == activeSectionIndex) sec.copy(colorHex = hex) else sec
+                            }
+                        }
+                    },
+                    currentStyle = textSections.getOrNull(activeSectionIndex)?.style ?: TextSectionStyle.PARAGRAPH,
+                    onSelectStyle = { style ->
+                        if (activeSectionIndex in textSections.indices) {
+                            textSections = textSections.mapIndexed { idx, sec ->
+                                if (idx == activeSectionIndex) sec.copy(style = style) else sec
+                            }
+                        }
+                    },
+                    cardShapeChoice = cardShapeChoice,
+                    onSelectCardShape = { cardShapeChoice = it },
+                    cardColorChoice = cardColorChoice,
+                    onSelectCardColor = { cardColorChoice = it },
+                    onAddCard = {
+                        val count = cards.size
+                        val x = 0.2f + (count % 3) * 0.25f
+                        val y = 0.25f + (count % 4) * 0.15f
+                        val newCard = IdeaCardItem(
+                            title = "",
+                            details = "",
+                            tag = "فكرة",
+                            colorHex = cardColorChoice,
+                            xPercent = x.coerceIn(0.1f, 0.8f),
+                            yPercent = y.coerceIn(0.1f, 0.8f),
+                            shape = cardShapeChoice
+                        )
+                        cards = cards + newCard
+                        selectedCardId = newCard.id
+                    },
+                    canUndo = drawingStrokes.isNotEmpty() || inProgressStroke != null,
+                    onUndo = {
+                        if (drawingStrokes.isNotEmpty()) {
+                            drawingStrokes = drawingStrokes.dropLast(1)
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                // 1) الخلفية الحركية الناعمة من الجوانب
+                AmbientLivingEdgeBackground(modifier = Modifier.fillMaxSize())
+
+                // 2) ورقة الملاحظة البيضاء الصافية الموحدة في المنتصف
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    val paperWidth = maxWidth
+                    val paperHeight = maxHeight
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .shadow(
+                                elevation = 6.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                spotColor = Color(0x1F000000)
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFFFCFDFD),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // طبقة خطوط ورقة الملاحظة الهادئة
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                drawCanvasPaperBackground(CanvasBackground.RULED)
+                            }
+
+                            // طبقة النصوص القابلة للتمرير والتحرير على الورقة
+                            val textScrollState = rememberScrollState()
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(
+                                        textScrollState,
+                                        enabled = activeToolMode != NoteToolMode.DRAW
+                                    )
+                                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                // الملخص السريع (اختياري بنقر زر الإفصاح)
+                                if (showSummaryField || summary.isNotBlank()) {
+                                    OutlinedCard(
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.outlinedCardColors(
+                                            containerColor = Color(0xFFF8FAFC)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Text(
+                                                text = "الملخص السريع",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            BasicTextField(
+                                                value = summary,
+                                                onValueChange = { summary = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = Color(0xFF334155)
+                                                ),
+                                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                                decorationBox = { inner ->
+                                                    if (summary.isEmpty()) {
+                                                        Text(
+                                                            "خلاصة الملاحظة في جملتين…",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = Color(0xFF94A3B8)
+                                                        )
+                                                    }
+                                                    inner()
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // فقرات وكتل الكتابة على الورقة
+                                textSections.forEachIndexed { index, section ->
+                                    val isFocused = index == activeSectionIndex
+                                    PaperTextSectionEditor(
+                                        section = section,
+                                        isFocused = isFocused,
+                                        onFocus = {
+                                            activeSectionIndex = index
+                                            currentFontSizeSp = section.fontSizeSp
+                                            currentIsBold = section.isBold
+                                            currentTextColorHex = section.colorHex
+                                        },
+                                        onUpdate = { updated ->
+                                            textSections = textSections.mapIndexed { idx, s ->
+                                                if (idx == index) updated else s
+                                            }
+                                        },
+                                        onDelete = if (textSections.size > 1) {
+                                            {
+                                                textSections = textSections.filterIndexed { idx, _ -> idx != index }
+                                                activeSectionIndex = activeSectionIndex.coerceAtMost(textSections.lastIndex)
+                                            }
+                                        } else null
+                                    )
+                                }
+
+                                // زر إضافة فقرة جديدة بسلاسة على الورقة
+                                TextButton(
+                                    onClick = {
+                                        val newSec = NoteBlock.TextSection(
+                                            fontSizeSp = currentFontSizeSp,
+                                            isBold = currentIsBold,
+                                            colorHex = currentTextColorHex
+                                        )
+                                        textSections = textSections + newSec
+                                        activeSectionIndex = textSections.lastIndex
+                                    },
+                                    modifier = Modifier.align(Alignment.Start)
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("+ إضافة فقرة جديدة")
+                                }
+
+                                Spacer(Modifier.height(140.dp))
+                            }
+
+                            // 3) طبقة البطاقات الحرة الملونة القابلة للسحب والتحريك على الورقة
+                            cards.forEach { card ->
+                                val isSelected = card.id == selectedCardId
+                                FloatingDraggableCard(
+                                    card = card,
+                                    containerWidthDp = paperWidth,
+                                    containerHeightDp = paperHeight,
+                                    isSelected = isSelected,
+                                    onSelect = { selectedCardId = card.id },
+                                    onUpdatePosition = { newX, newY ->
+                                        cards = cards.map {
+                                            if (it.id == card.id) it.copy(xPercent = newX, yPercent = newY) else it
+                                        }
+                                    },
+                                    onUpdateCard = { updated ->
+                                        cards = cards.map { if (it.id == card.id) updated else it }
+                                    },
+                                    onDeleteCard = {
+                                        cards = cards.filter { it.id != card.id }
+                                        if (selectedCardId == card.id) selectedCardId = null
+                                    }
+                                )
+                            }
+
+                            // 4) طبقة الرسم الحر المباشر على الورقة وفوق النص
+                            PaperDrawingCanvasOverlay(
+                                strokes = drawingStrokes,
+                                inProgressStroke = inProgressStroke,
+                                liveTouchPoint = liveTouchPoint,
+                                isDrawingActive = activeToolMode == NoteToolMode.DRAW,
+                                drawingMode = drawingMode,
+                                strokeWidthDp = strokeWidthDp,
+                                strokeColorHex = strokeColorHex,
+                                onDragStart = { offset, normPt ->
+                                    liveTouchPoint = offset
+                                    if (drawingMode == DrawingToolMode.ERASER) {
+                                        drawingStrokes = drawingStrokes.filterNot { s ->
+                                            s.points.any { pt ->
+                                                hypot(pt.x - normPt.x, pt.y - normPt.y) < 0.045f
+                                            }
+                                        }
+                                    } else {
+                                        inProgressStroke = DrawingStroke(
+                                            colorHex = strokeColorHex,
+                                            widthDp = if (drawingMode == DrawingToolMode.HIGHLIGHTER) strokeWidthDp * 2.2f else strokeWidthDp,
+                                            isHighlighter = drawingMode == DrawingToolMode.HIGHLIGHTER,
+                                            points = listOf(normPt)
+                                        )
+                                    }
+                                },
+                                onDrag = { offset, normPt ->
+                                    liveTouchPoint = offset
+                                    if (drawingMode == DrawingToolMode.ERASER) {
+                                        drawingStrokes = drawingStrokes.filterNot { s ->
+                                            s.points.any { pt ->
+                                                hypot(pt.x - normPt.x, pt.y - normPt.y) < 0.045f
+                                            }
+                                        }
+                                    } else {
+                                        inProgressStroke?.let { curr ->
+                                            inProgressStroke = curr.copy(points = curr.points + normPt)
+                                        }
+                                    }
+                                },
+                                onDragEnd = {
+                                    liveTouchPoint = null
+                                    inProgressStroke?.let { finished ->
+                                        if (finished.points.isNotEmpty()) {
+                                            drawingStrokes = drawingStrokes + finished
+                                        }
+                                    }
+                                    inProgressStroke = null
+                                }
                             )
                         }
                     }
+                }
+            }
+        }
+
+        if (showDiscardDialog) {
+            ConfirmDialog(
+                title = "تجاهل التعديلات؟",
+                message = "هناك محتوى غير محفوظ في الورقة، هل تريد إغلاق الملاحظة دون حفظ؟",
+                confirmLabel = "تجاهل",
+                onConfirm = {
+                    showDiscardDialog = false
+                    onDismiss()
+                },
+                onDismiss = { showDiscardDialog = false }
+            )
+        }
+    }
+}
+
+// ============================================================================
+// محرر فقرة نصية على الورقة مع تأثير حركي ناعم وتنسيق الخطوط
+// ============================================================================
+@Composable
+private fun PaperTextSectionEditor(
+    section: NoteBlock.TextSection,
+    isFocused: Boolean,
+    onFocus: () -> Unit,
+    onUpdate: (NoteBlock.TextSection) -> Unit,
+    onDelete: (() -> Unit)?
+) {
+    // حركة نبض المؤشر الناعمة
+    val transition = rememberInfiniteTransition(label = "cursorBlink")
+    val cursorAlpha by transition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 650, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cursorAlpha"
+    )
+
+    val textColor = remember(section.colorHex) { section.colorHex.toComposeColor() }
+    val fontWeight = if (section.isBold) FontWeight.Bold else FontWeight.Normal
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onFocus() }
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // شريط عنوان الفقرة (إن وجد أو كان في وضع التركيز)
+        if (section.heading.isNotBlank() || isFocused) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BasicTextField(
+                    value = section.heading,
+                    onValueChange = { onUpdate(section.copy(heading = it)) },
+                    modifier = Modifier.weight(1f),
+                    textStyle = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        if (section.heading.isEmpty()) {
+                            Text(
+                                "عنوان فرعي (اختياري)…",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                            )
+                        }
+                        inner()
+                    }
+                )
+                if (onDelete != null && isFocused) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "حذف الفقرة",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // نص الفقرة الفعلي مع التنسيقات المخصصة
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            // مؤشر نمط النقاط إن كان النمط BULLETS
+            if (section.style == TextSectionStyle.BULLETS) {
+                Text(
+                    text = "• ",
+                    fontSize = section.fontSizeSp.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (section.style == TextSectionStyle.CALLOUT) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(24.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                BasicTextField(
+                    value = section.body,
+                    onValueChange = { onUpdate(section.copy(body = it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = section.fontSizeSp.sp,
+                        fontWeight = fontWeight,
+                        color = textColor,
+                        lineHeight = (section.fontSizeSp * 1.45f).sp
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha)),
+                    decorationBox = { inner ->
+                        if (section.body.isEmpty()) {
+                            Text(
+                                "اكتب هنا بحرية… استخدم شريط الأدوات بالأسفل للرسم أو إضافة البطاقات وتغيير الخط",
+                                fontSize = section.fontSizeSp.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                        inner()
+                    }
+                )
+            }
+        }
+    }
+}
+
+// ============================================================================
+// بطاقة حرة ملونة وعائمة وقابلة للسحب والتحريك على الورقة
+// بأشكال متعددة (مستطيل، ورقة مطوية، كبسولة، مشطوفة، شارة)
+// ============================================================================
+@Composable
+private fun FloatingDraggableCard(
+    card: IdeaCardItem,
+    containerWidthDp: androidx.compose.ui.unit.Dp,
+    containerHeightDp: androidx.compose.ui.unit.Dp,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onUpdatePosition: (Float, Float) -> Unit,
+    onUpdateCard: (IdeaCardItem) -> Unit,
+    onDeleteCard: () -> Unit
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val cardWidthDp = 160.dp
+
+    val cardWidthPx = with(density) { cardWidthDp.toPx() }
+    val containerWidthPx = with(density) { containerWidthDp.toPx() }
+    val containerHeightPx = with(density) { containerHeightDp.toPx() }
+
+    val currentX = (card.xPercent * (containerWidthPx - cardWidthPx)).coerceIn(0f, (containerWidthPx - cardWidthPx).coerceAtLeast(0f))
+    val currentY = (card.yPercent * (containerHeightPx - 200f)).coerceIn(0f, (containerHeightPx - 200f).coerceAtLeast(0f))
+
+    val cardBg = remember(card.colorHex) { card.colorHex.toComposeColor() }
+    val cardShape = remember(card.shape) { resolveCardShape(card.shape, 32f) }
+
+    val elevation by animateDpAsState(
+        targetValue = if (isSelected) 10.dp else 4.dp,
+        label = "cardElevation"
+    )
+
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(currentX.roundToInt(), currentY.roundToInt()) }
+            .width(cardWidthDp)
+            .shadow(elevation, cardShape, spotColor = Color(0x28000000))
+            .clip(cardShape)
+            .background(cardBg)
+            .border(
+                width = if (isSelected) 1.5.dp else 0.5.dp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.12f),
+                shape = cardShape
+            )
+            .pointerInput(card.id) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    val newX = (currentX + dragAmount.x) / (containerWidthPx - cardWidthPx).coerceAtLeast(1f)
+                    val newY = (currentY + dragAmount.y) / (containerHeightPx - 200f).coerceAtLeast(1f)
+                    onUpdatePosition(newX.coerceIn(0.02f, 0.98f), newY.coerceIn(0.02f, 0.98f))
+                }
+            }
+            .clickable { onSelect() }
+            .padding(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // شريط البطاقة العلوي
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // وسم نوع الشكل
+                Text(
+                    text = card.shape.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Black.copy(alpha = 0.45f),
+                    fontSize = 10.sp
+                )
+                if (isSelected) {
+                    IconButton(onClick = onDeleteCard, modifier = Modifier.size(18.dp)) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "حذف البطاقة",
+                            tint = Color.Black.copy(alpha = 0.55f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            // عنوان البطاقة
+            BasicTextField(
+                value = card.title,
+                onValueChange = { onUpdateCard(card.copy(title = it)) },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B)
+                ),
+                cursorBrush = SolidColor(Color(0xFF1E293B)),
+                decorationBox = { inner ->
+                    if (card.title.isEmpty()) {
+                        Text(
+                            "عنوان الفكرة…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black.copy(alpha = 0.35f)
+                        )
+                    }
+                    inner()
+                }
+            )
+
+            // تفاصيل البطاقة
+            BasicTextField(
+                value = card.details,
+                onValueChange = { onUpdateCard(card.copy(details = it)) },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodySmall.copy(
+                    color = Color(0xFF334155)
+                ),
+                cursorBrush = SolidColor(Color(0xFF1E293B)),
+                decorationBox = { inner ->
+                    if (card.details.isEmpty()) {
+                        Text(
+                            "اكتب تفاصيل…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Black.copy(alpha = 0.35f)
+                        )
+                    }
+                    inner()
+                }
+            )
+
+            // عند تحديد البطاقة: إظهار خيارات سريعة لتبديل الشكل واللون
+            if (isSelected) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // زر تبديل الشكل
+                    Text(
+                        text = "تبديل الشكل",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable {
+                                val nextShape = IdeaCardShape.entries[(card.shape.ordinal + 1) % IdeaCardShape.entries.size]
+                                onUpdateCard(card.copy(shape = nextShape))
+                            }
+                            .padding(2.dp)
+                    )
+                    // زر تبديل اللون
+                    Text(
+                        text = "لون آخر",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable {
+                                val colors = listOf("#FEF3C7", "#D1FAE5", "#DBEAFE", "#FFE4E6", "#EDE9FE", "#FFEDD5")
+                                val currIdx = colors.indexOf(card.colorHex)
+                                val nextColor = colors[(currIdx + 1).coerceAtLeast(0) % colors.size]
+                                onUpdateCard(card.copy(colorHex = nextColor))
+                            }
+                            .padding(2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// طبقة الرسم الحر على الورقة وفوق النصوص والبطاقات مباشرة
+// ============================================================================
+@Composable
+private fun PaperDrawingCanvasOverlay(
+    strokes: List<DrawingStroke>,
+    inProgressStroke: DrawingStroke?,
+    liveTouchPoint: Offset?,
+    isDrawingActive: Boolean,
+    drawingMode: DrawingToolMode,
+    strokeWidthDp: Float,
+    strokeColorHex: String,
+    onDragStart: (Offset, NormalizedPoint) -> Unit,
+    onDrag: (Offset, NormalizedPoint) -> Unit,
+    onDragEnd: () -> Unit
+) {
+    // أنيميشن نبض مؤشر القلم عند الرسم النشط
+    val transition = rememberInfiniteTransition(label = "brushGlow")
+    val glowRadius by transition.animateFloat(
+        initialValue = 4f,
+        targetValue = 9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowPulse"
+    )
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (isDrawingActive) {
+                    Modifier.pointerInput(drawingMode, strokeWidthDp, strokeColorHex) {
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                val normPt = NormalizedPoint(
+                                    x = (offset.x / size.width).coerceIn(0f, 1f),
+                                    y = (offset.y / size.height).coerceIn(0f, 1f)
+                                )
+                                onDragStart(offset, normPt)
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                val normPt = NormalizedPoint(
+                                    x = (change.position.x / size.width).coerceIn(0f, 1f),
+                                    y = (change.position.y / size.height).coerceIn(0f, 1f)
+                                )
+                                onDrag(change.position, normPt)
+                            },
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragEnd
+                        )
+                    }
+                } else Modifier
+            )
+    ) {
+        // رسم الخطوط المحفوظة
+        strokes.forEach { stroke ->
+            drawNormalizedStroke(stroke)
+        }
+
+        // رسم الخط قيد الرسم حالياً
+        inProgressStroke?.let { stroke ->
+            drawNormalizedStroke(stroke)
+        }
+
+        // رسم مؤشر تفاعلي ناعم يتبع إصبع المستخدم أثناء الرسم
+        if (isDrawingActive && liveTouchPoint != null) {
+            val tipColor = if (drawingMode == DrawingToolMode.ERASER) Color.Red else strokeColorHex.toComposeColor()
+            drawCircle(
+                color = tipColor.copy(alpha = 0.25f),
+                radius = strokeWidthDp.dp.toPx() + glowRadius,
+                center = liveTouchPoint
+            )
+            drawCircle(
+                color = tipColor,
+                radius = (strokeWidthDp.dp.toPx() / 2f).coerceAtLeast(3f),
+                center = liveTouchPoint
+            )
+        }
+    }
+}
+
+// ============================================================================
+// شريط الأدوات السفلي الحديث والعائم للملاحظات
+// ============================================================================
+@Composable
+private fun ModernNoteBottomToolbar(
+    activeToolMode: NoteToolMode,
+    onToggleTool: (NoteToolMode) -> Unit,
+    drawingMode: DrawingToolMode,
+    onSelectDrawingMode: (DrawingToolMode) -> Unit,
+    strokeWidthDp: Float,
+    onSelectStrokeWidth: (Float) -> Unit,
+    strokeColorHex: String,
+    onSelectStrokeColor: (String) -> Unit,
+    onClearDrawings: () -> Unit,
+    currentFontSizeSp: Float,
+    onChangeFontSize: (Float) -> Unit,
+    currentIsBold: Boolean,
+    onToggleBold: () -> Unit,
+    currentTextColorHex: String,
+    onSelectTextColor: (String) -> Unit,
+    currentStyle: TextSectionStyle,
+    onSelectStyle: (TextSectionStyle) -> Unit,
+    cardShapeChoice: IdeaCardShape,
+    onSelectCardShape: (IdeaCardShape) -> Unit,
+    cardColorChoice: String,
+    onSelectCardColor: (String) -> Unit,
+    onAddCard: () -> Unit,
+    canUndo: Boolean,
+    onUndo: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 8.dp,
+        tonalElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // الشريط الثانوي السياقي المتكيف مع الأداة المختارة
+            AnimatedVisibility(
+                visible = activeToolMode != NoteToolMode.NONE,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                when (activeToolMode) {
+                    NoteToolMode.DRAW -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // اختيار القلم / التظليل / الممحاة
+                                DrawingToolMode.entries.forEach { mode ->
+                                    FilterChip(
+                                        selected = drawingMode == mode,
+                                        onClick = { onSelectDrawingMode(mode) },
+                                        label = { Text(mode.label) },
+                                        leadingIcon = {
+                                            when (mode) {
+                                                DrawingToolMode.PEN -> Icon(Icons.Filled.Brush, null, modifier = Modifier.size(16.dp))
+                                                DrawingToolMode.HIGHLIGHTER -> Icon(Icons.Filled.Draw, null, modifier = Modifier.size(16.dp))
+                                                DrawingToolMode.ERASER -> Icon(Icons.Filled.Clear, null, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    )
+                                }
+
+                                HorizontalDivider(modifier = Modifier.height(20.dp).width(1.dp))
+
+                                // أحجام الخط
+                                listOf(2f to "رفيع", 5f to "متوسط", 10f to "عريض", 18f to "تظليل").forEach { (width, label) ->
+                                    FilterChip(
+                                        selected = strokeWidthDp == width,
+                                        onClick = { onSelectStrokeWidth(width) },
+                                        label = { Text(label, fontSize = 11.sp) }
+                                    )
+                                }
+
+                                TextButton(onClick = onClearDrawings) {
+                                    Text("مسح الرسم", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                                }
+                            }
+
+                            // باليتة ألوان الرسم
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val drawColors = listOf("#1E293B", "#3E6B5E", "#5B7FA6", "#C25E52", "#C79A4B", "#7D5A7A", "#166534", "#E11D48")
+                                drawColors.forEach { hex ->
+                                    val isSelected = strokeColorHex.equals(hex, ignoreCase = true)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (isSelected) 26.dp else 22.dp)
+                                            .clip(CircleShape)
+                                            .background(hex.toComposeColor())
+                                            .border(
+                                                width = if (isSelected) 2.dp else 0.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { onSelectStrokeColor(hex) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    NoteToolMode.FORMAT -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // أزرار تكبير وتصغير الخط
+                                IconButton(
+                                    onClick = { onChangeFontSize(-2f) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Text("A-", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                }
+                                Text(
+                                    text = "${currentFontSizeSp.toInt()}sp",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                IconButton(
+                                    onClick = { onChangeFontSize(2f) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Text("A+", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                }
+
+                                HorizontalDivider(modifier = Modifier.height(20.dp).width(1.dp))
+
+                                // زر الخط العريض
+                                FilterChip(
+                                    selected = currentIsBold,
+                                    onClick = onToggleBold,
+                                    label = { Text("عريض B", fontWeight = FontWeight.ExtraBold) }
+                                )
+
+                                HorizontalDivider(modifier = Modifier.height(20.dp).width(1.dp))
+
+                                // أنماط الفقرة
+                                TextSectionStyle.entries.forEach { style ->
+                                    FilterChip(
+                                        selected = currentStyle == style,
+                                        onClick = { onSelectStyle(style) },
+                                        label = { Text(style.label, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+
+                            // باليتة ألوان النص
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val textColors = listOf("#1E293B", "#475569", "#166534", "#1E40AF", "#991B1B", "#92400E")
+                                textColors.forEach { hex ->
+                                    val isSelected = currentTextColorHex.equals(hex, ignoreCase = true)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (isSelected) 26.dp else 22.dp)
+                                            .clip(CircleShape)
+                                            .background(hex.toComposeColor())
+                                            .border(
+                                                width = if (isSelected) 2.dp else 0.dp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { onSelectTextColor(hex) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    NoteToolMode.CARDS -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // اختيار شكل البطاقة
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                IdeaCardShape.entries.forEach { shape ->
+                                    FilterChip(
+                                        selected = cardShapeChoice == shape,
+                                        onClick = { onSelectCardShape(shape) },
+                                        label = { Text(shape.label, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+
+                            // ألوان البطاقة الباستيل + زر الإضافة
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val cardColors = listOf("#FEF3C7", "#D1FAE5", "#DBEAFE", "#FFE4E6", "#EDE9FE", "#FFEDD5")
+                                    cardColors.forEach { hex ->
+                                        val isSelected = cardColorChoice.equals(hex, ignoreCase = true)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(if (isSelected) 24.dp else 20.dp)
+                                                .clip(CircleShape)
+                                                .background(hex.toComposeColor())
+                                                .border(
+                                                    width = if (isSelected) 2.dp else 0.5.dp,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                    shape = CircleShape
+                                                )
+                                                .clickable { onSelectCardColor(hex) }
+                                        )
+                                    }
+                                }
+
+                                FilledTonalButton(
+                                    onClick = onAddCard,
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("إضافة بطاقة للورقة", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    else -> Unit
+                }
+            }
+
+            // الشريط الرئيسي للأدوات (الأيقونات الأساسية)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // زر أداة النص
+                IconButton(
+                    onClick = { onToggleTool(NoteToolMode.TEXT) }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TextFields,
+                        contentDescription = "كتابة",
+                        tint = if (activeToolMode == NoteToolMode.TEXT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // زر أداة الرسم الحر
+                IconButton(
+                    onClick = { onToggleTool(NoteToolMode.DRAW) }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Draw,
+                        contentDescription = "رسم حر",
+                        tint = if (activeToolMode == NoteToolMode.DRAW) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // زر أداة البطاقات
+                IconButton(
+                    onClick = { onToggleTool(NoteToolMode.CARDS) }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AutoAwesomeMotion,
+                        contentDescription = "بطاقات أفكار",
+                        tint = if (activeToolMode == NoteToolMode.CARDS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // زر تنسيق الخط
+                IconButton(
+                    onClick = { onToggleTool(NoteToolMode.FORMAT) }
+                ) {
+                    Text(
+                        text = "Aa",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = if (activeToolMode == NoteToolMode.FORMAT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // زر التراجع
+                IconButton(
+                    onClick = onUndo,
+                    enabled = canUndo
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "تراجع",
+                        tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                    )
                 }
             }
         }
