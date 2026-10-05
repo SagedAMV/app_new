@@ -83,6 +83,24 @@ enum class IdeaCardShape(val label: String) {
     companion object {
         fun fromNameOrDefault(name: String?): IdeaCardShape =
             entries.firstOrNull { it.name == name } ?: ROUNDED
+
+        /**
+         * الأشكال المتاحة للمستخدم في واجهة الورقة.
+         *
+         * الزاوية المشطوفة والشارة أبقيتا في الترقيم حمايةً لتوافق فك الترميز وللملاحظات
+         * المحفوظة سابقاً، لكنهما لا تُعرضان كخيار لأن شكلهما يبتعد عن هدوء بقية التطبيق.
+         */
+        val selectable: List<IdeaCardShape> = listOf(ROUNDED, FOLDED_STICKY, CAPSULE)
+
+        /**
+         * الشكل التالي ضمن الأشكال المتاحة فقط. يبدأ من الشكل الحالي إن كان متاحاً،
+         * وإلا (شكل قديم محفوظ) ينتقل إلى أول شكل متاح بدل المرور على شكل مخفي.
+         */
+        fun nextSelectable(current: IdeaCardShape): IdeaCardShape {
+            val index = selectable.indexOf(current)
+            if (index < 0) return selectable.first()
+            return selectable[(index + 1) % selectable.size]
+        }
     }
 }
 
@@ -446,6 +464,106 @@ object NoteWorkspaceOperations {
         val projY = a.y + t * dy
         return hypot((p.x - projX).toDouble(), (p.y - projY).toDouble())
     }
+
+    /**
+     * تجميع وثيقة الملاحظة بعد التحرير دون فقدان أي كتلة غير قابلة للتحرير.
+     *
+     * محرر الورقة يحرّر ثلاثة أنواع فقط (الفقرات، بطاقات الأفكار، الرسم)، بينما الوثيقة قد
+     * تحتوي أنواعاً أخرى (جداول، مهام). القاعدة هنا: تُستبدل كل كتلة قابلة للتحرير بموضعها
+     * نفسه، وتبقى بقية الكتل كما هي، ثم تُلحق الكتل الجديدة في النهاية. بذلك لا يضيع جدول
+     * أو قائمة مهام عند فتح الملاحظة وحفظها، ولا يتغيّر ترتيب محتوى المستخدم.
+     *
+     * دالة نقية (بلا أي اعتماد على الواجهة) حتى تبقى قابلة للاختبار محلياً.
+     */
+    fun assembleEditedDocument(
+        original: NoteWorkspaceDocument,
+        colorTag: NoteColorTag,
+        summary: String,
+        textSections: List<NoteBlock.TextSection>,
+        ideaCards: List<IdeaCardItem>,
+        drawingStrokes: List<DrawingStroke>
+    ): NoteWorkspaceDocument {
+        val sections = textSections.ifEmpty { listOf(NoteBlock.TextSection()) }
+
+        var textCursor = 0
+        var boardReplaced = false
+        var drawingReplaced = false
+
+        val keptBlocks = original.blocks.map { block ->
+            when (block) {
+                is NoteBlock.TextSection -> {
+                    val replacement = sections.getOrNull(textCursor)
+                    textCursor += 1
+                    replacement
+                }
+
+                // أول لوحة أفكار في الوثيقة تحمل البطاقات المحرّرة، وأي لوحة إضافية تُحفظ كما هي
+                is NoteBlock.IdeaBoard ->
+                    if (!boardReplaced) {
+                        boardReplaced = true
+                        block.copy(cards = ideaCards)
+                    } else {
+                        block
+                    }
+
+                // أول لوحة رسم في الوثيقة تحمل الضربات المحرّرة، وأي لوحة إضافية تُحفظ كما هي
+                is NoteBlock.DrawingBoard ->
+                    if (!drawingReplaced) {
+                        drawingReplaced = true
+                        block.copy(strokes = drawingStrokes)
+                    } else {
+                        block
+                    }
+
+                // الجداول والمهام وأية كتلة مستقبلية: تُحفظ حرفياً كما هي
+                else -> block
+            }
+        }.filterNotNull()
+
+        val appended = buildList {
+            for (index in textCursor until sections.size) add(sections[index])
+            if (!boardReplaced && ideaCards.isNotEmpty()) {
+                add(NoteBlock.IdeaBoard(boardTitle = "أفكار الورقة", cards = ideaCards))
+            }
+            if (!drawingReplaced && drawingStrokes.isNotEmpty()) {
+                add(NoteBlock.DrawingBoard(title = "رسم الملاحظة", strokes = drawingStrokes))
+            }
+        }
+
+        val blocks = (keptBlocks + appended).ifEmpty { listOf(NoteBlock.TextSection()) }
+        return original.copy(colorTag = colorTag, summary = summary, blocks = blocks)
+    }
+}
+
+/**
+ * لوحة ألوان الملاحظات — مصدر واحد للألوان المستخدمة في محرر الورقة وبطاقاتها.
+ * موجودة هنا بدل تكرارها داخل الواجهة حتى يبقى تعديلها من مكان واحد.
+ */
+object NotePalette {
+    /** ألوان قلم الرسم والتظليل في شريط أدوات الورقة */
+    val strokeColors: List<String> = listOf(
+        "#1E293B", "#3E6B5E", "#5B7FA6", "#C25E52",
+        "#C79A4B", "#7D5A7A", "#166534", "#E11D48"
+    )
+
+    /** ألوان نص الفقرات */
+    val textColors: List<String> = listOf(
+        "#1E293B", "#475569", "#166534", "#1E40AF", "#991B1B", "#92400E"
+    )
+
+    /** ألوان بطاقات الأفكار الباستيل */
+    val cardColors: List<String> = listOf(
+        "#FEF3C7", "#D1FAE5", "#DBEAFE", "#FFE4E6", "#EDE9FE", "#FFEDD5"
+    )
+
+    /** اللون الافتراضي لقلم الرسم عند فتح ملاحظة جديدة */
+    const val defaultStrokeColor: String = "#3E6B5E"
+
+    /** اللون الافتراضي لنص الفقرة الجديدة */
+    const val defaultTextColor: String = "#1E293B"
+
+    /** اللون الافتراضي لبطاقة فكرة جديدة */
+    const val defaultCardColor: String = "#FEF3C7"
 }
 
 /** قوالب جاهزة لإنشاء ملاحظات احترافية بضغطة واحدة */

@@ -631,4 +631,290 @@ class NoteWorkspaceTest {
         assertEquals("#1E40AF", decodedSection.colorHex)
         assertEquals("عنوان رئيسي مكبّر", decodedSection.heading)
     }
+
+    // ========================================================================
+    // S11: تحرير ملاحظة تحتوي جدولاً ومهام — لا يجوز فقدان كتلة غير قابلة للتحرير
+    // ========================================================================
+    @Test
+    fun s11_editingNoteWithTableAndChecklist_keepsNonEditableBlocks() {
+        // Arrange: ملاحظة فيها فقرة + جدول + مهام
+        val original = NoteWorkspaceDocument(
+            colorTag = NoteColorTag.STUDY,
+            summary = "ملخص قبل التحرير",
+            blocks = listOf(
+                NoteBlock.TextSection(id = "t1", heading = "مقدمة", body = "نص أصلي"),
+                NoteBlock.TableBlock(
+                    id = "tbl",
+                    caption = "جدول المحاضرة",
+                    headers = listOf("العنصر", "الخصائص", "ملاحظات"),
+                    rows = listOf(listOf("أ", "ب", "ج"))
+                ),
+                NoteBlock.ChecklistBlock(
+                    id = "chk",
+                    title = "مهام",
+                    items = listOf(ChecklistItem(id = "c1", text = "مراجعة", isChecked = true))
+                )
+            )
+        )
+
+        // Act: المستخدم حرّر نص الفقرة فقط
+        val edited = NoteWorkspaceOperations.assembleEditedDocument(
+            original = original,
+            colorTag = original.colorTag,
+            summary = original.summary,
+            textSections = listOf(
+                NoteBlock.TextSection(id = "t1", heading = "مقدمة", body = "نص معدّل من المستخدم")
+            ),
+            ideaCards = emptyList(),
+            drawingStrokes = emptyList()
+        )
+
+        // Assert (Inv: لا تُفقد كتلة عند الحفظ)
+        assertEquals(3, edited.blocks.size)
+        assertEquals("نص معدّل من المستخدم", (edited.blocks[0] as NoteBlock.TextSection).body)
+        val table = edited.blocks[1] as NoteBlock.TableBlock
+        assertEquals("جدول المحاضرة", table.caption)
+        assertEquals(listOf("العنصر", "الخصائص", "ملاحظات"), table.headers)
+        assertEquals("ب", table.rows[0][1])
+        val checklist = edited.blocks[2] as NoteBlock.ChecklistBlock
+        assertEquals(1, checklist.items.size)
+        assertTrue(checklist.items[0].isChecked)
+
+        // Assert: الترميز الناتج يبقى متوافقاً مع فك الترميز
+        val decoded = NoteWorkspaceCodec.decode(NoteWorkspaceCodec.encode(edited))
+        assertEquals(1, decoded.blocks.count { it is NoteBlock.TableBlock })
+        assertEquals(1, decoded.blocks.count { it is NoteBlock.ChecklistBlock })
+    }
+
+    @Test
+    fun s11_openAndSaveWithoutChanges_producesIdenticalDocument() {
+        // Arrange
+        val original = NoteTemplates.structuredTable()
+
+        // Act: فتح الملاحظة ثم الحفظ دون أي تعديل
+        val textSections = original.blocks.filterIsInstance<NoteBlock.TextSection>()
+        val cards = original.blocks.filterIsInstance<NoteBlock.IdeaBoard>().flatMap { it.cards }
+        val strokes = original.blocks.filterIsInstance<NoteBlock.DrawingBoard>().flatMap { it.strokes }
+        val rebuilt = NoteWorkspaceOperations.assembleEditedDocument(
+            original = original,
+            colorTag = original.colorTag,
+            summary = original.summary,
+            textSections = textSections,
+            ideaCards = cards,
+            drawingStrokes = strokes
+        )
+
+        // Assert (MR: فتح ثم حفظ بلا تحرير = لا تغيير)
+        assertEquals(
+            NoteWorkspaceCodec.encode(original),
+            NoteWorkspaceCodec.encode(rebuilt)
+        )
+        assertFalse(rebuilt.blocks.none { it is NoteBlock.TableBlock })
+    }
+
+    @Test
+    fun s11_ideaBoardIsMergedInPlace_notDuplicated() {
+        // Arrange: لوحتا أفكار — الأولى هي التي يحررها المستخدم
+        val original = NoteWorkspaceDocument(
+            blocks = listOf(
+                NoteBlock.IdeaBoard(id = "b1", boardTitle = "أفكار الورقة", cards = listOf(
+                    IdeaCardItem(id = "c1", title = "فكرة قديمة")
+                )),
+                NoteBlock.IdeaBoard(id = "b2", boardTitle = "أرشيف", cards = listOf(
+                    IdeaCardItem(id = "c9", title = "فكرة مؤرشفة")
+                ))
+            )
+        )
+
+        // Act
+        val edited = NoteWorkspaceOperations.assembleEditedDocument(
+            original = original,
+            colorTag = original.colorTag,
+            summary = original.summary,
+            textSections = emptyList(),
+            ideaCards = listOf(IdeaCardItem(id = "c1", title = "فكرة معدّلة")),
+            drawingStrokes = emptyList()
+        )
+
+        // Assert: لوحتان فقط، الأولى محدّثة والثانية محفوظة كما هي
+        val boards = edited.blocks.filterIsInstance<NoteBlock.IdeaBoard>()
+        assertEquals(2, boards.size)
+        assertEquals("أفكار الورقة", boards[0].boardTitle)
+        assertEquals("فكرة معدّلة", boards[0].cards.first().title)
+        assertEquals("أرشيف", boards[1].boardTitle)
+        assertEquals("فكرة مؤرشفة", boards[1].cards.first().title)
+    }
+
+    @Test
+    fun s11_newDrawingAppendedOnce_whenNoDrawingBoardExists() {
+        // Arrange: وثيقة بلا لوحة رسم
+        val original = NoteWorkspaceDocument(
+            blocks = listOf(NoteBlock.TextSection(id = "t1", body = "نص"))
+        )
+
+        // Act: المستخدم رسم ضربة واحدة
+        val edited = NoteWorkspaceOperations.assembleEditedDocument(
+            original = original,
+            colorTag = original.colorTag,
+            summary = original.summary,
+            textSections = listOf(NoteBlock.TextSection(id = "t1", body = "نص")),
+            ideaCards = emptyList(),
+            drawingStrokes = listOf(
+                DrawingStroke(points = listOf(NormalizedPoint(0.1f, 0.1f), NormalizedPoint(0.5f, 0.6f)))
+            )
+        )
+
+        // Assert
+        assertEquals(2, edited.blocks.size)
+        val board = edited.blocks[1] as NoteBlock.DrawingBoard
+        assertEquals(1, board.strokes.size)
+        assertEquals("رسم الملاحظة", board.title)
+    }
+
+    @Test
+    fun s11_versionAndColorTagAreCarriedFromOriginalDocument() {
+        // Arrange
+        val original = NoteWorkspaceDocument(
+            version = NoteWorkspaceCodec.CURRENT_VERSION,
+            colorTag = NoteColorTag.REVIEW,
+            blocks = listOf(NoteBlock.TextSection(id = "t1", body = "نص"))
+        )
+
+        // Act: تغيير وسم اللون
+        val edited = NoteWorkspaceOperations.assembleEditedDocument(
+            original = original,
+            colorTag = NoteColorTag.IDEA,
+            summary = "",
+            textSections = listOf(NoteBlock.TextSection(id = "t1", body = "نص")),
+            ideaCards = emptyList(),
+            drawingStrokes = emptyList()
+        )
+
+        // Assert (Inv-1: بقاء بادئة الإصدار وسلامة الحقول)
+        assertEquals(NoteWorkspaceCodec.CURRENT_VERSION, edited.version)
+        assertEquals(NoteColorTag.IDEA, edited.colorTag)
+        assertTrue(
+            NoteWorkspaceCodec.encode(edited).startsWith(NoteWorkspaceCodec.PREFIX)
+        )
+    }
+
+    // ========================================================================
+    // S12: أشكال بطاقات الأفكار — الأشكال المخفية تبقى قابلة لفك الترميز
+    // ========================================================================
+    @Test
+    fun s12_hiddenShapesStillDecodable_andCyclingSkipsThem() {
+        // Arrange: ملاحظة قديمة محفوظة بشكل مخفي عن الواجهة
+        val doc = NoteWorkspaceDocument(
+            blocks = listOf(
+                NoteBlock.IdeaBoard(
+                    cards = listOf(IdeaCardItem(id = "c1", title = "فكرة", shape = IdeaCardShape.BADGE))
+                )
+            )
+        )
+
+        // Act
+        val decoded = NoteWorkspaceCodec.decode(NoteWorkspaceCodec.encode(doc))
+        val decodedShape = (decoded.blocks.first() as NoteBlock.IdeaBoard).cards.first().shape
+        val afterCycle = IdeaCardShape.nextSelectable(decodedShape)
+
+        // Assert: التوافق العكسي محفوظ + التدوير ينتقل لشكل متاح فقط
+        assertEquals(IdeaCardShape.BADGE, decodedShape)
+        assertEquals(IdeaCardShape.ROUNDED, afterCycle)
+        assertFalse(IdeaCardShape.selectable.contains(IdeaCardShape.CUT_CORNER))
+        assertFalse(IdeaCardShape.selectable.contains(IdeaCardShape.BADGE))
+        assertEquals(IdeaCardShape.FOLDED_STICKY, IdeaCardShape.nextSelectable(IdeaCardShape.ROUNDED))
+        assertEquals(IdeaCardShape.CAPSULE, IdeaCardShape.nextSelectable(IdeaCardShape.FOLDED_STICKY))
+        assertEquals(IdeaCardShape.ROUNDED, IdeaCardShape.nextSelectable(IdeaCardShape.CAPSULE))
+    }
+
+    // ========================================================================
+    // S13: حدود حجم ضربة الرسم — حماية حجم التخزين (Inv-4)
+    // ========================================================================
+    @Test
+    fun s13_simplifyPoints_capsStrokeSize_andKeepsEndpoints() {
+        // Arrange: ضربة طويلة جداً (محاكاة سحب بطيء على الشاشة)
+        val rawPoints = (0..1200).map { NormalizedPoint(it / 1200f, (it % 97) / 1200f) }
+
+        // Act
+        val simplified = NoteWorkspaceOperations.simplifyPoints(rawPoints)
+
+        // Assert
+        assertTrue(simplified.size <= NoteWorkspaceOperations.MAX_POINTS_PER_STROKE)
+        assertEquals(rawPoints.first().x, simplified.first().x, 0.001f)
+        assertEquals(rawPoints.last().x, simplified.last().x, 0.001f)
+        assertTrue(simplified.size < rawPoints.size)
+    }
+
+    @Test
+    fun s13_eraserRemovesStrokeBySegmentDistance_notOnlyVertices() {
+        // Arrange: خط أفقي طويل، رؤوسه بعيدة عن نقطة الممحاة لكن القطعة تمر بها
+        val strokes = listOf(
+            DrawingStroke(points = listOf(NormalizedPoint(0.0f, 0.5f), NormalizedPoint(1.0f, 0.5f)))
+        )
+
+        // Act: ممحاة في منتصف القطعة
+        val erased = NoteWorkspaceOperations.eraseStrokesNear(strokes, x = 0.5f, y = 0.5f)
+
+        // Assert: تُمحى الضربة رغم أن المسافة إلى أقرب رأس تساوي 0.5
+        assertTrue(erased.isEmpty())
+        assertEquals(1, NoteWorkspaceOperations.eraseStrokesNear(strokes, x = 0.5f, y = 0.9f).size)
+    }
+
+    @Test
+    fun s13_undoLastStroke_isSafeOnEmptyList() {
+        assertTrue(NoteWorkspaceOperations.undoLastStroke(emptyList()).isEmpty())
+
+        val strokes = listOf(
+            DrawingStroke(points = listOf(NormalizedPoint(0.1f, 0.1f))),
+            DrawingStroke(points = listOf(NormalizedPoint(0.2f, 0.2f)))
+        )
+        assertEquals(1, NoteWorkspaceOperations.undoLastStroke(strokes).size)
+    }
+
+    @Test
+    fun s13_cardPaletteHasSingleSourceOfTruth() {
+        // Assert: لوحة الألوان مصدر واحد بلا تكرار ولا قيم فارغة
+        assertTrue(NotePalette.cardColors.isNotEmpty())
+        assertTrue(NotePalette.strokeColors.isNotEmpty())
+        assertTrue(NotePalette.textColors.isNotEmpty())
+        assertTrue(NotePalette.cardColors.contains(NotePalette.defaultCardColor))
+        assertTrue(NotePalette.strokeColors.contains(NotePalette.defaultStrokeColor))
+        assertTrue(NotePalette.textColors.contains(NotePalette.defaultTextColor))
+    }
+
+    @Test
+    fun s13_newEraserIsSupersetOfLegacyVertexEraser() {
+        // Arrange
+        // ممحاة عند منتصف قطعة أفقية: أقرب رأس يبعد 0.4 (خارج نصف القطر) لكن الممحاة
+        // فوق القطعة نفسها مباشرة — هنا يظهر الفرق بين فحص الرؤوس وفحص القطع.
+        val strokes = listOf(
+            DrawingStroke(points = listOf(NormalizedPoint(0.10f, 0.50f), NormalizedPoint(0.90f, 0.50f))),
+            DrawingStroke(points = listOf(NormalizedPoint(0.20f, 0.90f), NormalizedPoint(0.30f, 0.90f)))
+        )
+        val x = 0.5f
+        val y = 0.5f
+        val radius = 0.045f
+
+        // السلوك القديم (فحص الرؤوس فقط) بدلالة حدّ موحّدة مع الجديد
+        val legacy = strokes.filterNot { stroke ->
+            stroke.points.any { kotlin.math.hypot(it.x - x, it.y - y) <= radius }
+        }
+
+        // Act
+        val current = NoteWorkspaceOperations.eraseStrokesNear(strokes, x = x, y = y, radius = radius)
+
+        // Assert (MR-4): كل ضربة تمحوها الممحاة القديمة تمحوها الجديدة أيضاً.
+        // البرهان: إن كان رأس داخل نصف القطر فالمسافة إلى القطعة الحاوية له صفر،
+        // فتمحوها الجديدة حتماً — وقد تمحو إضافياً ما تمر الممحاة فوق قطعته.
+        val erasedByLegacy = strokes.filterNot { legacy.contains(it) }
+        erasedByLegacy.forEach { assertFalse(current.contains(it)) }
+        assertTrue(current.size <= legacy.size)
+
+        // القديمة تبقي الضربتين: أقرب رأس للضربة الأولى يبعد 0.4، والثانية بعيدة أصلاً
+        assertEquals(2, legacy.size)
+        // الجديدة تمحو الأولى (الممحاة على القطعة) وتبقي الثانية (بعيدة 0.4 رأسياً)
+        assertEquals(1, current.size)
+        assertEquals(strokes[1], current.first())
+    }
+
 }

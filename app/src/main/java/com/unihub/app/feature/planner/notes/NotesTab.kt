@@ -2,14 +2,12 @@ package com.unihub.app.feature.planner.notes
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -30,7 +28,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -40,7 +37,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,19 +64,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.TextFields
@@ -91,8 +82,6 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -127,7 +116,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -140,7 +128,6 @@ import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.UiMessagesHost
-import com.unihub.app.ui.theme.FolderPalette
 import com.unihub.app.ui.theme.PaperSurface
 import com.unihub.app.ui.theme.SemanticInfo
 import com.unihub.app.ui.theme.SemanticSuccess
@@ -635,6 +622,17 @@ private fun RichNoteCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                IconButton(
+                    onClick = onDeleteRequest,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.DeleteOutline,
+                        contentDescription = "حذف الملاحظة",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 TextButton(onClick = onTogglePin) {
                     Text(if (note.isPinned) "إلغاء التثبيت" else "تثبيت")
                 }
@@ -796,78 +794,57 @@ private fun resolveCardShape(shape: IdeaCardShape, foldPx: Float): Shape = when 
     IdeaCardShape.BADGE -> RoundedCornerShape(topStart = 20.dp, bottomEnd = 20.dp, topEnd = 4.dp, bottomStart = 4.dp)
 }
 
-/** خلفية حركية هادئة تتنفس وتتحرك من الجوانب والأطراف محيطة بورقة الملاحظة */
+/** خلفية هادئة ثابتة حول ورقة الملاحظة — بلا حركة دائمة تستهلك البطارية وتشتت النظر */
 @Composable
 private fun AmbientLivingEdgeBackground(
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "ambientEdgeTransition")
-    val phase1 by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambientPhase1"
-    )
-    val phase2 by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambientPhase2"
-    )
-
     Canvas(modifier = modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
 
-        // تموجات أفقية ناعمة جداً على الحواف
+        // تدرجان هادئان على الحواف
         drawRect(
             brush = Brush.horizontalGradient(
                 colors = listOf(
-                    Color(0xFF4E7D6E).copy(alpha = 0.12f + 0.08f * phase1),
+                    Color(0xFF4E7D6E).copy(alpha = 0.14f),
                     Color.Transparent,
                     Color.Transparent,
-                    Color(0xFF5B7FA6).copy(alpha = 0.10f + 0.07f * phase2)
+                    Color(0xFF5B7FA6).copy(alpha = 0.12f)
                 )
             ),
             size = size
         )
-        // تموجات رأسية ناعمة جداً على الحواف
         drawRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFFC79A4B).copy(alpha = 0.08f + 0.06f * (1f - phase1)),
+                    Color(0xFFC79A4B).copy(alpha = 0.09f),
                     Color.Transparent,
                     Color.Transparent,
-                    Color(0xFF4E7D6E).copy(alpha = 0.09f + 0.06f * phase2)
+                    Color(0xFF4E7D6E).copy(alpha = 0.10f)
                 )
             ),
             size = size
         )
 
-        // إشراقة ناعمة في الزوايا تتنفس وتتحرك بهدوء
+        // إشراقة ثابتة في الزاويتين المتقابلتين
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFF5B7FA6).copy(alpha = 0.15f + 0.06f * phase1),
+                    Color(0xFF5B7FA6).copy(alpha = 0.16f),
                     Color.Transparent
                 ),
-                center = Offset(w * 0.10f + (w * 0.06f * phase2), h * 0.06f),
+                center = Offset(w * 0.10f, h * 0.06f),
                 radius = w * 0.45f
             )
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFFC79A4B).copy(alpha = 0.13f + 0.05f * (1f - phase2)),
+                    Color(0xFFC79A4B).copy(alpha = 0.14f),
                     Color.Transparent
                 ),
-                center = Offset(w * 0.90f - (w * 0.06f * phase1), h * 0.94f),
+                center = Offset(w * 0.90f, h * 0.94f),
                 radius = w * 0.45f
             )
         )
@@ -939,35 +916,29 @@ private fun NoteWorkspaceDialog(
     var activeToolMode by remember { mutableStateOf(NoteToolMode.NONE) }
     var drawingMode by remember { mutableStateOf(DrawingToolMode.PEN) }
     var strokeWidthDp by remember { mutableFloatStateOf(4f) }
-    var strokeColorHex by remember { mutableStateOf("#3E6B5E") }
+    var strokeColorHex by remember { mutableStateOf(NotePalette.defaultStrokeColor) }
 
     // خيارات تنسيق الخط للنصوص
     var currentFontSizeSp by remember { mutableFloatStateOf(16f) }
     var currentIsBold by remember { mutableStateOf(false) }
-    var currentTextColorHex by remember { mutableStateOf("#1E293B") }
+    var currentTextColorHex by remember { mutableStateOf(NotePalette.defaultTextColor) }
 
     // خيارات إضافة البطاقات الحرة
-    var cardShapeChoice by remember { mutableStateOf(IdeaCardShape.ROUNDED) }
-    var cardColorChoice by remember { mutableStateOf("#FEF3C7") }
+    var cardShapeChoice by remember { mutableStateOf(IdeaCardShape.selectable.first()) }
+    var cardColorChoice by remember { mutableStateOf(NotePalette.defaultCardColor) }
 
     var showDiscardDialog by remember { mutableStateOf(false) }
 
-    // تجميع الوثيقة الكاملة للحفظ
-    val currentDocument = remember(colorTag, summary, textSections, cards, drawingStrokes) {
-        val blocks = buildList {
-            addAll(textSections)
-            if (cards.isNotEmpty()) {
-                add(NoteBlock.IdeaBoard(boardTitle = "أفكار الورقة", cards = cards))
-            }
-            if (drawingStrokes.isNotEmpty()) {
-                add(NoteBlock.DrawingBoard(title = "رسم الملاحظة", strokes = drawingStrokes))
-            }
-        }.ifEmpty { listOf(NoteBlock.TextSection()) }
-
-        NoteWorkspaceDocument(
+    // تجميع الوثيقة الكاملة للحفظ: يُعاد بناء الكتل المحرّرة في مواضعها،
+    // وتبقى الجداول والمهام كما هي حتى لا تضيع عند حفظ ملاحظة قديمة
+    val currentDocument = remember(colorTag, summary, textSections, cards, drawingStrokes, session) {
+        NoteWorkspaceOperations.assembleEditedDocument(
+            original = session.initialDocument,
             colorTag = colorTag,
             summary = summary,
-            blocks = blocks
+            textSections = textSections,
+            ideaCards = cards,
+            drawingStrokes = drawingStrokes
         )
     }
 
@@ -1151,11 +1122,9 @@ private fun NoteWorkspaceDialog(
                         cards = cards + newCard
                         selectedCardId = newCard.id
                     },
-                    canUndo = drawingStrokes.isNotEmpty() || inProgressStroke != null,
+                    canUndo = drawingStrokes.isNotEmpty(),
                     onUndo = {
-                        if (drawingStrokes.isNotEmpty()) {
-                            drawingStrokes = drawingStrokes.dropLast(1)
-                        }
+                        drawingStrokes = NoteWorkspaceOperations.undoLastStroke(drawingStrokes)
                     }
                 )
             }
@@ -1288,7 +1257,7 @@ private fun NoteWorkspaceDialog(
                                 ) {
                                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("+ إضافة فقرة جديدة")
+                                    Text("فقرة جديدة")
                                 }
 
                                 Spacer(Modifier.height(140.dp))
@@ -1330,11 +1299,11 @@ private fun NoteWorkspaceDialog(
                                 onDragStart = { offset, normPt ->
                                     liveTouchPoint = offset
                                     if (drawingMode == DrawingToolMode.ERASER) {
-                                        drawingStrokes = drawingStrokes.filterNot { s ->
-                                            s.points.any { pt ->
-                                                hypot(pt.x - normPt.x, pt.y - normPt.y) < 0.045f
-                                            }
-                                        }
+                                        drawingStrokes = NoteWorkspaceOperations.eraseStrokesNear(
+                                            strokes = drawingStrokes,
+                                            x = normPt.x,
+                                            y = normPt.y
+                                        )
                                     } else {
                                         inProgressStroke = DrawingStroke(
                                             colorHex = strokeColorHex,
@@ -1347,11 +1316,11 @@ private fun NoteWorkspaceDialog(
                                 onDrag = { offset, normPt ->
                                     liveTouchPoint = offset
                                     if (drawingMode == DrawingToolMode.ERASER) {
-                                        drawingStrokes = drawingStrokes.filterNot { s ->
-                                            s.points.any { pt ->
-                                                hypot(pt.x - normPt.x, pt.y - normPt.y) < 0.045f
-                                            }
-                                        }
+                                        drawingStrokes = NoteWorkspaceOperations.eraseStrokesNear(
+                                            strokes = drawingStrokes,
+                                            x = normPt.x,
+                                            y = normPt.y
+                                        )
                                     } else {
                                         inProgressStroke?.let { curr ->
                                             inProgressStroke = curr.copy(points = curr.points + normPt)
@@ -1362,7 +1331,10 @@ private fun NoteWorkspaceDialog(
                                     liveTouchPoint = null
                                     inProgressStroke?.let { finished ->
                                         if (finished.points.isNotEmpty()) {
-                                            drawingStrokes = drawingStrokes + finished
+                                            // تبسيط النقاط يحفظ شكل الخط ويمنع تضخّم حجم الملاحظة في التخزين
+                                            drawingStrokes = drawingStrokes + finished.copy(
+                                                points = NoteWorkspaceOperations.simplifyPoints(finished.points)
+                                            )
                                         }
                                     }
                                     inProgressStroke = null
@@ -1400,17 +1372,21 @@ private fun PaperTextSectionEditor(
     onUpdate: (NoteBlock.TextSection) -> Unit,
     onDelete: (() -> Unit)?
 ) {
-    // حركة نبض المؤشر الناعمة
-    val transition = rememberInfiniteTransition(label = "cursorBlink")
-    val cursorAlpha by transition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 650, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "cursorAlpha"
-    )
+    // نبض المؤشر للفقرة المركّزة فقط — بلا حركة مستمرة في بقية الفقرات
+    val cursorAlpha by if (isFocused) {
+        val transition = rememberInfiniteTransition(label = "cursorBlink")
+        transition.animateFloat(
+            initialValue = 0.2f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 650, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "cursorAlpha"
+        )
+    } else {
+        remember { mutableFloatStateOf(1f) }
+    }
 
     val textColor = remember(section.colorHex) { section.colorHex.toComposeColor() }
     val fontWeight = if (section.isBold) FontWeight.Bold else FontWeight.Normal
@@ -1658,8 +1634,7 @@ private fun FloatingDraggableCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clickable {
-                                val nextShape = IdeaCardShape.entries[(card.shape.ordinal + 1) % IdeaCardShape.entries.size]
-                                onUpdateCard(card.copy(shape = nextShape))
+                                onUpdateCard(card.copy(shape = IdeaCardShape.nextSelectable(card.shape)))
                             }
                             .padding(2.dp)
                     )
@@ -1672,7 +1647,7 @@ private fun FloatingDraggableCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clickable {
-                                val colors = listOf("#FEF3C7", "#D1FAE5", "#DBEAFE", "#FFE4E6", "#EDE9FE", "#FFEDD5")
+                                val colors = NotePalette.cardColors
                                 val currIdx = colors.indexOf(card.colorHex)
                                 val nextColor = colors[(currIdx + 1).coerceAtLeast(0) % colors.size]
                                 onUpdateCard(card.copy(colorHex = nextColor))
@@ -1701,17 +1676,21 @@ private fun PaperDrawingCanvasOverlay(
     onDrag: (Offset, NormalizedPoint) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    // أنيميشن نبض مؤشر القلم عند الرسم النشط
-    val transition = rememberInfiniteTransition(label = "brushGlow")
-    val glowRadius by transition.animateFloat(
-        initialValue = 4f,
-        targetValue = 9f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowPulse"
-    )
+    // نبض خفيف لمؤشر القلم أثناء الرسم فقط — لا حركة دائمة أثناء القراءة أو الكتابة
+    val glowRadius by if (isDrawingActive) {
+        val transition = rememberInfiniteTransition(label = "brushGlow")
+        transition.animateFloat(
+            initialValue = 4f,
+            targetValue = 9f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "glowPulse"
+        )
+    } else {
+        remember { mutableFloatStateOf(4f) }
+    }
 
     Canvas(
         modifier = Modifier
@@ -1869,7 +1848,7 @@ private fun ModernNoteBottomToolbar(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val drawColors = listOf("#1E293B", "#3E6B5E", "#5B7FA6", "#C25E52", "#C79A4B", "#7D5A7A", "#166534", "#E11D48")
+                                val drawColors = NotePalette.strokeColors
                                 drawColors.forEach { hex ->
                                     val isSelected = strokeColorHex.equals(hex, ignoreCase = true)
                                     Box(
@@ -1946,7 +1925,7 @@ private fun ModernNoteBottomToolbar(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val textColors = listOf("#1E293B", "#475569", "#166534", "#1E40AF", "#991B1B", "#92400E")
+                                val textColors = NotePalette.textColors
                                 textColors.forEach { hex ->
                                     val isSelected = currentTextColorHex.equals(hex, ignoreCase = true)
                                     Box(
@@ -1976,7 +1955,7 @@ private fun ModernNoteBottomToolbar(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                IdeaCardShape.entries.forEach { shape ->
+                                IdeaCardShape.selectable.forEach { shape ->
                                     FilterChip(
                                         selected = cardShapeChoice == shape,
                                         onClick = { onSelectCardShape(shape) },
@@ -1995,7 +1974,7 @@ private fun ModernNoteBottomToolbar(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val cardColors = listOf("#FEF3C7", "#D1FAE5", "#DBEAFE", "#FFE4E6", "#EDE9FE", "#FFEDD5")
+                                    val cardColors = NotePalette.cardColors
                                     cardColors.forEach { hex ->
                                         val isSelected = cardColorChoice.equals(hex, ignoreCase = true)
                                         Box(
