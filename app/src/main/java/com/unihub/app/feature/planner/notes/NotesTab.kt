@@ -101,7 +101,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,7 +114,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -992,7 +994,7 @@ private fun NoteWorkspaceDialog(
                                 textStyle = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
-                                ),
+                                ).noteWritingStyle(),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 decorationBox = { innerTextField ->
                                     if (title.isEmpty()) {
@@ -1199,7 +1201,7 @@ private fun NoteWorkspaceDialog(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                                                     color = Color(0xFF334155)
-                                                ),
+                                                ).noteWritingStyle(),
                                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                                 decorationBox = { inner ->
                                                     if (summary.isEmpty()) {
@@ -1242,24 +1244,7 @@ private fun NoteWorkspaceDialog(
                                     )
                                 }
 
-                                // زر إضافة فقرة جديدة بسلاسة على الورقة
-                                TextButton(
-                                    onClick = {
-                                        val newSec = NoteBlock.TextSection(
-                                            fontSizeSp = currentFontSizeSp,
-                                            isBold = currentIsBold,
-                                            colorHex = currentTextColorHex
-                                        )
-                                        textSections = textSections + newSec
-                                        activeSectionIndex = textSections.lastIndex
-                                    },
-                                    modifier = Modifier.align(Alignment.Start)
-                                ) {
-                                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("فقرة جديدة")
-                                }
-
+                                // مساحة سفلية أسفل آخر سطر: المستخدم يكتب وينزل بحرية بلا أزرار وسيطة
                                 Spacer(Modifier.height(140.dp))
                             }
 
@@ -1362,6 +1347,18 @@ private fun NoteWorkspaceDialog(
 }
 
 // ============================================================================
+// نمط الكتابة المشترك داخل محرر الملاحظات — يُطبَّق على كل حقول التحرير
+// ============================================================================
+/**
+ * الكتابة في الملاحظات تبدأ من اليمين (العربية أولاً)، مع بقاء المحتوى اللاتيني
+ * — رابط، اسم مقرر، معادلة — باتجاهه الطبيعي بدل أن يُجبَر على اليمين.
+ */
+internal fun TextStyle.noteWritingStyle(): TextStyle = copy(
+    textAlign = TextAlign.Start,
+    textDirection = TextDirection.ContentOrRtl
+)
+
+// ============================================================================
 // محرر فقرة نصية على الورقة مع تأثير حركي ناعم وتنسيق الخطوط
 // ============================================================================
 @Composable
@@ -1399,44 +1396,17 @@ private fun PaperTextSectionEditor(
             .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // شريط عنوان الفقرة (إن وجد أو كان في وضع التركيز)
-        if (section.heading.isNotBlank() || isFocused) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = section.heading,
-                    onValueChange = { onUpdate(section.copy(heading = it)) },
-                    modifier = Modifier.weight(1f),
-                    textStyle = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    ),
-                    singleLine = true,
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    decorationBox = { inner ->
-                        if (section.heading.isEmpty()) {
-                            Text(
-                                "عنوان فرعي (اختياري)…",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                            )
-                        }
-                        inner()
-                    }
+        // عنوان محفوظ مسبقاً (قالب جاهز أو ملاحظة قديمة) يُعرض كنص فقط — محرر الملاحظات لا يعرض حقل عنوان
+        if (section.heading.isNotBlank()) {
+            Text(
+                text = section.heading,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall.noteWritingStyle().copy(
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                if (onDelete != null && isFocused) {
-                    IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "حذف الفقرة",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
+            )
         }
 
         // نص الفقرة الفعلي مع التنسيقات المخصصة
@@ -1463,29 +1433,29 @@ private fun PaperTextSectionEditor(
                 Spacer(Modifier.width(8.dp))
             }
 
-            Box(modifier = Modifier.weight(1f)) {
-                BasicTextField(
-                    value = section.body,
-                    onValueChange = { onUpdate(section.copy(body = it)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = section.fontSizeSp.sp,
-                        fontWeight = fontWeight,
-                        color = textColor,
-                        lineHeight = (section.fontSizeSp * 1.45f).sp
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha)),
-                    decorationBox = { inner ->
-                        if (section.body.isEmpty()) {
-                            Text(
-                                "اكتب هنا بحرية… استخدم شريط الأدوات بالأسفل للرسم أو إضافة البطاقات وتغيير الخط",
-                                fontSize = section.fontSizeSp.sp,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                        inner()
-                    }
-                )
+            BasicTextField(
+                value = section.body,
+                onValueChange = { onUpdate(section.copy(body = it)) },
+                modifier = Modifier.weight(1f),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = section.fontSizeSp.sp,
+                    fontWeight = fontWeight,
+                    color = textColor,
+                    lineHeight = (section.fontSizeSp * 1.45f).sp
+                ).noteWritingStyle(),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha))
+            )
+
+            // زر حذف فقرة يظل متاحاً للملاحظات متعددة الفقرات فقط — ويظهر عند التركيز
+            if (onDelete != null && isFocused) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "حذف الفقرة",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
@@ -1581,7 +1551,7 @@ private fun FloatingDraggableCard(
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1E293B)
-                ),
+                ).noteWritingStyle(),
                 cursorBrush = SolidColor(Color(0xFF1E293B)),
                 decorationBox = { inner ->
                     if (card.title.isEmpty()) {
@@ -1603,7 +1573,7 @@ private fun FloatingDraggableCard(
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.bodySmall.copy(
                     color = Color(0xFF334155)
-                ),
+                ).noteWritingStyle(),
                 cursorBrush = SolidColor(Color(0xFF1E293B)),
                 decorationBox = { inner ->
                     if (card.details.isEmpty()) {
