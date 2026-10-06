@@ -81,12 +81,22 @@ class BackupStreamTest {
     // ========================================================================
     @Test
     fun headerAndMagicTogetherRouteARealExportToTheArchivePath() {
-        val archive = zipOf("manifest.json" to """{"app":"unihub","schemaVersion":3}""")
+        val manifest = """{"app":"unihub","schemaVersion":3,"files":[]}"""
+        val archive = zipOf("manifest.json" to manifest)
         val stream = buffered(BackupSignature.HEADER_BYTES + archive)
 
         assertTrue(BackupStream.skipSignatureLine(stream, BackupSignature.HEADER_BYTES))
         assertTrue("أرشيف موقّع يجب أن يُقرأ كأرشيف", BackupStream.looksLikeZip(stream))
-        assertEquals("unihub", JSONObject(BackupStream.readTextBounded(stream, 1_000_000)).getString("app"))
+
+        // من نفس موضع التدفق — كما يفعل المسار الحقيقي: manifest يُستخرج من الأرشيف لا من رأس الملف
+        val result = BackupStream.spool(
+            input = stream,
+            manifestEntry = "manifest.json",
+            filesPrefix = "files/",
+            spoolDir = File(temp.root, "routed"),
+            maxEntryBytes = 1L * 1024 * 1024
+        )
+        assertEquals("unihub", JSONObject(result.manifestText!!).getString("app"))
     }
 
     // ========================================================================
