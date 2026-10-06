@@ -33,8 +33,9 @@ data class ImportedFile(
  *    السبب الجذري لعطلين مُبلَّغ عنهما معاً: تعذّر "تعديل الاسم الأصلي" فعلياً،
  *    وإرسال/مشاركة الملف باسمه القديم بدل اسمه الحالي — لأن FileProvider يقرأ
  *    اسم الملف الحقيقي من القرص وليس عمود "name" في قاعدة البيانات.
- * 3) إضافة [importBytes] لاستعادة نسخة فعلية من محتوى مضمّن داخل أرشيف نسخة
- *    احتياطية (انظر BackupRepository) بدل الاكتفاء بمسار نصّي لم يعد موجوداً.
+ * 3) استعادة النسخ الاحتياطية تنزل محتواها من قرص مؤقت عبر [importTempFile] بدل
+ *    تمرير البايتات على الذاكرة — نسخة فيها ملف كبير كانت تُحمَّل كلها فتُفشل
+ *    الاستيراد برسالة نفاد الذاكرة (انظر BackupStream).
  */
 @Singleton
 class FileStorage @Inject constructor(
@@ -198,27 +199,11 @@ class FileStorage @Inject constructor(
         }
 
     /**
-     * استعادة نسخة فعلية من بايتات مضمّنة داخل أرشيف نسخة احتياطية (ZIP)
-     * إلى مجلد المكتبة الخاص بهذا الجهاز، وإرجاع مسارها الجديد الصالح محلياً.
-     */
-    suspend fun importBytes(bytes: ByteArray, displayName: String, extension: String): String =
-        withContext(Dispatchers.IO) {
-            val safeBase = InputValidator.sanitizeName(displayName).ifBlank { "ملف" }
-            // نتساهل هنا عمداً في التحقق من الامتداد مقارنة بـ import(): بيانات النسخة
-            // الاحتياطية سبق التحقق منها عند تصديرها، ورفض الاستعادة بسبب تغيّر قائمة
-            // الامتدادات المسموحة بين إصدارين يفقد المستخدم بياناته بلا داعٍ.
-            val safeExt = extension.trim('.').ifBlank { "bin" }.filter { it.isLetterOrDigit() }.ifBlank { "bin" }
-            val target = uniqueTarget(safeBase, safeExt)
-            try { target.writeBytes(bytes) } catch (error: Exception) {
-                target.delete()
-                throw error
-            }
-            target.absolutePath
-        }
-
-    /**
-     * نقل ملف تم تنزيله من خادم Cloudflare R2 (ملف مؤقت على القرص) إلى مجلد المكتبة
-     * مباشرة دون تحميله في الذاكرة العشوائية (RAM) — مثالي للملفات الضخمة جداً.
+     * نقل ملف مؤقت على القرص إلى مجلد المكتبة مباشرة دون تحميله في الذاكرة العشوائية
+     * (RAM) — مثالي للملفات الضخمة جداً. يُستخدم لسحوبات Cloudflare R2، ولإعادة ملفات
+     * النسخ الاحتياطية من قرصها المؤقت؛ والتساهل في التحقق من الامتداد عمدًا لأن
+     * بيانات النسخة سبق التحقق منها عند تصديرها، ورفض الاستعادة بسبب تغيّر قائمة
+     * الامتدادات بين إصدارين يفقد المستخدم بياناته بلا داعٍ.
      */
     suspend fun importTempFile(source: File, displayName: String, extension: String): String =
         withContext(Dispatchers.IO) {

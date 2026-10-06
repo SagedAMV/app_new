@@ -29,9 +29,4 @@ object BackupSignature {
         }
         return true
     }
-
-    /** إسقاط سطر الشفرة إن وُجد — ما بعده أرشيف ZIP (أو JSON قديم) صالح */
-    fun stripIfPresent(bytes: ByteArray): ByteArray =
-        if (startsWithSignature(bytes)) bytes.copyOfRange(HEADER_BYTES.size, bytes.size)
-        else bytes
 }

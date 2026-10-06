@@ -31,13 +31,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,6 +75,20 @@ class BackupRepository @Inject constructor(
 
         /** حد أقصى لكل عنصر داخل الأرشيف — يمنع "قنبلة ضغط" من استهلاك الذاكرة بلا حدود */
         private val MAX_ENTRY_BYTES = InputValidator.MAX_UPLOAD_SIZE_BYTES
+
+        /** وسيط القراءة من مزوّد الـURI — يمرّر الأرشيف بحمل ذاكرة ثابت صغير */
+        private const val READ_BUFFER_BYTES = 32 * 1024
+
+        /**
+         * مجلد مؤقت داخل تخزين التطبيق تُلغى فيه عناصر الأرشيف قبل الاستعادة.
+         * داخل filesDir عمدًا: [FileStorage.importTempFile] ينقله نقلاً (rename) بلا نسخ،
+         * و FileStorage.clearAll() يحذف مكتبة المستخدم فقط فلا يمسّه.
+         */
+        private const val IMPORT_SPOOL_PREFIX = "backup_import_"
+
+        /** رسالة موحّدة لأي عطل غير متوقع — نص الاستثناء التقني لا يفيد المستخدم */
+        private const val FRIENDLY_IMPORT_FAILURE =
+            "تعذّر استيراد النسخة الاحتياطية — تأكد أنها ملف نسخة كامل صادر من هذا التطبيق"
 
         private fun fileEntryName(id: Long, extension: String) =
             "$FILES_PREFIX$id.${extension.ifBlank { "bin" }}"
@@ -398,59 +410,73 @@ class BackupRepository @Inject constructor(
 
     // ====== الاستيراد ======
 
+    /**
+     * يستورد نسخة احتياطية من [uri] بلا تحميلها في الذاكرة: يُقرأ التدفق قطعاً
+     * ثابتة، ويُنزل محتوى كل ملف مضمّن إلى قرص مؤقت حتى لحظة الاستعادة.
+     *
+     * المسار القديم كان يقرأ الملف كاملاً بـ readBytes() ثم ينسخه مرة لإسقاط سطر
+     * الشفرة، ثم يجمع كل الملفات المضمّنة في HashMap من ByteArray — نسخة واحدة فيها
+     * محاضرة مرئية كانت تكفي لامتلاء كومة الـ Dalvik/ART وفشل الاستيراد برسالة
+     * «Failed to allocate a … byte allocation … until OOM».
+     */
     suspend fun import(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
-        runCatching {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: throw IOException("تعذّر قراءة ملف النسخة الاحتياطية")
-            importRawBytes(bytes)
-        }.onFailure { android.util.Log.e(TAG, "فشل الاستيراد", it) }
+        runCatching { importFrom(uri) }
+            .recoverCatching { error ->
+                // المستخدم يرى رسالة عربية مختصرة، والسجل يحتفظ بالتفاصيل التقنية كاملة
+                android.util.Log.e(TAG, "فشل الاستيراد", error)
+                throw error as? IOException ?: IOException(FRIENDLY_IMPORT_FAILURE)
+            }
     }
 
-    private suspend fun importRawBytes(bytes: ByteArray): Int {
-        if (bytes.size.toLong() > MAX_BACKUP_BYTES) {
+    private suspend fun importFrom(uri: Uri): Int {
+        // حدّ الحجم يُقارن قبل القراءة: محاولة قراءة ملف ضخم هي نفسها ما كان يُسقط التطبيق.
+        // بعض المزوّدين لا تُبلغ عن الحجم (-1) فيُترك الأرشيف يُعالَج والحماية لكل عنصر قائمة.
+        val declaredSize = runCatching {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+        }.getOrDefault(-1L)
+        if (declaredSize > MAX_BACKUP_BYTES) {
             throw IOException("ملف النسخة الاحتياطية أكبر من الحد المسموح")
         }
-        // إسقاط سطر الشفرة إن وُجد — النسخ الجديدة تبدأ به والقديمة تبدأ بـ PK مباشرة
-        val payload = BackupSignature.stripIfPresent(bytes)
-        return if (isZipArchive(payload)) {
-            importFromZip(payload)
-        } else {
-            importFromLegacyJson(String(payload, Charsets.UTF_8))
+
+        val source = context.contentResolver.openInputStream(uri)
+            ?: throw IOException("تعذّر قراءة ملف النسخة الاحتياطية")
+        val spoolDir = File(context.filesDir, "$IMPORT_SPOOL_PREFIX${System.currentTimeMillis()}")
+
+        return source.buffered(READ_BUFFER_BYTES).use { buffered ->
+            try {
+                // النسخ الجديدة تبدأ بسطر الشفرة، والقديمة تبدأ بـ PK مباشرة أو بـ { لملف JSON
+                BackupStream.skipSignatureLine(buffered, BackupSignature.HEADER_BYTES)
+                if (BackupStream.looksLikeZip(buffered)) {
+                    importFromZip(buffered, spoolDir)
+                } else {
+                    importFromLegacyJson(buffered)
+                }
+            } finally {
+                // يمسح المؤقت في كل الحالات: نجاحاً كان أم فشلاً جزئياً بعد clearAll()
+                runCatching { spoolDir.deleteRecursively() }
+            }
         }
     }
 
-    /** توقيع ZIP القياسي (PK\x03\x04) — يميّز الأرشيف الجديد عن نص JSON القديم */
-    private fun isZipArchive(bytes: ByteArray): Boolean =
-        bytes.size >= 4 &&
-            bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() &&
-            bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
-
-    /** مسار التوافق العكسي: نسخة JSON قديمة بلا محتوى ملفات فعلي مضمّن */
-    private suspend fun importFromLegacyJson(text: String): Int {
+    /** مسار التوافق العكسي: نسخة JSON قديمة (بيانات وصفية فقط) — نص واحد لا ثلاث نسخ منه */
+    private suspend fun importFromLegacyJson(source: InputStream): Int {
+        val text = source.reader(Charsets.UTF_8).readText()
         val root = parseAndValidateManifest(text)
         val files = parseFiles(root.optJSONArray("files"))
         return applyParsedBackup(root, files)
     }
 
     /** مسار الأرشيف الجديد: يعيد إنشاء نسخة فعلية من كل ملف مضمّن داخل الأرشيف */
-    private suspend fun importFromZip(bytes: ByteArray): Int {
-        var manifestText: String? = null
-        val fileBytesByEntry = HashMap<String, ByteArray>()
+    private suspend fun importFromZip(source: InputStream, spoolDir: File): Int {
+        val archive = BackupStream.spool(
+            input = source,
+            manifestEntry = MANIFEST_ENTRY,
+            filesPrefix = FILES_PREFIX,
+            spoolDir = spoolDir,
+            maxEntryBytes = MAX_ENTRY_BYTES
+        )
 
-        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-            var entry: ZipEntry? = zip.nextEntry
-            while (entry != null) {
-                val data = zip.readBounded(MAX_ENTRY_BYTES)
-                when {
-                    entry.name == MANIFEST_ENTRY -> manifestText = String(data, Charsets.UTF_8)
-                    entry.name.startsWith(FILES_PREFIX) -> fileBytesByEntry[entry.name] = data
-                }
-                zip.closeEntry()
-                entry = zip.nextEntry
-            }
-        }
-
-        val text = manifestText ?: throw IOException("النسخة الاحتياطية لا تحتوي على بيانات صالحة")
+        val text = archive.manifestText ?: throw IOException("النسخة الاحتياطية لا تحتوي على بيانات صالحة")
         val root = parseAndValidateManifest(text)
         val declaredFiles = parseFiles(root.optJSONArray("files"))
 
@@ -462,12 +488,13 @@ class BackupRepository @Inject constructor(
         // محتواها الفعلي وقت التصدير (كانت محذوفة خارج التطبيق) تُتخطى بأمان
         // بدل إدراج سجل يتيم يشير لملف غير موجود.
         val restoredFiles = declaredFiles.mapNotNull { fe ->
-            val data = fileBytesByEntry[fileEntryName(fe.id, fe.extension)]
-            if (data == null) {
+            val spooled = archive.filesByEntry[fileEntryName(fe.id, fe.extension)]
+            if (spooled == null || !spooled.isFile) {
                 android.util.Log.w(TAG, "تخطي الملف #${fe.id} — محتواه الفعلي غير موجود داخل الأرشيف")
                 return@mapNotNull null
             }
-            val newPath = runCatching { fileStorage.importBytes(data, fe.name, fe.extension) }
+            // نقل الملف المؤقت إلى المكتبة — بلا تمرير محتواه على الذاكرة
+            val newPath = runCatching { fileStorage.importTempFile(spooled, fe.name, fe.extension) }
                 .getOrElse {
                     android.util.Log.e(TAG, "تعذّرت استعادة الملف الفعلي #${fe.id}", it)
                     return@mapNotNull null
@@ -789,19 +816,4 @@ class BackupRepository @Inject constructor(
             )
         }
     }
-}
-
-/** قراءة عنصر ZIP الحالي بحد أقصى للبايتات — يمنع "قنبلة ضغط" من استهلاك الذاكرة بلا حدود */
-private fun ZipInputStream.readBounded(maxBytes: Long): ByteArray {
-    val buffer = ByteArrayOutputStream()
-    val chunk = ByteArray(8192)
-    var total = 0L
-    while (true) {
-        val n = read(chunk)
-        if (n < 0) break
-        total += n
-        if (total > maxBytes) throw IOException("عنصر داخل النسخة الاحتياطية أكبر من الحد المسموح")
-        buffer.write(chunk, 0, n)
-    }
-    return buffer.toByteArray()
 }
