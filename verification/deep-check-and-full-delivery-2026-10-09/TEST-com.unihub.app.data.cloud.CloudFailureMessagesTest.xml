@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudFailureMessagesTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.026">
+  <properties/>
+  <testcase name="offlineOverridesAnyNetworkFault" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <testcase name="isUserFacingRejectsEverythingTechnicalOrEmpty" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.002"/>
+  <testcase name="unknownHostIsExplainedNotDumped" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <testcase name="mixedArabicAndTechnicalIsRejectedNotKept" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="missingLocalFileSaysSoInArabic" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.002"/>
+  <testcase name="orKeepsOnlyUserWrittenText" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="sameErrorAlwaysGivesSameText" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="droppedStreamIsToldAsDisconnect" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <testcase name="httpStatusesBecomeHumanReasonsWithoutNumbers" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.002"/>
+  <testcase name="userPauseIsNeverAnError" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="noRawNetworkMessageEverReachesTheUser" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.004"/>
+  <testcase name="addingTechnicalNoiseDoesNotChangeUserText" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="everyUserTextIsArabicAndTechnicalFree" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.006"/>
+  <testcase name="arabicProjectMessagesAreKeptVerbatim" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <testcase name="tlsFailureIsSecureConnectionReason" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <testcase name="readTimeoutIsTimeoutReason" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="nullThrowableAndNullMessageNeverPrintNull" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.0"/>
+  <testcase name="noRouteIsAlwaysOffline" classname="com.unihub.app.data.cloud.CloudFailureMessagesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

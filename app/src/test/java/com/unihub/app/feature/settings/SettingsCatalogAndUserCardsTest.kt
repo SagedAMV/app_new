@@ -260,6 +260,11 @@ class SettingsCatalogAndUserCardsTest {
         assertTrue(SettingsCatalogRules.isValidCustomBackupDays("1"))
         assertTrue(SettingsCatalogRules.isValidCustomBackupDays("365"))
         assertTrue(SettingsCatalogRules.isValidCustomBackupDays(" 90 "))
+
+        // التحليل الآمن (جلسة التحقق العميق 2026-10-09): يعيد القيمة الصالحة نفسها بلا !!
+        assertEquals(1, SettingsCatalogRules.parseCustomBackupDays("1"))
+        assertEquals(365, SettingsCatalogRules.parseCustomBackupDays("365"))
+        assertEquals(90, SettingsCatalogRules.parseCustomBackupDays(" 90 "))
     }
 
     // ── S7: تسجيل الدخول من جهاز جديد ينتج طلب موافقة معلق وينعكس في ملخص الصنف الأول للمشرف ──
@@ -373,6 +378,14 @@ class SettingsCatalogAndUserCardsTest {
         assertFalse(SettingsCatalogRules.isValidCustomBackupDays("366"))
         assertFalse(SettingsCatalogRules.isValidCustomBackupDays("abc"))
         assertFalse(SettingsCatalogRules.isValidCustomBackupDays(null))
+
+        // التحليل الآمن يمتص كل المدخلات الفاسدة ويعيد null بدل الانهيار (بلا !!)
+        assertNull(SettingsCatalogRules.parseCustomBackupDays("0"))
+        assertNull(SettingsCatalogRules.parseCustomBackupDays("-15"))
+        assertNull(SettingsCatalogRules.parseCustomBackupDays("366"))
+        assertNull(SettingsCatalogRules.parseCustomBackupDays("abc"))
+        assertNull(SettingsCatalogRules.parseCustomBackupDays(null))
+        assertNull(SettingsCatalogRules.parseCustomBackupDays("   "))
 
         val users = listOf(sampleUser("ahmed"), sampleUser("sara"))
         // استعلام مسافات فقط يعيد كل القائمة، واستعلام رموز غير موجودة يعيد قائمة فارغة بأمان

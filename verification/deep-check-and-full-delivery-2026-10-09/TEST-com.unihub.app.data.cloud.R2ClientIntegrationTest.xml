@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.R2ClientIntegrationTest" tests="3" skipped="3" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.01">
+  <properties/>
+  <testcase name="folderAndSubfolderIndexRoundTripsOverRealR2" classname="com.unihub.app.data.cloud.R2ClientIntegrationTest" time="0.007">
+    <skipped/>
+  </testcase>
+  <testcase name="actualKotlinClientUploadsListsStreamsAndRejectsChangedVersions" classname="com.unihub.app.data.cloud.R2ClientIntegrationTest" time="0.001">
+    <skipped/>
+  </testcase>
+  <testcase name="conditionalManifestWritesNeverOverwriteNewerRemoteIndex" classname="com.unihub.app.data.cloud.R2ClientIntegrationTest" time="0.001">
+    <skipped/>
+  </testcase>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

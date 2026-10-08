@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudDownloadPartTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.018">
+  <properties/>
+  <testcase name="fileForUsesTheStagingFolderOnly" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.006"/>
+  <testcase name="keysDifferingOnlyBySeparatorsDoNotCollide" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.001"/>
+  <testcase name="oversizedPartIsRejectedNotTrusted" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.001"/>
+  <testcase name="unknownExpectedSizeRefusesToResume" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.0"/>
+  <testcase name="stalePartsAreForgottenAfterTheRetentionWindow" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.0"/>
+  <testcase name="noPartMeansRestart" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.0"/>
+  <testcase name="partialFileResumesFromItsLength" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.001"/>
+  <testcase name="partNameCannotEscapeTheStagingDirectory" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.004"/>
+  <testcase name="longKeysAreCappedSoTheFileNameStaysValid" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.001"/>
+  <testcase name="partNameIsStableForTheSameKey" classname="com.unihub.app.data.cloud.CloudDownloadPartTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

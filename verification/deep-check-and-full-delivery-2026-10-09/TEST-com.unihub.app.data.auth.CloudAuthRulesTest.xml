@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.auth.CloudAuthRulesTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:27" hostname="e2b.local" time="0.312">
+  <properties/>
+  <testcase name="h1_suspending_or_resetting_user_clears_pending_device_requests" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.193"/>
+  <testcase name="h2_ensure_invariants_deduplicates_users_and_prunes_orphan_requests" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.007"/>
+  <testcase name="s1_initial_registry_seeds_admin_saged_with_192168_and_full_permissions" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.009"/>
+  <testcase name="s9_admin_saged_cannot_be_deleted_suspended_or_restricted_and_auth_file_is_protected" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.005"/>
+  <testcase name="s7_login_without_internet_is_rejected_immediately" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.004"/>
+  <testcase name="s6_suspending_or_deleting_user_immediately_invalidates_session_and_permissions" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.006"/>
+  <testcase name="s8_wrong_password_never_binds_device_or_creates_pending_request" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.005"/>
+  <testcase name="s10_non_admin_cannot_manage_users_and_json_serialization_preserves_all_fields" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.015"/>
+  <testcase name="s3_foreign_device_blocks_login_with_pending_admin_message_until_admin_approves" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.006"/>
+  <testcase name="s4_username_normalization_and_idempotent_foreign_device_requests_and_rejection" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.007"/>
+  <testcase name="s5_granular_permissions_enforce_download_upload_and_modify_independently" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.003"/>
+  <testcase name="h3_resolved_device_requests_are_capped_while_preserving_all_pending" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.039"/>
+  <testcase name="s2_user_first_login_binds_device_and_password_change_is_visible_to_admin" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

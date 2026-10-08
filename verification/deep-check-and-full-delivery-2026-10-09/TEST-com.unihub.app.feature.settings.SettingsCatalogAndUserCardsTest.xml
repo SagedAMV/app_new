@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:29" hostname="e2b.local" time="0.131">
+  <properties/>
+  <testcase name="s10_corrupt_inputs_resilience_and_metamorphic_involution_and_normalization" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.006"/>
+  <testcase name="s9_admin_account_hides_destructive_controls_and_displays_admin_summary" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.001"/>
+  <testcase name="s5_deleting_expanded_user_prunes_only_deleted_user_from_expansion_state" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.03"/>
+  <testcase name="s2_login_ui_hides_device_and_android_version_while_backend_device_binding_remains_intact" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.003"/>
+  <testcase name="s4_large_list_75_users_search_filtering_monotonicity_and_collapse_all" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.035"/>
+  <testcase name="h3_search_filtering_never_wipes_expansion_state_of_non_matching_users" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.018"/>
+  <testcase name="s6_saved_category_restoration_and_custom_backup_days_boundaries" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.002"/>
+  <testcase name="h1_collapsing_user_card_or_collapse_all_automatically_hides_revealed_passwords" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.0"/>
+  <testcase name="s1_admin_navigates_five_categories_and_expands_single_user_among_60_collapsed_users" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.024"/>
+  <testcase name="s8_offline_or_suspended_account_rejected_and_collapsed_summary_marks_suspended" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.002"/>
+  <testcase name="s3_sequential_navigation_across_all_categories_and_live_subtitles_update" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.002"/>
+  <testcase name="s7_foreign_device_login_creates_pending_request_reflected_in_admin_category_subtitle" classname="com.unihub.app.feature.settings.SettingsCatalogAndUserCardsTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

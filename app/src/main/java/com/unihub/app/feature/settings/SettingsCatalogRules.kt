@@ -323,8 +323,15 @@ object SettingsCatalogRules {
     }
 
     /** التحقق من صلاحية عدد الأيام المخصص للنسخ الاحتياطي التلقائي (1..365). */
-    fun isValidCustomBackupDays(raw: String?): Boolean {
-        val value = raw?.trim()?.toIntOrNull() ?: return false
-        return value in AutoBackupPreferences.MIN_INTERVAL_DAYS..AutoBackupPreferences.MAX_INTERVAL_DAYS
+    fun isValidCustomBackupDays(raw: String?): Boolean = parseCustomBackupDays(raw) != null
+
+    /**
+     * تحليل عدد الأيام المخصص بأمان (جلسة التحقق العميق 2026-10-09): يعيد القيمة
+     * الصالحة أو null — مصدر واحد للحقيقة يشترك فيه التحقق والاستخدام، فلا يحتاج
+     * موضع الاستدعاء إلى أي force-unwrap (بوابة «صفر !!» في تعليمات.md).
+     */
+    fun parseCustomBackupDays(raw: String?): Int? {
+        val value = raw?.trim()?.toIntOrNull() ?: return null
+        return value.takeIf { it in AutoBackupPreferences.MIN_INTERVAL_DAYS..AutoBackupPreferences.MAX_INTERVAL_DAYS }
     }
 }

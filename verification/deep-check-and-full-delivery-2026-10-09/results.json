@@ -1,0 +1,71 @@
+{
+  "local_date": "2026-10-09",
+  "session": "deep build verification + full build delivery to buled",
+  "base_commit": "c0f77b6",
+  "variant": "releaseFull",
+  "versionName": "1.3.1",
+  "versionCode": 5,
+  "toolchain": {
+    "jdk": "OpenJDK 21.0.12 (Debian)",
+    "gradle": "8.9",
+    "agp": "8.7.2",
+    "kotlin": "2.0.21",
+    "compileSdk": 35,
+    "buildTools": "35.0.0",
+    "machine": "1.9GB RAM, 2GB swap enabled this session, 2 cores"
+  },
+  "environmental_fix": {
+    "symptom": "Gradle build daemon disappeared unexpectedly during first compileReleaseFullKotlin",
+    "root_cause": "OOM killer killed the daemon at ~1.36GB RSS (832m heap + retained kotlin-compiler Metaspace) on a no-swap machine",
+    "fix": "enabled 2GB swap; no changes to tuned gradle.properties were needed"
+  },
+  "gates": {
+    "compile": "passed (0 errors, 0 real kotlin warnings)",
+    "tests": {
+      "tests": 272,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3,
+      "test_classes": 22,
+      "read_from_xml": true
+    },
+    "lintVital": "passed",
+    "assemble": "passed (signed with release key)",
+    "fullLint_extra": "0 errors, 47 informational warnings (all from external libraries: UsableSpace suggestions, ObsoleteLintCustomCheck for navigation lint jars)"
+  },
+  "r2_live_tests_skipped_by_design": 3,
+  "build_errors_found": 0,
+  "code_changes_required": true,
+  "code_fixes": [
+    {
+      "file": "app/src/main/java/com/unihub/app/feature/settings/SettingsCatalogRules.kt",
+      "change": "added parseCustomBackupDays(raw): Int? safe parser; isValidCustomBackupDays now delegates to it (single source of truth)"
+    },
+    {
+      "file": "app/src/main/java/com/unihub/app/feature/settings/SettingsScreen.kt",
+      "change": "custom backup interval path no longer uses force-unwrap (rawCustom!!); reads parsed value or shows the same error message"
+    },
+    {
+      "file": "app/src/test/java/com/unihub/app/feature/settings/SettingsCatalogAndUserCardsTest.kt",
+      "change": "9 new assertions covering parseCustomBackupDays: valid values returned as-is, all corrupt inputs return null"
+    }
+  ],
+  "manual_scans": {
+    "kotlin_source_files": 123,
+    "kotlin_source_lines": 27745,
+    "test_source_files": 22,
+    "double_bang_real": 0,
+    "double_bang_comment_only": 4,
+    "todo_fixme_real": 0,
+    "todo_fixme_false_positives": 13,
+    "stray_print_statements": 0
+  },
+  "artifact": {
+    "path": "app/build/outputs/apk/releaseFull/app-releaseFull.apk",
+    "bytes": 14483717,
+    "sha256": "f73c3f41380e3fe089881e4521099c7493bb9bd8efada02e8283fcde4c9a2c14",
+    "zipalign": "ok",
+    "apksigner": "ok (CN=UniHub, OU=Personal, O=UniHub, C=SA)",
+    "delivered_to": "SagedAMV/buled as UniHub-v1.3.1-release-full.apk (replacing the 2026-10-01 build of the same version)"
+  }
+}

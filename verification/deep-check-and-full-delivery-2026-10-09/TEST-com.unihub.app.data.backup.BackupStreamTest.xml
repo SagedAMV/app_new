@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.backup.BackupStreamTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:27" hostname="e2b.local" time="0.274">
+  <properties/>
+  <testcase name="skipSignatureLine_leavesStreamUntouchedForLegacyBackup" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.014"/>
+  <testcase name="looksLikeZip_returnsFalseForJsonAndForTinyFiles" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.001"/>
+  <testcase name="spool_stopsAtFirstEntryOverTheLimit" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.011"/>
+  <testcase name="looksLikeZip_detectsArchiveAndDoesNotConsumeMagicBytes" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.001"/>
+  <testcase name="spool_createsSpoolDirAndSkipsDirectoryEntries" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.001"/>
+  <testcase name="spool_reportsMissingManifestForNonBackupArchive" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.0"/>
+  <testcase name="copyBounded_copiesEverythingUnderTheLimit" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.024"/>
+  <testcase name="headerAndMagicTogetherRouteARealExportToTheArchivePath" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.003"/>
+  <testcase name="spool_writesFileEntriesToDiskAndKeepsOnlyManifestInMemory" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.206"/>
+  <testcase name="copyBounded_rejectsPayloadBiggerThanLimitWithUserReadableMessage" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.003"/>
+  <testcase name="skipSignatureLine_consumesHeaderOnlyWhenItMatches" classname="com.unihub.app.data.backup.BackupStreamTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

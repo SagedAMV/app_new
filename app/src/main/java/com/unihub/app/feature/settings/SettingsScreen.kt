@@ -788,9 +788,12 @@ private fun AutoBackupCategoryContent(
                         2 -> viewModel.setIntervalDays(7)
                         3 -> viewModel.setIntervalDays(30)
                         else -> {
-                            val rawCustom = autoBackup?.customDaysInput
-                            if (SettingsCatalogRules.isValidCustomBackupDays(rawCustom)) {
-                                viewModel.setIntervalDays(rawCustom!!.trim().toInt())
+                            // تحليل آمن بلا force-unwrap (بوابة «صفر !!» في تعليمات.md):
+                            // دالة التحليل تُعيد القيمة الصالحة أو null، فلا افتراض عدم-صفريّة
+                            // يظل معلقاً على سلوك دالة تحقق منفصلة.
+                            val customDays = SettingsCatalogRules.parseCustomBackupDays(autoBackup?.customDaysInput)
+                            if (customDays != null) {
+                                viewModel.setIntervalDays(customDays)
                             } else {
                                 viewModel.messenger.notifyError("اكتب عدد الأيام في الخانة أولاً (1-365)")
                             }

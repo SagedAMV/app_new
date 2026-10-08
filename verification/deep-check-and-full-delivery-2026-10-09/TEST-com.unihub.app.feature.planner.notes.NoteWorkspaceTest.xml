@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" tests="29" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.092">
+  <properties/>
+  <testcase name="s4_legacyPlainTextNote_decodesCleanlyAndUpgradesWithoutDataLoss" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.006"/>
+  <testcase name="hole3_customTableHeadersOnly_isRecognizedAsMeaningfulContent" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.0"/>
+  <testcase name="s11_multiShapedDraggableCards_preservesShapesPositionsAndColors" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.016"/>
+  <testcase name="s11_newDrawingAppendedOnce_whenNoDrawingBoardExists" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="mr2_movingBlockUpThenDown_restoresExactOriginalBlockOrder" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s1_lectureSummaryRoundTrip_preservesTextTableAndChecklist" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="s6_tableBoundaryOperations_enforcesRectangularBoundsAndMinMaxLimits" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.007"/>
+  <testcase name="s13_cardPaletteHasSingleSourceOfTruth" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s7_completelyBlankDocument_hasMeaningfulContentReturnsFalse" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.0"/>
+  <testcase name="s3_drawingCanvas_supportsHighlighterUndoAndEraser" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.008"/>
+  <testcase name="s5_drawingOnlyNoteWithoutTitle_isRecognizedAsMeaningfulAndGeneratesFallbackTitle" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="s11_editingNoteWithTableAndChecklist_keepsNonEditableBlocks" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="s9_corruptedJsonPayload_recoversGracefullyWithoutException" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s13_newEraserIsSupersetOfLegacyVertexEraser" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.0"/>
+  <testcase name="s13_simplifyPoints_capsStrokeSize_andKeepsEndpoints" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.005"/>
+  <testcase name="s13_undoLastStroke_isSafeOnEmptyList" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.002"/>
+  <testcase name="s11_versionAndColorTagAreCarriedFromOriginalDocument" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s9_extremeAndNaNCoordinates_areClampedToUnitSquare" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s10_massiveDuplicatePointsAndControlChars_areSimplifiedAndSanitized" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.003"/>
+  <testcase name="s12_richTextFormatting_preservesFontSizeBoldAndColor" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s8_searchFilter_ignoresInternalJsonKeysAndMatchesHumanTextOnly" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="mr1_addingIdeaCard_incrementsIdeaCountWhileKeepingOtherStatsConstant" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.004"/>
+  <testcase name="hole1_clearingTableHeaderWhileTyping_preservesEmptyString" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s11_openAndSaveWithoutChanges_producesIdenticalDocument" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s13_eraserRemovesStrokeBySegmentDistance_notOnlyVertices" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s11_ideaBoardIsMergedInPlace_notDuplicated" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.0"/>
+  <testcase name="s2_ideaBoardCardsReorderingAndFiltering_preservesOrderAndMatchesFilter" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="s12_hiddenShapesStillDecodable_andCyclingSkipsThem" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.001"/>
+  <testcase name="hole2_eraserRemovesLongSegmentWhenTouchedAtMidpoint" classname="com.unihub.app.feature.planner.notes.NoteWorkspaceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

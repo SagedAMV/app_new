@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.feature.planner.notes.NotesWritingFlowTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.05">
+  <properties/>
+  <testcase name="deletingMiddleParagraph_keepsOtherParagraphsInOrder" classname="com.unihub.app.feature.planner.notes.NotesWritingFlowTest" time="0.002"/>
+  <testcase name="noteWritingStyle_startsFromRightAndSurvivesTypographyCopy" classname="com.unihub.app.feature.planner.notes.NotesWritingFlowTest" time="0.045"/>
+  <testcase name="editingOnlyTheBody_preservesALegacyHeadingAndOtherBlocks" classname="com.unihub.app.feature.planner.notes.NotesWritingFlowTest" time="0.002"/>
+  <testcase name="blankTemplate_isASingleEmptyWritingArea_withoutHeading" classname="com.unihub.app.feature.planner.notes.NotesWritingFlowTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

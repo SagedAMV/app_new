@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" tests="29" skipped="0" failures="0" errors="0" timestamp="2026-10-08T22:06:28" hostname="e2b.local" time="0.025">
+  <properties/>
+  <testcase name="malformedEntriesAreDroppedNotCrashed" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.003"/>
+  <testcase name="destinationStaysFrozenInBatch" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="finishedBatchDoesNotBlockNewSameRequest" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="offlinePendingReArmsScheduledWorkInsteadOfRelyingOnIgnoredResult" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="stoppedWorkerReArmsBecauseItsResultWouldBeDiscarded" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="pausedSummarySaysSo" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.003"/>
+  <testcase name="pruningKeepsAllPendingAndLastFinishedOnly" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.003"/>
+  <testcase name="removedBatchDisappearsAndIsNotRevived" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="enqueueKeepsFifoOrderAndCountsItems" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="pausedOrEmptyQueueNeedsNoFurtherWork" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="outcomeTextIsNeverTechnical" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.002"/>
+  <testcase name="uselessBatchIsRejected" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="realFailuresBecomeExceptionOnlyAfterMaxAttempts" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="dedupeKeySeparatesDifferentDestinations" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="transientFailureKeepsBatchPendingWithoutBurningAttempts" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="retryFailedResetsAttemptsAndRequeuesOnlyExceptions" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="duplicatePendingBatchIsIgnored" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="jsonRoundTripPreservesEveryField" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.004"/>
+  <testcase name="outcomeNamesFailuresAndPointsToRetry" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="outcomeCombinesCompletedAndFailedWithoutInventingTotals" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="cancelRemovesOnlyPendingAndKeepsDoneAndFailed" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="pauseHidesNextPendingAndResumeRestoresItLosslessly" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="busyQueueRetriesSoonInsteadOfWaitingOnNetwork" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="staleCompletedBatchesDoNotInflateThisRunsNumber" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="doneBatchRecordsNoteAndIsNeverRequeuedSilently" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="blankAndCorruptJsonDecodeToEmptyQueue" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.001"/>
+  <testcase name="nextPendingTakesOldestFirst" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="outcomeMentionsPauseAndWaitingCount" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.0"/>
+  <testcase name="outcomeIsSilentOnPureSuccess" classname="com.unihub.app.data.cloud.CloudTransferQueueLogicTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
