@@ -18,7 +18,6 @@ android {
         versionCode = 5
         versionName = "1.3.1"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -159,12 +158,6 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-
-    // اختبارات الوحدة
-    testImplementation(libs.junit)
-    // JSON حقيقي لا بدائل android.jar الوهمية، لاختبارات منطق الفهرس وعميل R2 على JVM.
-    testImplementation(libs.json)
-    testImplementation(libs.kotlinx.coroutines.test)
 
     // أدوات التطوير
     debugImplementation(libs.androidx.compose.ui.tooling)
