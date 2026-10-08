@@ -55,7 +55,7 @@ class CloudScanController<T>(
                         onFailure = { error ->
                             _state.value = before.copy(
                                 phase = if (error is CloudBusyException) CloudScanPhase.BUSY else CloudScanPhase.ERROR,
-                                message = error.message ?: "تعذّر فحص السحابة"
+                                message = CloudFailureMessages.userMessage(error)
                             )
                         }
                     )

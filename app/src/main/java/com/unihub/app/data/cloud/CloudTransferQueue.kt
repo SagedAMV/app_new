@@ -116,6 +116,28 @@ object CloudTransferQueueLogic {
         return prune(snapshot.copy(batches = snapshot.batches + ready))
     }
 
+    /**
+     * نص إشعار النتيجة — null أي لا شيء يستحق مقابلًا بصريًا.
+     *
+     * يُنبَّه المستخدم عند تعذّر شيء أو توقفه فقط: هذا ما يجعل المتابعة ممكنة وهو خارج
+     * التطبيق، والصمت عند النجاح الكامل حتى لا يتحوّل كل رفع إلى تنبيه مزعج.
+     */
+    fun outcomeNotificationText(snapshot: CloudTransferQueueSnapshot, completedItems: Int): String? {
+        // لا «اكتمل» من الطابور نفسه: المنتهية تبقى محفوظة للمقارنة، فعدد هذا التشغيل
+        // هو ما يُعرض وإلا قرأ المستخدم أرقامًا من دفعات قديمة.
+        val failedItems = snapshot.failed.sumOf { it.itemCount }
+        val waiting = snapshot.pendingItems
+        return when {
+            failedItems > 0 && completedItems > 0 ->
+                "اكتمل $completedItems عنصرًا • تعذّر $failedItems — افتح التطبيق لمعرفة السبب وإعادة المحاولة"
+            failedItems > 0 ->
+                "تعذّر $failedItems في طابور النقل — افتح التطبيق لمعرفة السبب وإعادة المحاولة"
+            snapshot.paused && waiting > 0 ->
+                "النقل متوقف مؤقتًا • $waiting في الانتظار — افتح التطبيق للاستئناف"
+            else -> null
+        }
+    }
+
     /** العنصر التالي بحسب ترتيب الطلب (FIFO)؛ الإيقاف المؤقت يمنع كل تنفيذ جديد */
     fun nextPending(snapshot: CloudTransferQueueSnapshot): CloudTransferBatch? =
         if (snapshot.paused) null else snapshot.pending.minByOrNull { it.createdAt }

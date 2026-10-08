@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -32,9 +33,38 @@ import javax.inject.Singleton
  */
 object CloudTransferNotifier {
 
+    private const val TAG = "CloudTransferNotifier"
+
     const val NOTIFICATION_ID = 9043
     private const val REQUEST_PAUSE = 9044
     private const val REQUEST_CANCEL = 9045
+    /** إشعار النتيجة على قناة أخرى برقم آخر: لا يُلغي المستمر ولا يُبطل أزراره */
+    private const val RESULT_ID = 9046
+
+    /** لحظة القبول: أول ما يطمن عليه المستخدم أن طلبه دخل الطابور فعلًا، قبل أي خدمة أمامية */
+    fun queued(context: Context, snapshot: CloudTransferQueueSnapshot): Notification =
+        baseBuilder(context, "أُضيف إلى النقل في الخلفية", snapshot.summary)
+            .setProgress(0, 0, true)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+
+    /**
+     * إشعار النتيجة. يُنشر على قناة «ملفات سحابية جديدة» لأنها عالية الأهمية فيصل تنبيهها
+     * إلى المستخدم وهو داخل تطبيق آخر، بينما قناة النقل منخفضة عمدًا (تقدّم مستمر لا يرنّ).
+     */
+    fun showResult(context: Context, snapshot: CloudTransferQueueSnapshot, completedItems: Int) {
+        val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems) ?: return
+        val notification = baseBuilder(context, "النقل من/إلى السحابة", text, NotificationChannels.CLOUD_FILES)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .build()
+        post(context, RESULT_ID, notification)
+    }
 
     fun progress(context: Context, snapshot: CloudTransferQueueSnapshot, batch: CloudTransferBatch): Notification {
         val verb = if (batch.kind == CloudTransferKind.UPLOAD) "رفع" else "تنزيل"
@@ -65,27 +95,36 @@ object CloudTransferNotifier {
             .addAction(0, "استئناف", action(context, CloudTransferActionsReceiver.ACTION_RESUME, REQUEST_PAUSE))
             .build()
 
-    fun show(context: Context, notification: Notification) {
+    fun show(context: Context, notification: Notification) = post(context, NOTIFICATION_ID, notification)
+
+    /** بوابة واحدة للإذن: لا استثناءات أمنية ولا نشر صامت عند رفض الإشعارات من النظام */
+    private fun post(context: Context, id: Int, notification: Notification) {
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
-        runCatching { manager.notify(NOTIFICATION_ID, notification) }
+        runCatching { manager.notify(id, notification) }
+            .onFailure { Log.w(TAG, "تعذّر نشر إشعار النقل (المستخدم يراه في التطبيق)", it) }
     }
 
     fun cancel(context: Context) {
         runCatching { NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID) }
     }
 
-    private fun baseBuilder(context: Context, title: String, text: String): NotificationCompat.Builder {
+    private fun baseBuilder(
+        context: Context,
+        title: String,
+        text: String,
+        channelId: String = NotificationChannels.CLOUD_TRANSFERS
+    ): NotificationCompat.Builder {
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val openPending = PendingIntent.getActivity(
             context, NOTIFICATION_ID, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(context, NotificationChannels.CLOUD_TRANSFERS)
+        return NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
@@ -118,6 +157,14 @@ class CloudTransferControls @Inject constructor(
     private val scheduler: CloudSyncScheduler,
     private val manager: CloudSyncManager
 ) {
+
+    /**
+     * يُنشر فور قبول الطلب من أي شاشة حتى لا يبقى الإحساس بالنقل محصورًا داخل التطبيق:
+     * النشر نفسه غير مربوط بقناة ولا بانتظار خدمة أمامية، والبناء في [CloudTransferNotifier].
+     */
+    suspend fun announceQueued() {
+        CloudTransferNotifier.show(context, CloudTransferNotifier.queued(context, queue.snapshot()))
+    }
 
     suspend fun pause() {
         queue.update { CloudTransferQueueLogic.setPaused(it, true) }

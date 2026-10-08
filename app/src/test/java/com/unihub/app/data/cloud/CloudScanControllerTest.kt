@@ -39,7 +39,12 @@ class CloudScanControllerTest {
             fetch = { throw IOException("HTTP 403") })
         controller.execute()
         assertEquals(CloudScanPhase.ERROR, controller.state.value.phase)
-        assertTrue(controller.state.value.message.contains("403"))
+        // العقد انقلب عمدًا: كان الاختبار يطالب بـ«403» في النص، أي رمز حالة يصل المستخدم،
+        // وهذا ما تمنعه طبيعة تطبيق.md §5. الرقم يبقى في السجلّ؛ الواجهة ترى سببًا إنسانيًا.
+        val message = controller.state.value.message
+        assertTrue(message, CloudFailureMessages.isUserFacing(message))
+        assertEquals(CloudFailureMessages.SESSION, message)
+        assertFalse(message, message.contains("403"))
     }
     @Test fun duplicateRequestsDoNotCreateAQueue() = runTest {
         var calls = 0

@@ -1,5 +1,6 @@
 package com.unihub.app.feature.backup
 
+import com.unihub.app.data.cloud.CloudFailureMessages
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -49,13 +50,13 @@ class BackupViewModel @Inject constructor(
         _status.value = null
         cloudSyncManager.syncWithServer(true)
             .onSuccess { _status.value = it }
-            .onFailure { _status.value = it.message ?: "تعذّرت المزامنة" }
+            .onFailure { _status.value = CloudFailureMessages.userMessage(it) }
     }
 
     fun pushToCloud() = runBusy {
         cloudSyncManager.pushToServer()
             .onSuccess { _status.value = "تم تحديث بيانات الخادم ($it عنصر) دون حذف الملفات غير المنزّلة" }
-            .onFailure { _status.value = it.message ?: "تعذّر الرفع" }
+            .onFailure { _status.value = CloudFailureMessages.userMessage(it) }
     }
 
     fun setAutoSyncEnabled(enabled: Boolean) {
@@ -68,7 +69,7 @@ class BackupViewModel @Inject constructor(
     fun saveCloudCredentials(accountId: String, endpointUrl: String, bucketName: String, accessKeyId: String, secretAccessKey: String) {
         viewModelScope.launch {
             authManager.requireAdmin().getOrElse {
-                _status.value = it.message ?: "تعديل إعدادات الخادم السحابي متاح للمشرف فقط"
+                _status.value = CloudFailureMessages.or(it, "تعديل إعدادات الخادم السحابي متاح للمشرف فقط")
                 return@launch
             }
             val creds = R2Credentials(accountId.trim(), endpointUrl.trim(), bucketName.trim(), accessKeyId.trim(), secretAccessKey.trim())

@@ -1,5 +1,6 @@
 package com.unihub.app.data.backup
 
+import com.unihub.app.data.cloud.CloudFailureMessages
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -127,7 +128,7 @@ class AutoBackupExporter @Inject constructor(
             runCatching {
                 preferences.recordResult(
                     success = false,
-                    message = error.message ?: "خطأ غير متوقع أثناء النسخ التلقائي"
+                    message = CloudFailureMessages.or(error, "خطأ غير متوقع أثناء النسخ التلقائي")
                 )
             }
         }

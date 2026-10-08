@@ -1,5 +1,6 @@
 package com.unihub.app.data.cloud
 
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -335,7 +336,11 @@ class CloudflareR2Client @Inject constructor() {
     private fun requireSuccess(conn: HttpURLConnection) {
         val status = conn.responseCode
         if (status == 412 || status == 409) throw CloudConflictException()
-        if (status !in 200..299) throw IOException("فشل الاتصال بخادم R2 (HTTP $status)")
+        if (status !in 200..299) {
+            // الرقم وجسم الخادم يذهبان للسجلّ فقط؛ المستخدم يرى سببًا إنسانيًا (طبيعة تطبيق.md §5)
+            Log.w(LOG_TAG, "R2 HTTP $status ${conn.url}")
+            throw IOException(CloudFailureMessages.messageFor(status))
+        }
     }
 
     private suspend fun readBoundedText(input: InputStream): String {
@@ -374,6 +379,7 @@ class CloudflareR2Client @Inject constructor() {
     private fun quoteEtag(etag: String) = "\"${etag.trim('"')}\""
 
     companion object {
+        private const val LOG_TAG = "CloudflareR2"
         private const val BUFFER_BYTES = 64 * 1024
         private const val MAX_INDEX_BYTES = 16L * 1024 * 1024
         private const val EMPTY_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

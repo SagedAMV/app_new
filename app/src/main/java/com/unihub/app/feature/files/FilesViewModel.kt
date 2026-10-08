@@ -1,5 +1,6 @@
 package com.unihub.app.feature.files
 
+import com.unihub.app.data.cloud.CloudFailureMessages
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
@@ -111,7 +112,7 @@ class FilesViewModel @Inject constructor(
     fun previewSelectedUpload(files: List<FileEntity>) {
         viewModelScope.launch {
             authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
-                messenger.notifyError(it.message ?: "ليس لديك صلاحية الرفع إلى السحابة")
+                messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(fileIds = files.mapTo(mutableSetOf()) { it.id }, title = "رفع الملفات المحددة")
@@ -120,7 +121,7 @@ class FilesViewModel @Inject constructor(
     fun previewFolderUpload(id: Long, name: String) {
         viewModelScope.launch {
             authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
-                messenger.notifyError(it.message ?: "ليس لديك صلاحية الرفع إلى السحابة")
+                messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته")
@@ -143,6 +144,7 @@ class FilesViewModel @Inject constructor(
                 totalBytes = plan.totalBytes
             ))
             cloudTransferScheduler.enqueueTransfers()
+            cloudTransferControls.announceQueued()
             val missing = if (plan.missingFiles.isEmpty()) "" else " • لن يُرفع ${plan.missingFiles.size} ملفًا (لم تعد موجودة)"
             messenger.notify("أُضيف ${plan.title} إلى النقل في الخلفية — يمكنك إغلاق التطبيق وسيكمل النظام$missing")
             clearSelection()
@@ -345,7 +347,7 @@ class FilesViewModel @Inject constructor(
     fun createFolder(name: String, description: String, color: String) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(name)
-                .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
+                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
                 .getOrNull() ?: return@launch
             runCatching {
                 folderRepository.create(
@@ -364,7 +366,7 @@ class FilesViewModel @Inject constructor(
     fun renameFolder(folder: FolderEntity, newName: String) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(newName)
-                .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
+                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
                 .getOrNull() ?: return@launch
             if (validName == folder.name) {
                 messenger.notify("الاسم لم يتغير")
@@ -478,7 +480,7 @@ class FilesViewModel @Inject constructor(
                 }
                 messenger.notify("استُورد ${result.first} ملف مع بنية المجلد؛ تعذّر ${result.second}. اضغط مطولاً على المجلد لرفعه للسحابة.")
             } catch (cancelled: CancellationException) { throw cancelled
-            } catch (error: Exception) { messenger.notifyError(error.message ?: "تعذّر استيراد المجلد")
+            } catch (error: Exception) { messenger.notifyError(CloudFailureMessages.or(error, "تعذّر استيراد المجلد"))
             } finally { importing.value = false }
         }
     }
@@ -532,7 +534,7 @@ class FilesViewModel @Inject constructor(
     fun renameFile(file: FileEntity, newName: String) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(newName)
-                .onFailure { messenger.notifyError(it.message ?: "اسم غير صالح") }
+                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
                 .getOrNull() ?: return@launch
             if (validName == file.name) {
                 messenger.notify("الاسم لم يتغير")

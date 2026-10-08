@@ -298,4 +298,85 @@ class CloudTransferQueueLogicTest {
         assertEquals(listOf("b"), snapshot.batches.map { it.id })
         assertFalse(snapshot.batches.any { it.id == "a" })
     }
+
+    // ─── إشعار النتيجة: ما ينتبه له المستخدم وهو خارج التطبيق (F10، I4) ───
+
+    private fun failedUploadSnapshot(vararg ids: Long): CloudTransferQueueSnapshot {
+        var snapshot = CloudTransferQueueSnapshot()
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, upload("a", *ids), now = 1L)
+        repeat(CloudTransferQueueLogic.MAX_ATTEMPTS) {
+            snapshot = CloudTransferQueueLogic.markFailed(snapshot, "a", "تعذّر الوصول إلى خادم السحابة", retryLater = false)
+        }
+        return snapshot
+    }
+
+    @Test
+    fun outcomeIsSilentOnPureSuccess() {
+        var snapshot = CloudTransferQueueLogic.enqueue(CloudTransferQueueSnapshot(), upload("a", 1, 2), now = 1L)
+        snapshot = CloudTransferQueueLogic.markDone(snapshot, "a")
+        assertNull(CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 2))
+    }
+
+    @Test
+    fun outcomeNamesFailuresAndPointsToRetry() {
+        val snapshot = failedUploadSnapshot(1, 2, 3)
+        val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 0)!!
+        assertTrue("يجب أن يذكر عدد ما تعذّر: $text", text.contains("3"))
+        assertTrue(text.contains("إعادة المحاولة"))
+        assertTrue("نص تقني في إشعار: $text", CloudFailureMessages.isUserFacing(text))
+    }
+
+    @Test
+    fun outcomeCombinesCompletedAndFailedWithoutInventingTotals() {
+        var snapshot = CloudTransferQueueLogic.enqueue(CloudTransferQueueSnapshot(), upload("a", 1, 2), now = 1L)
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, upload("b", 3), now = 2L)
+        snapshot = CloudTransferQueueLogic.markDone(snapshot, "a")
+        repeat(CloudTransferQueueLogic.MAX_ATTEMPTS) {
+            snapshot = CloudTransferQueueLogic.markFailed(snapshot, "b", "انقطع الاتصال أثناء النقل", retryLater = false)
+        }
+        val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 2)!!
+        assertTrue(text, text.contains("اكتمل 2"))
+        assertTrue(text, text.contains("تعذّر 1"))
+    }
+
+    @Test
+    fun staleCompletedBatchesDoNotInflateThisRunsNumber() {
+        // المنتهية تبقى محفوظة للمقارنة؛ لو حسبناها من الطابور لقرأ المستخدم «اكتمل 6»
+        // عن تشغيلٍ نقل عنصرين فقط.
+        var snapshot = CloudTransferQueueSnapshot()
+        listOf("a", "b", "c").forEachIndexed { index, id ->
+            snapshot = CloudTransferQueueLogic.enqueue(snapshot, upload(id, 10L + index, 11L + index), now = index.toLong())
+            snapshot = CloudTransferQueueLogic.markDone(snapshot, id)
+        }
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, upload("d", 99L), now = 4L)
+        repeat(CloudTransferQueueLogic.MAX_ATTEMPTS) {
+            snapshot = CloudTransferQueueLogic.markFailed(snapshot, "d", "تعذّر الوصول إلى خادم السحابة", retryLater = false)
+        }
+        val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 2)!!
+        assertTrue("لا «اكتمل 6»: $text", text.contains("اكتمل 2") && !text.contains("اكتمل 6"))
+    }
+
+    @Test
+    fun outcomeMentionsPauseAndWaitingCount() {
+        var snapshot = CloudTransferQueueLogic.enqueue(CloudTransferQueueSnapshot(), upload("a", 1), now = 1L)
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, upload("b", 2), now = 2L)
+        snapshot = CloudTransferQueueLogic.setPaused(snapshot, true)
+        val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 0)!!
+        assertTrue(text, text.contains("متوقف مؤقتًا"))
+        assertTrue(text, text.contains("2 في الانتظار"))
+        assertTrue(text, text.contains("للاستئناف"))
+    }
+
+    @Test
+    fun outcomeTextIsNeverTechnical() {
+        // I1: الإشعارات أخطر من البطاقة لأن اسم الصنف فيها يقرأه المستخدم في قفل الشاشة
+        listOf(
+            failedUploadSnapshot(1),
+            CloudTransferQueueLogic.setPaused(CloudTransferQueueSnapshot(), true)
+        ).forEach { snapshot ->
+            CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems = 0)?.let {
+                assertTrue("تسريب: $it", CloudFailureMessages.isUserFacing(it))
+            }
+        }
+    }
 }

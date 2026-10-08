@@ -1,6 +1,7 @@
 package com.unihub.app.data.cloud
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -42,6 +43,7 @@ class CloudTransferWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         var busy = false
+        var completed = 0
         while (true) {
             if (isStopped) break
             val snapshot = queue.snapshot()
@@ -52,7 +54,10 @@ class CloudTransferWorker @AssistedInject constructor(
                 .getOrElse { error ->
                     if (error is CancellationException) throw error else classify(error)
                 }) {
-                is BatchOutcome.Done -> queue.update { CloudTransferQueueLogic.markDone(it, batch.id, outcome.note) }
+                is BatchOutcome.Done -> {
+                    completed += batch.itemCount
+                    queue.update { CloudTransferQueueLogic.markDone(it, batch.id, outcome.note) }
+                }
                 is BatchOutcome.Defer, is BatchOutcome.Busy -> {
                     val message = when (outcome) { is BatchOutcome.Defer -> outcome.message; else -> (outcome as BatchOutcome.Busy).message }
                     // السبب يُحفظ مع العنصر المعلّق حتى تشرح الواجهة للمستخدم لماذا لا يتحرك
@@ -66,6 +71,9 @@ class CloudTransferWorker @AssistedInject constructor(
         // عند الإيقاف المؤقت يبقى إشعار «استئناف» ظاهرًا وإلا يُمحى — وإلا صار الزر بلا أثر
         if (snapshot.paused) CloudTransferNotifier.show(appContext, CloudTransferNotifier.paused(appContext, snapshot))
         else CloudTransferNotifier.cancel(appContext)
+        // إشعار نتيجة على قناة عالية الأهمية: هو ما ينتبه له المستخدم وهو في تطبيق آخر.
+        // مشروط بعمل هذا التشغيل حتى لا يُعاد التنبيه لنفس الاستثناءات القديمة كل جولة.
+        if (completed > 0 || snapshot.failed.isNotEmpty()) CloudTransferNotifier.showResult(appContext, snapshot, completed)
         // النتيجة المردودة من عاملٍ أوقفه النظام لسقوط شرط الشبكة **تُهمَل**، فالتسليح
         // صراحةً هو وحده الذي يضمن الاستئناف عند عودة الاتصال (تقرير عطل 2026-10-08).
         return when (CloudTransferQueueLogic.rearmAction(snapshot, manager.checkIsOnline(), isStopped, busy)) {
@@ -130,22 +138,33 @@ class CloudTransferWorker @AssistedInject constructor(
      * تصنيف العطل: الانشغال وانقطاع الاتصال «تأجيل» لا فشل — لئلا تُستهلك المحاولات الأربع
      * أثناء انقطاع طويل فيحتاج المستخدم تدخلاً يدويًا بلا سبب.
      */
-    private fun classify(error: Throwable): BatchOutcome = when {
-        // إلغاء بإرادة المستخدم (زر الإيقاف) أو بإنهاء النظام للعامل: نُبقي الجزء والنطاق كما هما
-        error is CancellationException -> BatchOutcome.Defer("أُوقف النقل؛ سيُستأنف من حيث توقف")
-        error is CloudBusyException -> BatchOutcome.Busy(error.message ?: "توجد عملية نقل جارية")
-        !manager.checkIsOnline() -> BatchOutcome.Defer(error.message ?: "لا يتوفر إنترنت؛ سيُستأنف عند عودة الاتصال")
-        else -> BatchOutcome.Failed(error.message ?: "تعذّر تنفيذ النقل")
+    private fun classify(error: Throwable): BatchOutcome {
+        // ما يُرجَع هنا يُعرض حرفيًا في إشعار الطابور وبطاقته، فيُمنع اسم الصنف ورمز الحالة
+        // (طبيعة تطبيق.md §5). السابق كان error.message ?: «عربي» فجعل العربية احتياطًا فقط،
+        // فعند انقطاع الشبكة وصلت «UnknownHostException: Unable to resolve host…» إلى الواجهة.
+        val reason = CloudFailureMessages.userMessage(error, networkAvailable = if (manager.checkIsOnline()) null else false)
+        return when {
+            // إلغاء بإرادة المستخدم (زر الإيقاف) أو بإنهاء النظام للعامل: نُبقي الجزء والنطاق كما هما
+            error is CancellationException -> BatchOutcome.Defer(reason)
+            error is CloudBusyException -> BatchOutcome.Busy(error.message?.takeIf { CloudFailureMessages.isUserFacing(it) } ?: "توجد عملية نقل جارية")
+            !manager.checkIsOnline() -> BatchOutcome.Defer(reason)
+            else -> BatchOutcome.Failed(reason)
+        }
     }
 
     private suspend fun publishProgress(snapshot: CloudTransferQueueSnapshot, batch: CloudTransferBatch) {
         val notification = CloudTransferNotifier.progress(appContext, snapshot, batch)
-        // على أندرويد 12+ قد يُرفض بدء خدمة أمامية من الخلفية؛ لا يجوز أن يُفشل ذلك النقل،
-        // فيُكتفى بإشعار يدوي ويكمل العامل بجدولة النظام العادية.
-        val foreground = runCatching {
-            setForegroundAsync(ForegroundInfo(CloudTransferNotifier.NOTIFICATION_ID, notification))
-        }.isSuccess
-        if (!foreground) CloudTransferNotifier.show(appContext, notification)
+        // الترتيب هنا هو العطل المُصلَّح: كان الإشعار مشروطًا بفشل setForegroundAsync، وذلك
+        // لا يستثني عند الرفض بل يردّ false — فلا إشعار إطلاقًا خارج التطبيق (الخدمة الأمامية
+        // مرفوضة من الخلفية، و«نجح» الردّ). الإشعار يُنشر أولًا بلا شرط، والخدمة الأمامية
+        // تُطلب بعده للإبقاء فقط، وفشلها يُسجَّل ولا يُلغي النقل ولا إخفاءه.
+        CloudTransferNotifier.show(appContext, notification)
+        runCatching { setForeground(ForegroundInfo(CloudTransferNotifier.NOTIFICATION_ID, notification)) }
+            .onFailure { Log.w(TAG, "رفض النظام خدمة أمامية لهذا النقل؛ إشعار الطابور يعمل وحده", it) }
+    }
+
+    private companion object {
+        private const val TAG = "CloudTransferWorker"
     }
 
 }

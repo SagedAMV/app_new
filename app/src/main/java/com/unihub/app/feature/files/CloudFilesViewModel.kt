@@ -1,5 +1,6 @@
 package com.unihub.app.feature.files
 
+import com.unihub.app.data.cloud.CloudFailureMessages
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unihub.app.core.common.Formatters
@@ -75,7 +76,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.createRemoteFolder(name, parentKey).fold(
                 onSuccess = { messenger.notify("أُنشئ المجلد «$name» في السحابة") },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّر إنشاء المجلد") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّر إنشاء المجلد")) }
             )
         }
     }
@@ -115,6 +116,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             queue.enqueue(batch)
             scheduler.enqueueTransfers()
+            controls.announceQueued()
             messenger.notify(confirmation + " — يمكنك إغلاق التطبيق وسيكمل النظام")
         }
     }
@@ -158,7 +160,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.renameRemoteFile(remoteKey, newName).fold(
                 onSuccess = { messenger.notify("أُعيدت تسمية الملف في السحابة") },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّرت إعادة التسمية") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّرت إعادة التسمية")) }
             )
         }
     }
@@ -171,7 +173,7 @@ class CloudFilesViewModel @Inject constructor(
                     if (moved == 0) messenger.notify("لا يلزم نقل؛ الملفات في الوجهة نفسها")
                     else messenger.notify("تغيّر مسار ${Formatters.fileCountLabel(moved)} في السحابة")
                 },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّر تغيير المسار") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّر تغيير المسار")) }
             )
         }
     }
@@ -181,7 +183,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.renameRemoteFolder(folderKey, newName).fold(
                 onSuccess = { messenger.notify("أُعيدت تسمية المجلد في السحابة") },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّرت إعادة تسمية المجلد") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّرت إعادة تسمية المجلد")) }
             )
         }
     }
@@ -194,7 +196,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.deleteRemoteFiles(files.map { it.remoteKey }).fold(
                 onSuccess = { count -> messenger.notify("حُذف ${Formatters.fileCountLabel(count)} من السحابة؛ نسخك المحلية كما هي") },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّر الحذف من السحابة") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.userMessage(it)) }
             )
         }
     }
@@ -204,7 +206,7 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.deleteRemoteFolder(folder.key).fold(
                 onSuccess = { messenger.notify("حُذف المجلد من السحابة") },
-                onFailure = { messenger.notifyError(it.message ?: "تعذّر حذف المجلد") }
+                onFailure = { messenger.notifyError(CloudFailureMessages.userMessage(it)) }
             )
         }
     }

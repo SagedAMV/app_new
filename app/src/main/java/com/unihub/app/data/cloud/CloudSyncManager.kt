@@ -1101,7 +1101,7 @@ class CloudSyncManager @Inject constructor(
             stagingCleaned = true
         }
         try {
-            cloudAttempt(block).onFailure { error -> cloudAttempt { preferences.recordSyncFailure(error.message ?: "فشل النقل") } }
+            cloudAttempt(block).onFailure { error -> cloudAttempt { preferences.recordSyncFailure(CloudFailureMessages.userMessage(error)) } }
         } finally {
             downloadJob = null; _isSyncing.value = false
             _transferState.value = CloudTransferState(); mutex.unlock()
