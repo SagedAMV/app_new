@@ -75,10 +75,9 @@ import kotlin.random.Random
  *    برقة — مشهد حي هادئ يزيل التوتر دون أي خطوط صاخبة أو استهلاك للبطارية.
  *
  * 2) النسيج الكوكبي الهادئ للعناقيد (المقترح #1):
- *    مجلدات ثابتة في إحداثياتها المكانية كنجوم قطبية مستقرة، ترتبط بخيوط
- *    نورانية منقطة [PathEffect.dashPathEffect] تنبض برقة باللون النجمي
- *    لترسم مسارات المواد نحو الأبناء مع نقاط تقاطع نجمية، ودائرة حاضنة منقطة
- *    تحصر العائلة، دون أي دوران مشتت أو دوار حركة.
+ *    مجلدات ثابتة في إحداثياتها المكانية كنجوم قطبية مستقرة: الأب في المركز،
+ *    والأبناء في مقاعد محددة على حلقات متعاقبة، مع روابط هادئة تصنع شبكة
+ *    واضحة بين أفراد العائلة دون دوران مشتت أو ازدحام.
  *
  * 3) ثبات تام للنصوص: اتجاه نصوص التسميات يظل أفقياً بزاوية 0° دائماً
  *    (Orientation Locking) لضمان القراءة الفورية لأسماء المواد الأكاديمية.
@@ -419,14 +418,13 @@ private fun FolderClusterView(
         } else {
             val count = cluster.children.size
             val maxChildFileCount = cluster.children.maxOf { it.fileCount }
-            val orbitRadius = GalaxyGeometry.orbitRadiusDp(count).dp
             val confinementRadius = GalaxyGeometry
                 .confinementRadiusDp(count, maxChildFileCount, cluster.parent.fileCount)
                 .dp
 
             Canvas(Modifier.matchParentSize()) {
                 val c = center
-                // الدائرة الحاضنة الكوكبية: حدود العنقود منقطة بنعومة
+                // حدود العنقود: إطار هادئ يحدد المساحة المخصصة لهذه العائلة.
                 drawCircle(
                     color = parentColor.copy(alpha = 0.28f),
                     radius = confinementRadius.toPx(),
@@ -439,36 +437,66 @@ private fun FolderClusterView(
                         )
                     )
                 )
-                // مسار المدار الهادئ
-                drawCircle(
-                    color = parentColor.copy(alpha = 0.10f),
-                    radius = orbitRadius.toPx(),
-                    center = c,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                // خيوط النسيج الكوكبي الهادئ (Constellation Lattice): خيوط نورانية منقطة تنبض بلطف
+                // بدلاً من مدار واحد مزدحم: حلقات ثابتة خافتة توضّح «المقاعد»
+                // التي تُوزّع عليها المجلدات. الحلقات لا تدور ولا تتحرك.
+                val lastRing = GalaxyGeometry.childRing(count - 1)
+                for (ring in 0..lastRing) {
+                    drawCircle(
+                        color = parentColor.copy(alpha = if (ring == 0) 0.08f else 0.045f),
+                        radius = (GalaxyGeometry.FIRST_RING_RADIUS_DP + ring * GalaxyGeometry.RING_STEP_DP).dp.toPx(),
+                        center = c,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
+
                 val dashEffect = PathEffect.dashPathEffect(
-                    floatArrayOf(8.dp.toPx(), 5.dp.toPx()),
+                    floatArrayOf(7.dp.toPx(), 6.dp.toPx()),
                     pulsePhase
                 )
-                for (i in cluster.children.indices) {
-                    val pos = Offset(
+                val positions = cluster.children.indices.map { i ->
+                    Offset(
                         x = c.x + GalaxyGeometry.childCenterDxDp(i, count).dp.toPx(),
                         y = c.y + GalaxyGeometry.childCenterDyDp(i, count).dp.toPx()
                     )
-                    // الخيط النوراني النابض
+                }
+
+                // الرابط الرئيسي: كل مجلد ابن مرتبط بالأب، مثل خريطة علاقات
+                // واضحة، وليس كواكباً سائبة داخل دائرة.
+                positions.forEach { pos ->
                     drawLine(
-                        color = parentColor.copy(alpha = 0.38f),
+                        color = parentColor.copy(alpha = 0.34f),
                         start = c,
                         end = pos,
-                        strokeWidth = 1.3.dp.toPx(),
+                        strokeWidth = 1.25.dp.toPx(),
                         pathEffect = dashEffect,
                         cap = StrokeCap.Round
                     )
-                    // عقدة نجمية عند نقطة التقاطع مع الكوكب الابن
+                }
+
+                // روابط جانبية خفيفة بين الإخوة في الحلقة نفسها. هذه الروابط
+                // تعطي إحساس «شبكة» واحدة من دون أن تسرق الانتباه من المجلدات.
+                cluster.children.indices
+                    .groupBy { GalaxyGeometry.childRing(it) }
+                    .values
+                    .forEach { ringIndices ->
+                        if (ringIndices.size > 1) {
+                            ringIndices.forEachIndexed { index, fromIndex ->
+                                val toIndex = ringIndices[(index + 1) % ringIndices.size]
+                                drawLine(
+                                    color = parentColor.copy(alpha = 0.13f),
+                                    start = positions[fromIndex],
+                                    end = positions[toIndex],
+                                    strokeWidth = 0.9.dp.toPx(),
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
+
+                positions.forEach { pos ->
                     drawCircle(
-                        color = parentColor.copy(alpha = 0.60f),
-                        radius = 2.dp.toPx(),
+                        color = parentColor.copy(alpha = 0.58f),
+                        radius = 2.2.dp.toPx(),
                         center = pos
                     )
                 }
@@ -487,8 +515,8 @@ private fun FolderClusterView(
                     .width(parentColumnWidth)
             )
 
-            // كواكب الأبناء: زوايا متساوية تماماً على المدار، والمدار نفسه
-            // يضمن تباعد المتجاورين (GalaxyGeometry.orbitRadiusDp)
+            // كواكب الأبناء: كل واحد منها له مقعد ثابت داخل شبكة الحلقات؛
+            // العدد لا يضغط العناصر فوق بعضها، بل يفتح حلقة جديدة عند الحاجة.
             cluster.children.forEachIndexed { index, child ->
                 val childSize = GalaxyGeometry.childPlanetSizeDp(child.fileCount).dp
                 // الإحداثيات نسبةً لمركز العنقود — نفس الزوايا التي يرسم بها

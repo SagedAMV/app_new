@@ -500,10 +500,10 @@ fun CloudFilesScreen(
                         CloudFolderTree.ancestors(folders, initialState).size
                     val forward = if (deeper) 1 else -1
                     val side = if (layoutDirection == LayoutDirection.Rtl) -forward else forward
-                    (slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { w -> side * w / 6 } +
-                        fadeIn(tween(300, easing = FastOutSlowInEasing)))
-                        .togetherWith(slideOutHorizontally(tween(300, easing = FastOutSlowInEasing)) { w -> -side * w / 6 } +
-                            fadeOut(tween(300, easing = FastOutSlowInEasing)))
+                    (slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { w -> side * w / 7 } +
+                        fadeIn(tween(260, easing = FastOutSlowInEasing)))
+                        .togetherWith(slideOutHorizontally(tween(240, easing = FastOutSlowInEasing)) { w -> -side * w / 9 } +
+                            fadeOut(tween(200, easing = FastOutSlowInEasing)))
                 },
                 label = "cloud_folder_nav"
             ) { levelKey ->

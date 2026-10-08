@@ -676,11 +676,11 @@ private fun AdminUserAccountCard(
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = expandVertically(
-                    animationSpec = tween(280, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(260)),
+                    animationSpec = tween(260, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(220)),
                 exit = shrinkVertically(
-                    animationSpec = tween(220, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(180))
+                    animationSpec = tween(200, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(160))
             ) {
                 Column(
                     modifier = Modifier

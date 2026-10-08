@@ -121,14 +121,14 @@ fun AuthGateScreen(
             }
         },
         transitionSpec = {
-            (fadeIn(animationSpec = tween(380, easing = FastOutSlowInEasing)) +
+            (fadeIn(animationSpec = tween(340, easing = FastOutSlowInEasing)) +
                 slideInVertically(
-                    animationSpec = tween(380, easing = FastOutSlowInEasing),
+                    animationSpec = tween(340, easing = FastOutSlowInEasing),
                     initialOffsetY = { it / 14 }
                 ) +
                 scaleIn(
-                    animationSpec = tween(380, easing = FastOutSlowInEasing),
-                    initialScale = 0.96f
+                    animationSpec = tween(340, easing = FastOutSlowInEasing),
+                    initialScale = 0.97f
                 )).togetherWith(
                 fadeOut(animationSpec = tween(260)) +
                     slideOutVertically(
@@ -238,12 +238,12 @@ private fun CloudLoginScreen(
 
     val headerProgress by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 460, easing = FastOutSlowInEasing),
         label = "LoginHeaderProgress"
     )
     val cardProgress by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 580, delayMillis = 110, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 520, delayMillis = 90, easing = FastOutSlowInEasing),
         label = "LoginCardProgress"
     )
     val buttonScale by animateFloatAsState(

@@ -39,7 +39,7 @@ import com.unihub.app.data.local.entity.FolderEntity
 
 /**
  * حوار وجهة التنزيل — جولة تعليمات.md:
- * 1) تسميات واضحة: «سحب ملفات فقط» / «سحب مجلد كامل» / «ترتيب تلقائي .. موصى بة»،
+ * 1) تسميات واضحة: «سحب ملفات فقط» / «سحب مجلد كامل» / «ترتيب تلقائي — موصى به»،
  *    والأخير هو المفعّل افتراضياً عند فتح الحوار (مصدر وحيد CloudDownloadDefaults)
  *    مع بقاء الاختيار كاملاً للمستخدم.
  * 2) منتقي وجهة في الهاتف بشجرة قابلة للتوسيع: النقر على مجلد يوسّعه ويظهر ما
@@ -61,7 +61,7 @@ fun CloudDownloadDestinationDialog(
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DestinationModeRow("سحب ملفات فقط", mode == CloudDownloadLocation.LOCAL_FOLDER) { mode = CloudDownloadLocation.LOCAL_FOLDER }
             if (cloudFolderName != null) DestinationModeRow("سحب مجلد كامل", mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL) { mode = CloudDownloadLocation.FOLDER_INSIDE_LOCAL }
-            DestinationModeRow("ترتيب تلقائي .. موصى بة", mode == CloudDownloadLocation.ORIGINAL_CLOUD_TREE) { mode = CloudDownloadLocation.ORIGINAL_CLOUD_TREE }
+            DestinationModeRow("ترتيب تلقائي — موصى به", mode == CloudDownloadLocation.ORIGINAL_CLOUD_TREE) { mode = CloudDownloadLocation.ORIGINAL_CLOUD_TREE }
             if (mode != CloudDownloadLocation.ORIGINAL_CLOUD_TREE) {
                 Text("اختر وجهة في هاتفك:", style = MaterialTheme.typography.titleSmall)
                 DestinationModeRow("الرئيسية (مكتبة التطبيق)", selectedId == null) { selectedId = null }
@@ -82,8 +82,8 @@ fun CloudDownloadDestinationDialog(
                 if (mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL && rootName.isBlank()) Text(
                     "اكتب اسماً للمجلد الجديد لتفعيل زر التنزيل",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لن ننشئ مجلدات بأسماء السحابة، ولن نعيد تسمية وجهتك."
-                    else "لا ننشئ أسلاف المجلد السحابي؛ نحفظ الجزء الذي اخترته فقط داخل وجهتك.", style = MaterialTheme.typography.bodySmall)
+                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لن ننشئ مجلدات السحابة أو نغيّر اسم وجهتك."
+                    else "سنحفظ الجزء المختار فقط داخل وجهتك.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }, confirmButton = {

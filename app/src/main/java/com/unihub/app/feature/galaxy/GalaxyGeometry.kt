@@ -80,7 +80,22 @@ internal object GalaxyGeometry {
     /** هامش حول البصمة حتى لا تلامس الدائرة حواف خليتها في الشبكة */
     const val OUTER_MARGIN_DP = 26f
 
-    /** أدنى مسافة مضمونة بين مركزي كوكبين ابنين متجاورين على المدار */
+    /**
+     * عدد المقاعد الثابتة في كل حلقة حول مجلد الأب.
+     *
+     * الفكرة الجديدة: المجرة ليست مداراً عشوائياً؛ هي شبكة علاقات لها
+     * أماكن محفوظة. كل ستة أبناء يحصلون على حلقة مستقلة، لذلك لا تتكدس
+     * المجلدات عندما يكبر العدد.
+     */
+    const val CHILDREN_PER_RING = 6
+
+    /** المسافة بين مركز الأب ومقاعد الحلقة الأولى. */
+    const val FIRST_RING_RADIUS_DP = 82f
+
+    /** المسافة الإضافية بين الحلقات المتعاقبة. */
+    const val RING_STEP_DP = 68f
+
+    /** الحد الأدنى للمسافة بين العقد على الحلقة نفسها. */
     const val MIN_PLANET_SEPARATION_DP = 34f
 
     /** قطر كوكب الأم: يكبر مع عدد الملفات بحد أعلى (30..48) */
@@ -89,19 +104,28 @@ internal object GalaxyGeometry {
     /** قطر كوكب الابن: يكبر مع عدد ملفاته بحد أعلى (20..30) */
     fun childPlanetSizeDp(fileCount: Int): Float = 20f + min(fileCount * 2f, 10f)
 
+    /** رقم الحلقة التي ينتمي إليها الابن. */
+    fun childRing(index: Int): Int = index / CHILDREN_PER_RING
+
+    /** موضع الابن داخل حلقته، وليس في مدار واحد مزدحم. */
+    fun childSlot(index: Int): Int = index % CHILDREN_PER_RING
+
+    /** عدد المقاعد الفعلية في حلقة معينة. */
+    fun ringChildCount(childCount: Int, ring: Int): Int =
+        (childCount - ring * CHILDREN_PER_RING).coerceIn(0, CHILDREN_PER_RING)
+
+    /** نصف قطر الحلقة التي يوجد فيها الابن. */
+    fun childRingRadiusDp(index: Int): Float =
+        FIRST_RING_RADIUS_DP + childRing(index) * RING_STEP_DP
+
     /**
-     * نصف قطر مدار الأبناء: يكبر مع العدد كما في التصميم الأصلي، وبحدّ
-     * هندسي أدنى يضمن ألا يتقابل كوكبان متجاوران بأقل من
-     * [MIN_PLANET_SEPARATION_DP] — ضلع مضلع منتظم ذي [childCount] رأساً
-     * على دائرة نصف قطرها `r` يساوي `2r·sin(π/n)`، ومنه الحد الأدنى.
+     * نصف قطر الحلقات. هذا ليس مداراً دواراً؛ هو إطار مكاني ثابت لتوزيع
+     * العقد على مقاعد واضحة.
      */
     fun orbitRadiusDp(childCount: Int): Float {
         if (childCount <= 0) return 0f
-        val base = 50f + min(childCount, 8) * 6f
-        if (childCount < 3) return base
-        val minBySeparation =
-            (MIN_PLANET_SEPARATION_DP / 2f) / sin(PI / childCount).toFloat()
-        return max(base, minBySeparation)
+        val lastRing = (childCount - 1) / CHILDREN_PER_RING
+        return childRingRadiusDp(lastRing)
     }
 
     /**
@@ -177,17 +201,25 @@ internal object GalaxyGeometry {
      */
     fun columnOffsetYDp(dyFromCenterDp: Float): Float = dyFromCenterDp + LABEL_BLOCK_DP / 2f
 
-    /** زاوية الابن رقم [index] على المدار — يبدأ من أعلى ثم بزوايا متساوية. */
-    fun childAngleRad(index: Int, childCount: Int): Double =
-        -PI / 2 + index * (2.0 * PI / childCount)
+    /**
+     * زاوية المقعد داخل الحلقة: ستة اتجاهات ثابتة تشبه عقد النجوم، مع تدوير
+     * بسيط للحلقة الثانية حتى لا تقع العقد فوق بعضها بصرياً.
+     */
+    fun childAngleRad(index: Int, childCount: Int): Double {
+        val ring = childRing(index)
+        val slot = childSlot(index)
+        val slots = ringChildCount(childCount, ring).coerceAtLeast(1)
+        val ringOffset = if (ring % 2 == 0) 0.0 else PI / 6.0
+        return -PI / 2 + ringOffset + slot * (2.0 * PI / slots)
+    }
 
     /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود. */
     fun childCenterDxDp(index: Int, childCount: Int): Float =
-        orbitRadiusDp(childCount) * cos(childAngleRad(index, childCount)).toFloat()
+        childRingRadiusDp(index) * cos(childAngleRad(index, childCount)).toFloat()
 
     /** إزاحة مركز قرص الابن رأسياً عن مركز العنقود. */
     fun childCenterDyDp(index: Int, childCount: Int): Float =
-        orbitRadiusDp(childCount) * sin(childAngleRad(index, childCount)).toFloat()
+        childRingRadiusDp(index) * sin(childAngleRad(index, childCount)).toFloat()
 
     /**
      * نصف قطر الحلقة الواقية لعنقود بلا أبناء — بنفس قيم التصميم الأصلي

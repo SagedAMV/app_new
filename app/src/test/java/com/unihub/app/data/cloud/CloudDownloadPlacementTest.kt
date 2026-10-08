@@ -282,7 +282,7 @@ class CloudDownloadPlacementTest {
     }
 
     @Test fun defaultLocationIsTheRecommendedCloudTreeFromSingleSource() {
-        // جولة تعليمات.md: «ترتيب تلقائي .. موصى بة» مفعّل افتراضياً — المصدر الوحيد
+        // جولة تعليمات.md: «ترتيب تلقائي — موصى به» مفعّل افتراضياً — المصدر الوحيد
         // CloudDownloadDefaults تقرأه الواجهة، وهذا الاختبار يثبته حتى لا ينحرف.
         assertEquals(CloudDownloadLocation.ORIGINAL_CLOUD_TREE, CloudDownloadDefaults.location)
         assertEquals(CloudDownloadDefaults.location, CloudDownloadDestination().location)

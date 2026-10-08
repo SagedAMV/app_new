@@ -41,11 +41,11 @@ fun CloudUploadConfirmationSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(plan.title, style = MaterialTheme.typography.titleLarge)
             Text(plan.summary, style = MaterialTheme.typography.titleMedium)
-            Text("سيُرفع المحدد فقط مع حفظ أسماء المجلدات وتداخلها. الملفات الأخرى في هاتفك لن تُرفع.",
+            Text("سيُرفع المحدد فقط مع حفظ بنية المجلدات. الملفات الأخرى لن تُرفع.",
                 style = MaterialTheme.typography.bodyMedium)
             if (plan.missingFiles.isNotEmpty()) Text("غير متاح محلياً: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            if (!isOnline) Text("لا إنترنت الآن — سيُسجَّل الطلب ويبدأ تلقائيًا عند عودة الاتصال", style = MaterialTheme.typography.bodySmall)
+            if (!isOnline) Text("لا إنترنت الآن — سيبدأ الرفع عند عودة الاتصال", style = MaterialTheme.typography.bodySmall)
             CloudTransferProgressCard(
                 state = transfer,
                 queue = queue,

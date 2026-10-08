@@ -166,8 +166,8 @@ fun SettingsScreen(
                     AnimatedContent(
                         targetState = selectedCategory?.title ?: "الإعدادات",
                         transitionSpec = {
-                            (fadeIn(tween(240)) + slideInVertically { it / 3 })
-                                .togetherWith(fadeOut(tween(180)) + slideOutVertically { -it / 3 })
+                            (fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 4 })
+                                .togetherWith(fadeOut(tween(160)) + slideOutVertically(tween(160)) { -it / 5 })
                         },
                         label = "SettingsTopBarTitle"
                     ) { titleText ->
@@ -195,13 +195,13 @@ fun SettingsScreen(
             transitionSpec = {
                 val enteringSubScreen = targetState != null
                 if (enteringSubScreen) {
-                    (fadeIn(tween(340, easing = FastOutSlowInEasing)) +
+                    (fadeIn(tween(320, easing = FastOutSlowInEasing)) +
                         slideInVertically(
-                            animationSpec = tween(340, easing = FastOutSlowInEasing),
+                            animationSpec = tween(320, easing = FastOutSlowInEasing),
                             initialOffsetY = { it / 10 }
                         ) +
                         scaleIn(
-                            animationSpec = tween(340, easing = FastOutSlowInEasing),
+                            animationSpec = tween(320, easing = FastOutSlowInEasing),
                             initialScale = 0.96f
                         )).togetherWith(
                         fadeOut(tween(220)) +

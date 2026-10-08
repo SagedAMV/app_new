@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -321,7 +322,7 @@ fun FilesScreen(
             item(key = "inbox_banner") {
                 AnimatedVisibility(
                     visible = inboxItems.isNotEmpty() && !isSelecting,
-                    enter = fadeIn(tween(700)),
+                    enter = fadeIn(tween(280)) + slideInVertically(tween(280)) { it / 12 },
                     exit = fadeOut(tween(300))
                 ) {
                     InboxPlacementBanner(
@@ -638,7 +639,7 @@ private fun FilesFloatingActions(
         ) {
             AnimatedVisibility(
                 visible = inboxCount > 0,
-                enter = fadeIn(tween(500)) + scaleIn(initialScale = 0.5f, animationSpec = tween(500)),
+                enter = fadeIn(tween(320)) + scaleIn(initialScale = 0.82f, animationSpec = tween(320)),
                 exit = fadeOut(tween(300))
             ) {
                 BadgedBox(
@@ -717,7 +718,7 @@ private fun FadeInIfHighlighted(highlight: Boolean, content: @Composable () -> U
         LaunchedEffect(Unit) { visible = true }
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.94f, animationSpec = tween(800)),
+            enter = fadeIn(tween(420)) + slideInVertically(tween(420)) { it / 18 } + scaleIn(initialScale = 0.97f, animationSpec = tween(420)),
             // AnimatedVisibility يتوقع لامدا بمستقبل AnimatedVisibilityScope،
             // فغلّفنا محتوى الدالة (Function0) بلامدا مستقبِلة تتوافق مع التوقيع.
             content = { content() }
@@ -782,7 +783,7 @@ private fun InboxSheetRow(
     }
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(450)) + scaleIn(initialScale = 0.85f, animationSpec = tween(450))
+        enter = fadeIn(tween(360)) + slideInVertically(tween(360)) { it / 20 } + scaleIn(initialScale = 0.92f, animationSpec = tween(360))
     ) {
         Card(
             shape = MaterialTheme.shapes.medium,

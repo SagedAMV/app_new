@@ -8,7 +8,7 @@ import com.unihub.app.data.local.entity.FolderEntity
 enum class CloudDownloadLocation { ORIGINAL_CLOUD_TREE, LOCAL_FOLDER, FOLDER_INSIDE_LOCAL }
 
 /**
- * جولة تعليمات.md: «ترتيب تلقائي .. موصى بة» هو الخيار المفعّل افتراضياً عند فتح
+ * جولة تعليمات.md: «ترتيب تلقائي — موصى به» هو الخيار المفعّل افتراضياً عند فتح
  * حوار الوجهة، مع بقاء الاختيار كاملاً للمستخدم. مصدر وحيد تقرأه الواجهة ويثبته
  * اختبار محلي — حتى لا ينحرف الافتراضي في الواجهة عن طبقة البيانات.
  */

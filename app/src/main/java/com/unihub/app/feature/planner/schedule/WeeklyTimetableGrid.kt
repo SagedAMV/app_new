@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -159,7 +160,7 @@ fun WeeklyTimetableGrid(
     AnimatedVisibility(
         visible = gridVisible,
         modifier = modifier,
-        enter = fadeIn(tween(450))
+        enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 14 }
     ) {
         Column(
             Modifier
@@ -302,9 +303,9 @@ private fun LectureBlock(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(500)) + scaleIn(
-            initialScale = 0.7f,
-            animationSpec = tween(500)
+        enter = fadeIn(tween(380)) + slideInVertically(tween(380)) { it / 10 } + scaleIn(
+            initialScale = 0.90f,
+            animationSpec = tween(380)
         )
     ) {
         Card(
