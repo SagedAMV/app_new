@@ -160,6 +160,7 @@ fun FilesScreen(
     // السحابة هنا: ما تحتاجه هذه الشاشة فقط (شارة الزر المضيء وحالة الرفع) —
     // أما تصفح السحابة وتنزيلها فانتقل إلى الشاشة المستقلة CloudFilesScreen
     val cloudTransfer by viewModel.cloudTransferState.collectAsStateWithLifecycle()
+    val cloudQueue by viewModel.cloudTransfers.collectAsStateWithLifecycle()
     val availableRemoteFiles by viewModel.availableRemoteFiles.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val uploadPlan by viewModel.uploadPlan.collectAsStateWithLifecycle()
@@ -508,7 +509,11 @@ fun FilesScreen(
             CloudUploadConfirmationSheet(plan, isOnline, cloudTransfer, uploadReport,
                 onConfirm = viewModel::confirmUpload,
                 onDismiss = viewModel::closeUploadPlan,
-                onCancel = viewModel::cancelCloudDownloads)
+                queue = cloudQueue,
+                onPause = viewModel::pauseCloudTransfers,
+                onResume = viewModel::resumeCloudTransfers,
+                onRetryFailed = viewModel::retryCloudTransfers,
+                onDropPending = viewModel::cancelCloudQueued)
         }
 
         if (showAddFolderSheet) {

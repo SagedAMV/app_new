@@ -22,13 +22,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.unihub.app.data.cloud.CloudUploadPlan
 import com.unihub.app.data.cloud.CloudUploadReport
+import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudUploadConfirmationSheet(
     plan: CloudUploadPlan, isOnline: Boolean, transfer: CloudTransferState, report: CloudUploadReport?,
-    onConfirm: () -> Unit, onDismiss: () -> Unit, onCancel: () -> Unit
+    onConfirm: () -> Unit, onDismiss: () -> Unit,
+    queue: CloudTransferQueueSnapshot = CloudTransferQueueSnapshot(),
+    onPause: () -> Unit = {},
+    onResume: () -> Unit = {},
+    onRetryFailed: () -> Unit = {},
+    onDropPending: () -> Unit = {}
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
@@ -39,13 +45,23 @@ fun CloudUploadConfirmationSheet(
                 style = MaterialTheme.typography.bodyMedium)
             if (plan.missingFiles.isNotEmpty()) Text("غير متاح محلياً: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            if (!isOnline) Text("اتصل بالإنترنت لبدء الرفع", color = MaterialTheme.colorScheme.error)
-            CloudTransferProgressCard(transfer, onCancel)
+            if (!isOnline) Text("لا إنترنت الآن — سيُسجَّل الطلب ويبدأ تلقائيًا عند عودة الاتصال", style = MaterialTheme.typography.bodySmall)
+            CloudTransferProgressCard(
+                state = transfer,
+                queue = queue,
+                onPause = onPause,
+                onResume = onResume,
+                onRetryFailed = onRetryFailed,
+                onDropPending = onDropPending,
+                online = isOnline
+            )
             report?.let { Text(it.message, color = if (it.failedNames.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("إغلاق") }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onConfirm, enabled = isOnline && !transfer.active && (plan.fileIds.isNotEmpty() || plan.folderIds.isNotEmpty())) {
+                // لم يعد «نقل جارٍ» يعطّل الزر: الطلبات تُطابَر وتُنفَّذ واحدًا تلو الآخر،
+                // فلا سبب أن يبدو الزر ميتًا (وهو بعينه ما شكا منه المستخدم). والإلغاء صريح.
+                Button(onClick = onConfirm, enabled = plan.fileIds.isNotEmpty() || plan.folderIds.isNotEmpty()) {
                     Icon(Icons.Filled.CloudUpload, contentDescription = null)
                     Spacer(Modifier.width(8.dp)); Text("رفع المحدد إلى السحابة")
                 }

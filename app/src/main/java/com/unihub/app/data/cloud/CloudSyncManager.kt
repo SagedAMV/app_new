@@ -136,6 +136,10 @@ class CloudSyncManager @Inject constructor(
                         if (settings.autoSyncEnabled && settings.isConfigured) {
                             if (foreground) syncWithServer() else scheduler.enqueueSyncWhenConnected()
                         }
+                        // طابور النقل لا يتبع autoSyncEnabled: كل دفعة فيه طلب صريح من المستخدم.
+                        // بدون هذا السطر تبقى الدفعات «قيد الانتظار» إلى الأبد بعد انقطاع يوقف
+                        // العامل (العامل الموقوف تُهمَل نتيجته، فلا أحد يعيد الجدولة).
+                        scheduler.enqueueTransfers()
                     }
                 }
             })
@@ -395,16 +399,21 @@ class CloudSyncManager @Inject constructor(
                     continue
                 }
                 val staging = File(context.filesDir, "cloud-downloads").apply { mkdirs() }
-                val temp = File.createTempFile("selected_", ".part", staging)
+                // اسم ثابت لكل مفتاح سحابي — لا createTempFile العشوائي: حتى يجد الاستئناف
+                // بعد انقطاع الشبكة (أو بعد إعادة تشغيل التطبيق) جزأه ويستكمل من نصفه.
+                val temp = CloudDownloadPart.fileFor(staging, remote.remoteKey)
                 _transferState.value = CloudTransferState(CloudTransferKind.DOWNLOAD, remote.fullDisplayName, index + 1, choices.size, bytesTotal = remote.size)
                 _downloadingKeys.value = setOf(remote.remoteKey)
                 _downloadProgress.value = mapOf(remote.remoteKey to CloudDownloadProgress(0, remote.size))
+                var keepPart = false
                 try {
-                    if (context.filesDir.usableSpace - RESERVE_BYTES < remote.size) throw IOException("المساحة لا تكفي")
+                    val remaining = remote.size - (if (temp.isFile) temp.length() else 0L)
+                    if (context.filesDir.usableSpace - RESERVE_BYTES < remaining.coerceAtLeast(0L)) throw IOException("المساحة لا تكفي")
                     var downloadedHash = ""
                     val found = r2Client.downloadFile(
                         settings.credentials, remote.remoteKey, temp, remote.etag, remote.size,
-                        onDigest = { downloadedHash = it }
+                        onDigest = { downloadedHash = it },
+                        resume = true
                     ) { bytes, total ->
                         _downloadProgress.value = mapOf(remote.remoteKey to CloudDownloadProgress(bytes, total))
                         _transferState.value = _transferState.value.copy(bytesDone = bytes, bytesTotal = total)
@@ -440,7 +449,9 @@ class CloudSyncManager @Inject constructor(
                     }
                     completed++
                     refreshAvailable(catalog.snapshot(activeConnection))
-                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (cancelled: CancellationException) {
+                    keepPart = true // مقاطعة المستخدم أو إيقاف النظام: الجزء للاستئناف لا للنفايات
+                    throw cancelled
                 } catch (error: Exception) {
                     Log.w(TAG, "تعذّر تنزيل ملف مختار", error)
                     failed += remote.fullDisplayName
@@ -449,7 +460,7 @@ class CloudSyncManager @Inject constructor(
                         break
                     }
                 } finally {
-                    temp.delete()
+                    if (!keepPart) temp.delete()
                     _downloadingKeys.value = emptySet()
                     _downloadProgress.value = emptyMap()
                 }
@@ -594,6 +605,36 @@ class CloudSyncManager @Inject constructor(
             ?: throw IOException("المجلد لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
         publishManifestEdit(settings, scan) { root ->
             root.put("cloudFolders", CloudFolderTree.mergeFolders(root.optJSONArray("cloudFolders"), listOf(current.copy(name = cleaned))))
+        }
+    }
+
+    /**
+     * إنشاء مجلد داخل السحابة نفسها (تكافؤ ما توفره شاشة الملفات المحلية).
+     *
+     * المفتاح يُبنى بنفس نمط الرفع «folder:<UUID>» حتى يقرأه [CloudFolderTree.foldersFromManifest]
+     * كما يقرأ بقية المجلدات المنشأة؛ ومجلد فارغ يبقى ظاهرًا لأنه يُنشر في بيان `cloudFolders`
+     * لا على أنه كائن في الحاوية. الرفض صريح عند الاسم المكرر في المستوى نفسه — وإلا تتوالد
+     * مجلدات متطابقة لا يستطيع المستخدم التمييز بينها ولا حذفها.
+     */
+    suspend fun createRemoteFolder(name: String, parentKey: String?): Result<Unit> = editRemoteMetadata {
+        val settings = preferences.snapshot()
+        requireConnection(settings)
+        val scan = boundedScanLocked(settings, false)
+        val cleaned = name.trim()
+        if (cleaned.isBlank() || cleaned.contains('/')) throw IOException("اسم غير صالح: لا يمكن أن يكون فارغاً أو يحوي /")
+        if (parentKey != null) {
+            val parent = scan.state.folders.firstOrNull { it.key == parentKey }
+                ?: throw IOException("المجلد الأب لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
+            if (!parent.key.startsWith("folder:")) {
+                throw IOException("لا يمكن إنشاء مجلد فرعي داخل مجلد مبني على مسار التخزين أو على مجلد محلي")
+            }
+        }
+        if (scan.state.folders.any { it.parentKey == parentKey && it.name.trim() == cleaned }) {
+            throw IOException("يوجد مجلد بالاسم نفسه في هذا المكان؛ اختر اسمًا آخر أو افتحه لرفع الملفات إليه")
+        }
+        val created = RemoteCloudFolder("folder:${UUID.randomUUID()}", cleaned, parentKey, System.currentTimeMillis())
+        publishManifestEdit(settings, scan) { root ->
+            root.put("cloudFolders", CloudFolderTree.mergeFolders(root.optJSONArray("cloudFolders"), listOf(created)))
         }
     }
 
@@ -1050,7 +1091,15 @@ class CloudSyncManager @Inject constructor(
         _isSyncing.value = true
         _transferState.value = CloudTransferState(kind = kind, phase = "تجهيز ${if (kind == CloudTransferKind.UPLOAD) "الرفع" else "التنزيل"}…")
         downloadJob = currentCoroutineContext().job
-        if (!stagingCleaned) { File(context.filesDir, "cloud-downloads").listFiles()?.forEach { it.delete() }; stagingCleaned = true }
+        if (!stagingCleaned) {
+            // الأجزاء الصالحة تُترك ليُستأنف منها؛ يُمحى ما لم يعد له معنى (قديم أو بغير صيغتنا)
+            val staging = File(context.filesDir, "cloud-downloads")
+            val now = System.currentTimeMillis()
+            staging.listFiles()?.forEach { file ->
+                if (!file.name.endsWith(CloudDownloadPart.SUFFIX) || CloudDownloadPart.isStale(now, file.lastModified())) file.delete()
+            }
+            stagingCleaned = true
+        }
         try {
             cloudAttempt(block).onFailure { error -> cloudAttempt { preferences.recordSyncFailure(error.message ?: "فشل النقل") } }
         } finally {

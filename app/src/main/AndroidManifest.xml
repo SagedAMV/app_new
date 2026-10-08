@@ -11,6 +11,13 @@
          لا أذونات تخزين: الملفات تُختار عبر SAF وتُنسخ لتخزين التطبيق الداخلي. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- خدمة أمامية للنقل السحابي الطويل: عامل WorkManager يستدعي setForegroundAsync
+         من خدمة نوعها dataSync (تعريفها في مكتبة work-runtime نفسها). على أندرويد 14+
+         لا غنى عن إذن dataSync: بدونه يفشل startForeground بـ SecurityException
+         فيتوقف الرفع والتنزيل في الخلفية بدل أن يستمرا. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <!-- إذن الكاميرا لالتقاط صور الملاحظات، والميكروفون للتسجيل الصوتي.
          الكاميرا ليست إلزامية: التطبيق يعمل كاملاً على جهاز بلا كاميرا. -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -65,6 +72,13 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+
+        <!-- أزرار إشعار النقل في الخلفية (إيقاف مؤقت / استئناف / إلغاء ما لم يبدأ).
+             خاص بالتطبيق: لا يُصدَّر حتى لا تستدعيه تطبيقات أخرى. -->
+        <receiver
+            android:name=".notifications.CloudTransferActionsReceiver"
+            android:exported="false"
+            android:enabled="true" />
 
         <!-- مزود ملفات لفتح/مشاركة الملفات المستوردة عبر تطبيقات النظام -->
         <provider

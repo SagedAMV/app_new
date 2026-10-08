@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -101,6 +102,8 @@ import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudFolderTree
 import com.unihub.app.data.cloud.CloudPresenceMatcher
 import com.unihub.app.data.cloud.CloudScanPhase
+import com.unihub.app.data.cloud.CloudTransferKind
+import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferState
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
@@ -206,6 +209,7 @@ fun CloudFilesScreen(
     val localVerification by viewModel.verification.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val transferState by viewModel.transfer.collectAsStateWithLifecycle()
+    val transfers by viewModel.transfers.collectAsStateWithLifecycle()
     val isOnline by viewModel.online.collectAsStateWithLifecycle()
     val downloadReport by viewModel.report.collectAsStateWithLifecycle()
     val availableFiles by viewModel.available.collectAsStateWithLifecycle()
@@ -219,7 +223,6 @@ fun CloudFilesScreen(
     val onRefresh: () -> Unit = viewModel::refresh
     val onDownloadSelected: (List<RemoteCloudFile>, CloudDownloadDestination) -> Unit = viewModel::download
     val onDownloadFolder: (String, CloudDownloadDestination) -> Unit = viewModel::downloadFolder
-    val onCancelDownloads: () -> Unit = viewModel::cancel
     var currentKey by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
     var missingOnly by rememberSaveable { mutableStateOf(true) }
@@ -237,6 +240,8 @@ fun CloudFilesScreen(
     // انيميشنات ناعمة (جولة تعليمات.md): نحتفظ بآخر حالة «نشطة» لبطاقة النقل وآخر تقرير
     // تنزيل حتى تكتمل انيميشن الخروج بمحتوى حقيقي بدل أن تفرغ البطاقة فجأة أثناء الاختفاء.
     var lastActiveTransfer by remember { mutableStateOf(transferState) }
+    var newFolderOpen by remember { mutableStateOf(false) }
+    var newFolderParent by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(transferState) { if (transferState.active) lastActiveTransfer = transferState }
     var lastReport by remember { mutableStateOf(downloadReport) }
     LaunchedEffect(downloadReport) { if (downloadReport != null) lastReport = downloadReport }
@@ -300,9 +305,21 @@ fun CloudFilesScreen(
                 !isOnline || !canChoose -> "الحذف متاح عندما يكون الاتصال متوفراً ولا توجد عملية نقل جارية"
                 else -> CloudDeleteRules.folderDeletionBlockReason(folder, remoteFiles, folders)
             },
+            canDownload = isOnline && canChoose && canDownloadPerm,
             onRename = { renameFolderTarget = folder; folderMenu = null },
+            onCreateSubfolder = { newFolderParent = folder.key; newFolderOpen = true; folderMenu = null },
+            onDownload = { requestFolder = folder; folderMenu = null },
             onDelete = { deleteFolderTarget = folder; folderMenu = null },
             onDismiss = { folderMenu = null }
+        )
+    }
+    if (newFolderOpen) {
+        CloudRenameSheet(
+            title = if (newFolderParent == null) "مجلد جديد في السحابة" else "مجلد فرعي جديد",
+            initialName = "",
+            fieldLabel = "اسم المجلد",
+            onSave = { name -> newFolderOpen = false; viewModel.createFolder(name, newFolderParent) },
+            onDismiss = { newFolderOpen = false }
         )
     }
     renameFileTarget?.let { file ->
@@ -397,10 +414,21 @@ fun CloudFilesScreen(
                 FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("كل الملفات") })
             }
             AnimatedVisibility(
-                visible = transferState.active,
+                visible = transferState.active || transfers.pending.isNotEmpty() || transfers.failed.isNotEmpty(),
                 enter = fadeIn(tween(260, easing = FastOutSlowInEasing)) + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(260, easing = FastOutSlowInEasing)),
                 exit = fadeOut(tween(180)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(180))
-            ) { CloudTransferProgressCard(lastActiveTransfer, onCancelDownloads) }
+            ) {
+                CloudTransferProgressCard(
+                    state = lastActiveTransfer,
+                    queue = transfers,
+                    onPause = viewModel::pauseTransfers,
+                    onResume = viewModel::resumeTransfers,
+                    onRetryFailed = viewModel::retryFailedTransfers,
+                    onDropPending = viewModel::cancelQueued,
+                    onDismissFailed = viewModel::dismissFailedBatch,
+                    online = isOnline
+                )
+            }
             AnimatedVisibility(
                 visible = downloadReport != null,
                 enter = fadeIn(tween(260, easing = FastOutSlowInEasing)),
@@ -420,6 +448,11 @@ fun CloudFilesScreen(
                 if (key != null) TextButton(onClick = { requestFolder = current }, enabled = isOnline && canChoose && canDownloadPerm && key in foldersWithMissing &&
                     CloudFolderTree.filesWithin(remoteFiles, folders, key).none { it.remoteKey in verifyingKeys }) {
                     Text("تنزيل المجلد")
+                }
+                // تكافؤ مع شاشة الملفات المحلية: إنشاء المجلد كان محصورًا في «المحلي» فقط
+                TextButton(onClick = { newFolderParent = currentKey; newFolderOpen = true },
+                    enabled = isOnline && canChoose && canModifyPerm) {
+                    Text("مجلد جديد")
                 }
             }
             // خيارات التحديد السياقية (جولة تعليمات.md): كانت الأزرار الأربعة تظهر معاً
@@ -617,8 +650,11 @@ private fun CloudFileMenuSheet(
 private fun CloudFolderMenuSheet(
     folder: RemoteCloudFolder,
     canModify: Boolean,
+    canDownload: Boolean,
     deleteBlockReason: String?,
     onRename: () -> Unit,
+    onCreateSubfolder: () -> Unit,
+    onDownload: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -629,6 +665,8 @@ private fun CloudFolderMenuSheet(
         actions = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            CloudMenuActionRow(icon = Icons.Filled.CreateNewFolder, text = "إنشاء مجلد فرعي هنا", enabled = canRename, onClick = onCreateSubfolder)
+            CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل المجلد إلى الجهاز", enabled = canDownload, onClick = onDownload)
             CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية المجلد", enabled = canRename, onClick = onRename)
             CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد من السحابة", enabled = deleteBlockReason == null && canModify, danger = true, onClick = onDelete)
             if (!folder.key.startsWith("folder:")) Text(
@@ -817,19 +855,70 @@ private fun CloudMoveSheet(
     }
 }
 
+/**
+ * بطاقة النقل: تُظهر النقل الجاري (مباشرة من [CloudTransferState]) **وطابور الخلفية** مع
+ * أزراره. والفاشلة تُعرض كاستثناءات قابلة لإعادة المحاولة — لا تُطوى ولا تُخفى، لأن إخفاءها
+ * يترك المستخدم يخمّن هل نَجُم كل شيء أم لا.
+ */
 @Composable
-fun CloudTransferProgressCard(state: CloudTransferState, onCancel: () -> Unit) {
-    if (!state.active) return
+fun CloudTransferProgressCard(
+    state: CloudTransferState,
+    queue: CloudTransferQueueSnapshot = CloudTransferQueueSnapshot(),
+    onPause: () -> Unit = {},
+    onResume: () -> Unit = {},
+    onRetryFailed: () -> Unit = {},
+    onDropPending: () -> Unit = {},
+    onDismissFailed: (String) -> Unit = {},
+    online: Boolean = true
+) {
+    val hasQueue = queue.pending.isNotEmpty() || queue.failed.isNotEmpty()
+    if (!state.active && !hasQueue) return
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(state.message, style = MaterialTheme.typography.bodyMedium)
-            val progress = state.progress
-            if (progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            if (state.bytesTotal > 0) Text("${Formatters.fileSize(state.bytesDone)} / ${Formatters.fileSize(state.bytesTotal)}",
-                style = MaterialTheme.typography.bodySmall)
-            // «إيقاف» بلا كلمة «النقل»: كلمة النقل صارت محجوزة لمعنى «نقل إلى مجلد»
-            TextButton(onClick = onCancel) { Text("إيقاف") }
+            if (state.active) {
+                Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                val progress = state.progress
+                if (progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                if (state.bytesTotal > 0) Text("${Formatters.fileSize(state.bytesDone)} / ${Formatters.fileSize(state.bytesTotal)}",
+                    style = MaterialTheme.typography.bodySmall)
+            } else if (hasQueue) {
+                Text("النقل في الخلفية مستمر — يمكنك إغلاق التطبيق", style = MaterialTheme.typography.bodyMedium)
+            }
+            if (hasQueue) {
+                Text(queue.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                if (!online && queue.pending.isNotEmpty()) {
+                    Text("بانتظار عودة الشبكة — سيستأنف النظام من حيث توقف دون إعادة ما اكتمل",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                queue.pending.forEach { batch ->
+                    val verb = if (batch.kind == CloudTransferKind.UPLOAD) "رفع" else "تنزيل"
+                    Text("$verb • ${batch.title} (${batch.itemCount})", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (batch.lastError.isNotBlank()) {
+                        Text("سبب الانتظار: ${batch.lastError}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                    }
+                }
+                queue.failed.forEach { batch ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("تعذّر: ${batch.title} — ${batch.lastError}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                        // استثناء يقبله المستخدم يُخفى بيدِه، فلا يبقى يعاد ولا يُنسى خِفية
+                        TextButton(onClick = { onDismissFailed(batch.id) }) { Text("إخفاء") }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // زرّ واحد للإيقاف لا اثنان: «إيقاف مؤقت» يقطع الجاري الآن ويُبقي المقطع محفوظًا،
+                // و«إلغاء ما لم يبدأ» يزيل ما لم يبدأ. كلمتا «نقل» محجوزتان لمعنى النقل إلى مجلد.
+                if (hasQueue) {
+                    if (queue.paused) TextButton(onClick = onResume) { Text("استئناف") }
+                    else TextButton(onClick = onPause) { Text("إيقاف مؤقت") }
+                    if (queue.pending.isNotEmpty()) TextButton(onClick = onDropPending) { Text("إلغاء ما لم يبدأ") }
+                    if (queue.failed.isNotEmpty()) TextButton(onClick = onRetryFailed) { Text("إعادة المحاولة") }
+                }
+            }
         }
     }
 }

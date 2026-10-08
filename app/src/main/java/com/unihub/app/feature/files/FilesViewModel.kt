@@ -13,6 +13,11 @@ import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.data.auth.AuthPermission
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.cloud.CloudSyncManager
+import com.unihub.app.data.cloud.CloudSyncScheduler
+import com.unihub.app.data.cloud.CloudTransferBatch
+import com.unihub.app.data.cloud.CloudTransferKind
+import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
+import com.unihub.app.data.cloud.CloudTransferQueueStore
 import com.unihub.app.data.cloud.CloudUploadPlan
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.local.entity.FileEntity
@@ -25,6 +30,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +64,9 @@ class FilesViewModel @Inject constructor(
     private val fileRepository: FileRepository,
     private val shareInbox: ShareInbox,
     private val cloudSyncManager: CloudSyncManager,
+    private val cloudTransferQueue: CloudTransferQueueStore,
+    private val cloudTransferScheduler: CloudSyncScheduler,
+    private val cloudTransferControls: com.unihub.app.notifications.CloudTransferControls,
     private val authManager: CloudAuthManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -73,7 +82,26 @@ class FilesViewModel @Inject constructor(
     val cloudTransferState = cloudSyncManager.transferState
     val availableRemoteFiles: StateFlow<List<RemoteCloudFile>> = cloudSyncManager.availableRemoteFiles
     val isOnline: StateFlow<Boolean> = cloudSyncManager.isOnline
-    fun cancelCloudDownloads() = cloudSyncManager.cancelDownloads()
+    /** طابور الخلفية كما تراه شاشة السحابة تمامًا — مصدر واحد للسلوك والإشعار معًا */
+    val cloudTransfers = cloudTransferQueue.state.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5_000), CloudTransferQueueSnapshot()
+    )
+
+    fun pauseCloudTransfers() {
+        viewModelScope.launch { cloudTransferControls.pause() }
+    }
+
+    fun resumeCloudTransfers() {
+        viewModelScope.launch { cloudTransferControls.resume() }
+    }
+
+    fun retryCloudTransfers() {
+        viewModelScope.launch { cloudTransferControls.retryFailed() }
+    }
+
+    fun cancelCloudQueued() {
+        viewModelScope.launch { cloudTransferControls.cancelQueued() }
+    }
 
     private val _uploadPlan = MutableStateFlow<CloudUploadPlan?>(null)
     val uploadPlan = _uploadPlan.asStateFlow()
@@ -98,15 +126,26 @@ class FilesViewModel @Inject constructor(
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته")
         }
     }
+    /**
+     * «رفع المحدد» صار طلبًا في طابور الخلفية: يبدأ فورًا إن لم يكن هناك نقل جارٍ،
+     * ويستمر بعد إغلاق التطبيق؛ ومتى انقطع الاتصال بقي ما لم يُرفع في الانتظار
+     * بلا إعادة ما رُفع (يتخطّاه المدير بالمقارنة الموجودة مسبقًا).
+     */
     fun confirmUpload() {
         val plan = _uploadPlan.value ?: return
         viewModelScope.launch {
-            cloudSyncManager.uploadSelected(plan)
-                .onSuccess { report ->
-                    if (report.failedNames.isEmpty()) messenger.notify(report.message) else messenger.notifyError(report.message)
-                    clearSelection()
-                }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر الرفع") }
+            cloudTransferQueue.enqueue(CloudTransferBatch(
+                id = UUID.randomUUID().toString(),
+                kind = CloudTransferKind.UPLOAD,
+                title = plan.title,
+                fileIds = plan.fileIds,
+                folderIds = plan.folderIds,
+                totalBytes = plan.totalBytes
+            ))
+            cloudTransferScheduler.enqueueTransfers()
+            val missing = if (plan.missingFiles.isEmpty()) "" else " • لن يُرفع ${plan.missingFiles.size} ملفًا (لم تعد موجودة)"
+            messenger.notify("أُضيف ${plan.title} إلى النقل في الخلفية — يمكنك إغلاق التطبيق وسيكمل النظام$missing")
+            clearSelection()
         }
     }
 

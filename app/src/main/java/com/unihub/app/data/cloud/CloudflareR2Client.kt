@@ -130,6 +130,12 @@ class CloudflareR2Client @Inject constructor() {
     suspend fun downloadText(credentials: R2Credentials, objectKey: String): Result<String?> =
         downloadTextObject(credentials, objectKey).map { it?.text }
 
+    /**
+     * تنزيل تدفقي مع إمكانية الاستكمال. عند [resume] وبعد انقطاع/إيقاف، يبقى الملف الجزئي
+     * ويُستأنف بـ `Range: bytes=N-` (الجواب 206) بدل إعادته من أوله؛ وإذا تجاهل الخادم النطاق
+     * (جاء 200) نُصفّر ونبدأ من جديد — لا نخلط جزئيًا بكامله. والبصمة تُحسب على الكل: نُمرّر
+     * الجزء السابق عبر الـdigest قبل اللصق، فلا تتفكك المقارنة مع الفهرس.
+     */
     suspend fun downloadFile(
         credentials: R2Credentials,
         objectKey: String,
@@ -137,27 +143,45 @@ class CloudflareR2Client @Inject constructor() {
         expectedEtag: String? = null,
         expectedSize: Long? = null,
         onDigest: ((String) -> Unit)? = null,
+        resume: Boolean = false,
         onProgress: (Long, Long) -> Unit = { _, _ -> }
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         cloudAttempt {
+            val partLength = if (resume && targetFile.isFile) targetFile.length() else 0L
+            val plan = CloudDownloadPart.plan(partLength, expectedSize)
+            val from = if (plan is CloudDownloadPart.Resume.Continue) plan.from else 0L
             val conn = connection(credentials, objectKey, "GET").apply {
                 if (!expectedEtag.isNullOrBlank()) setRequestProperty("If-Match", quoteEtag(expectedEtag))
+                if (from > 0L) setRequestProperty("Range", "bytes=$from-")
             }
             var completed = false
+            var keepPartial = false
             withCancellableConnection(conn) {
             try {
-                if (conn.responseCode == 404) return@withCancellableConnection false
+                if (conn.responseCode == 404) {
+                    if (from > 0L) targetFile.delete() // جزء من نسخة لم تعد موجودة: لا قيمة لها
+                    return@withCancellableConnection false
+                }
                 requireSuccess(conn)
-                val total = expectedSize ?: conn.contentLengthLong
-                if (expectedSize != null && conn.contentLengthLong >= 0 && conn.contentLengthLong != expectedSize) {
-                    throw CloudConflictException()
+                val partialAccepted = conn.responseCode == 206 && from > 0L
+                val resumeFrom = if (partialAccepted) from else 0L
+                val total = when {
+                    expectedSize != null && expectedSize > 0L -> expectedSize
+                    partialAccepted && conn.contentLengthLong >= 0 -> resumeFrom + conn.contentLengthLong
+                    conn.contentLengthLong >= 0 -> conn.contentLengthLong
+                    else -> -1L
+                }
+                if (expectedSize != null && expectedSize > 0L && conn.contentLengthLong >= 0) {
+                    val announced = if (partialAccepted) resumeFrom + conn.contentLengthLong else conn.contentLengthLong
+                    if (announced != expectedSize) throw CloudConflictException()
                 }
                 targetFile.parentFile?.mkdirs()
-                var bytes = 0L
+                var bytes = resumeFrom
                 val digest = MessageDigest.getInstance("SHA-256")
+                if (resumeFrom > 0L) digest.updateFromFile(targetFile, resumeFrom)
                 var lastProgressAt = 0L
                 conn.inputStream.use { input ->
-                    FileOutputStream(targetFile).use { output ->
+                    FileOutputStream(targetFile, resumeFrom > 0L).use { output ->
                         val buffer = ByteArray(BUFFER_BYTES)
                         while (true) {
                             currentCoroutineContext().ensureActive()
@@ -182,9 +206,26 @@ class CloudflareR2Client @Inject constructor() {
                 onProgress(bytes, total)
                 completed = true
                 true
+            } catch (cancelled: CancellationException) {
+                // مقاطعة المستخدم أو النظام: الجزء كنزٌ لا نفايات — يُستأنف منه
+                keepPartial = true
+                throw cancelled
             } finally {
-                if (!completed) targetFile.delete()
+                if (!completed && !keepPartial) targetFile.delete()
             }
+            }
+        }
+    }
+
+    private fun MessageDigest.updateFromFile(file: File, length: Long) {
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(BUFFER_BYTES)
+            var left = length
+            while (left > 0L) {
+                val read = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                if (read < 0) break
+                update(buffer, 0, read)
+                left -= read
             }
         }
     }
