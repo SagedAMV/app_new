@@ -1,0 +1,139 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Install Android SDK components
+      run: |
+        export ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        cd $ANDROID_HOME/cmdline-tools
+        
+        # Download command line tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        mv cmdline-tools latest
+        rm commandlinetools-linux-11076708_latest.zip
+        
+        # Add to PATH
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+        
+        # Accept licenses
+        yes | sdkmanager --licenses > /dev/null 2>&1
+        
+        # Install required SDK
+        sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        
+        # Export for next steps
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Compile Kotlin
+      run: ./gradlew compileReleaseFullKotlin --no-daemon
+      
+    - name: Build Release Full APK
+      run: ./gradlew assembleReleaseFull --no-daemon
+      
+    - name: Verify APK exists
+      run: |
+        APK_PATH="app/build/outputs/apk/releaseFull/app-releaseFull.apk"
+        if [ ! -f "$APK_PATH" ]; then
+          echo "ERROR: APK not found at $APK_PATH"
+          exit 1
+        fi
+        echo "APK found!"
+        ls -lh "$APK_PATH"
+        echo "APK_SIZE=$(ls -lh "$APK_PATH" | awk '{print $5}')" >> $GITHUB_ENV
+        
+    - name: Verify APK signature
+      run: |
+        APK_PATH="app/build/outputs/apk/releaseFull/app-releaseFull.apk"
+        
+        # Find apksigner
+        APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -1)
+        if [ -n "$APKSIGNER" ]; then
+          $APKSIGNER verify "$APK_PATH" && echo "APK signature verified successfully"
+        else
+          echo "Warning: apksigner not found, skipping signature verification"
+        fi
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: UniHub-releaseFull
+        path: app/build/outputs/apk/releaseFull/app-releaseFull.apk
+        retention-days: 30
+        
+    - name: Push APK to buled repository
+      env:
+        BULED_REPO_TOKEN: ${{ secrets.BULED_REPO_TOKEN }}
+      run: |
+        set -e
+        
+        # Only proceed if BULED_REPO_TOKEN is set
+        if [ -z "$BULED_REPO_TOKEN" ]; then
+          echo "BULED_REPO_TOKEN not set, skipping APK push to buled repository"
+          echo "APK is available as GitHub Actions artifact for 30 days"
+          exit 0
+        fi
+        
+        # Clone buled repo
+        git clone https://$BULED_REPO_TOKEN@github.com/SagedAMV/buled.git /tmp/buled
+        cd /tmp/buled
+        
+        # Get version from build.gradle.kts
+        VERSION=$(grep 'versionName' /home/runner/work/app_new/app_new/app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        APK_NAME="UniHub-v${VERSION}-release-full.apk"
+        
+        # Check if this version already exists
+        if [ -f "$APK_NAME" ]; then
+          echo "APK $APK_NAME already exists in buled repository, skipping upload"
+          exit 0
+        fi
+        
+        # Copy APK
+        cp /home/runner/work/app_new/app_new/app/build/outputs/apk/releaseFull/app-releaseFull.apk "$APK_NAME"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Add and commit
+        git add "$APK_NAME"
+        git diff --staged --quiet && echo "No changes to commit" && exit 0
+        
+        git commit -m "تحديث النسخة الكاملة v${VERSION}
+
+تم بناء APK تلقائياً بواسطة GitHub Actions
+الحجم: $APK_SIZE"
+        
+        git push origin main
