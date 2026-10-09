@@ -1,0 +1,94 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+      
+    - name: Install Android SDK components
+      run: |
+        sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Compile Kotlin
+      run: ./gradlew compileReleaseFullKotlin --no-daemon
+      
+    - name: Build Release Full APK
+      run: ./gradlew assembleReleaseFull --no-daemon
+      
+    - name: Verify APK exists
+      run: |
+        APK_PATH="app/build/outputs/apk/releaseFull/app-releaseFull.apk"
+        if [ ! -f "$APK_PATH" ]; then
+          echo "ERROR: APK not found at $APK_PATH"
+          exit 1
+        fi
+        echo "APK found!"
+        ls -lh "$APK_PATH"
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: UniHub-releaseFull
+        path: app/build/outputs/apk/releaseFull/app-releaseFull.apk
+        retention-days: 30
+        
+    - name: Push APK to buled repository
+      env:
+        BULED_REPO_TOKEN: ${{ secrets.BULED_REPO_TOKEN }}
+      run: |
+        set -e
+        
+        if [ -z "$BULED_REPO_TOKEN" ]; then
+          echo "BULED_REPO_TOKEN not set, skipping APK push"
+          exit 0
+        fi
+        
+        git clone https://$BULED_REPO_TOKEN@github.com/SagedAMV/buled.git /tmp/buled
+        cd /tmp/buled
+        
+        VERSION=$(grep 'versionName' /home/runner/work/app_new/app_new/app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        APK_NAME="UniHub-v${VERSION}-release-full.apk"
+        
+        if [ -f "$APK_NAME" ]; then
+          echo "APK $APK_NAME already exists, skipping"
+          exit 0
+        fi
+        
+        cp /home/runner/work/app_new/app_new/app/build/outputs/apk/releaseFull/app-releaseFull.apk "$APK_NAME"
+        
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        git add "$APK_NAME"
+        git commit -m "تحديث النسخة الكاملة v${VERSION}"
+        git push origin main
