@@ -101,6 +101,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -895,7 +896,7 @@ private fun NoteWorkspaceDialog(
             .ifEmpty { listOf(NoteBlock.TextSection()) }
     }
     var textSections by remember(session) { mutableStateOf(initialTexts) }
-    var activeSectionIndex by remember(session) { mutableStateOf(0) }
+    var activeSectionIndex by remember(session) { mutableIntStateOf(0) }
 
     val initialCards = remember(session) {
         session.initialDocument.blocks

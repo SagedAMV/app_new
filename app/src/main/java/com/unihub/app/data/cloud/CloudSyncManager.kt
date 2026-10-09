@@ -1,9 +1,11 @@
 package com.unihub.app.data.cloud
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.os.storage.StorageManager
 import android.util.Log
 import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.prefs.CloudSyncPreferences
@@ -359,7 +361,7 @@ class CloudSyncManager @Inject constructor(
         }
         val choices = selectedFiles.distinctBy { it.remoteKey }
         val totalBytes = choices.filter { choice -> scan.available.any { it.remoteKey == choice.remoteKey && it.versionToken == choice.versionToken } }.fold(0L) { total, file -> Math.addExact(total, file.size.coerceAtLeast(0)) }
-        if (context.filesDir.usableSpace - RESERVE_BYTES < totalBytes) {
+        if (freeSpaceForNewData() - RESERVE_BYTES < totalBytes) {
             throw IOException("المساحة المتاحة لا تكفي للمحدد (${Formatters.fileSize(totalBytes)})؛ اختر ملفات أقل أو حرّر مساحة")
         }
         if (CloudDownloadPlacement.shouldCreateCloudFolders(destination)) for (key in folderKeys) resolveDestination(key)
@@ -431,7 +433,7 @@ class CloudSyncManager @Inject constructor(
                 var keepPart = false
                 try {
                     val remaining = remote.size - (if (temp.isFile) temp.length() else 0L)
-                    if (context.filesDir.usableSpace - RESERVE_BYTES < remaining.coerceAtLeast(0L)) throw IOException("المساحة لا تكفي")
+                    if (freeSpaceForNewData() - RESERVE_BYTES < remaining.coerceAtLeast(0L)) throw IOException("المساحة لا تكفي")
                     var downloadedHash = ""
                     val found = r2Client.downloadFile(
                         settings.credentials, remote.remoteKey, temp, remote.etag, remote.size,
@@ -1175,6 +1177,30 @@ class CloudSyncManager @Inject constructor(
     private fun connectionId(creds: R2Credentials): String = MessageDigest.getInstance("SHA-256")
         .digest("${creds.resolvedEndpoint}/${creds.bucketName}".toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(Locale.US, it.toInt() and 255) }
+
+    /**
+     * المساحة المتاحة فعلياً لاستقبال بيانات جديدة في وحدة التخزين الداخلية.
+     *
+     * يُفضَّل StorageManager#getAllocatableBytes (متوفر من API 26 = أدنى SDK
+     * ندعمه) لأنه الواجهة التي توصي بها Google لقرار «هل تكفي المساحة لبيانات
+     * جديدة؟»: يحسب أيضاً البيانات المخبّأة التي يستطيع النظام مسحها لحسابنا،
+     * فلا يرفض التنزيل زوراً بينما توجد غيغابايتات من الكاش القابل للمسح.
+     * يعيد قيمة ≥ usableSpace دائماً، لذلك لا تفقد الفحوص حذرها: يبقى هامش
+     * الأمان RESERVE_BYTES مطروحاً في مواضع النداء، والكتابة الفعلية نفسها
+     * تفشل بـ IOException إن سبقنا مستهلك آخر للمساحة.
+     *
+     * المسار الاحتياطي usableSpace (التقدير المحافظ) محجوز لحالة تعذّر الوصول
+     * إلى خدمة التخزين أو رفضها الاستعلام، لذا نكبح تحذير lint هنا مبرراً.
+     */
+    @SuppressLint("UsableSpace")
+    private fun freeSpaceForNewData(): Long {
+        val storageManager = context.getSystemService(StorageManager::class.java) ?: return context.filesDir.usableSpace
+        return try {
+            storageManager.getAllocatableBytes(StorageManager.UUID_DEFAULT)
+        } catch (e: IOException) {
+            context.filesDir.usableSpace
+        }
+    }
 
     companion object {
         private const val TAG = "CloudSyncManager"
