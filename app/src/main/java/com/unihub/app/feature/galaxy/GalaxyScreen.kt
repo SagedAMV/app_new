@@ -599,6 +599,93 @@ private fun FolderClusterView(
 }
 
 /**
+ * «الشمس» — المجلد الأم في مركز العنّقود (إعادة تصميم المجرة: شمس مركزية).
+ *
+ * البنية مطابقة لـ [PlanetColumn] حرفياً من كتلة التسمية فما تحتها — بما في
+ * ذلك صندوق التسمية بارتفاع ثابت [GalaxyGeometry.LABELS_BOX_DP] المقصوص
+ * وبلا حشوة خط — كي تظل قيود الحصر في GalaxyGeometry سارية على العمود
+ * الأم كما هي على الأبناء. الفرق الوحيد: طبقتا توهج أقوى — هالة ذهبية واسعة
+ * (روح «اللون الذهبي» في رسالة إعادة التصميم) ثم هالة بلون الكوكب ثم القرص.
+ *
+ * (إصلاح جلسة التحقق العميق) كان commit 443d3d6 يستدعي SunColumn في موضعين
+ * دون أن يُنشئها أصلاً — ففشل البناء بـ Unresolved reference.
+ */
+@Composable
+private fun SunColumn(
+    folder: FolderWithFileCount,
+    planetSize: Dp,
+    color: Color,
+    onOpenFolder: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.clickable { onOpenFolder(folder.folderId) },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(planetSize)
+                .drawBehind {
+                    // هالة ذهبية واسعة — توهج «الشمس» الخارجي
+                    drawCircle(
+                        color = SUN_GOLD.copy(alpha = 0.16f),
+                        radius = size.minDimension / 2f + 16.dp.toPx()
+                    )
+                    // هالة بلون الكوكب — توهج أقوى من توهج الكوكب العادي (0.25)
+                    drawCircle(
+                        color = color.copy(alpha = 0.40f),
+                        radius = size.minDimension / 2f + 8.dp.toPx()
+                    )
+                }
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(color.copy(alpha = 0.98f), color.copy(alpha = 0.72f))
+                    )
+                )
+        )
+        Spacer(Modifier.height(GalaxyGeometry.LABEL_SPACER_DP.dp))
+        // كتلة التسمية المثبّتة — مطابقة لـ PlanetColumn بالضبط (انظر تعليقه هناك)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(GalaxyGeometry.LABELS_BOX_DP.dp)
+                .clipToBounds(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    lineHeight = 16.sp,
+                    color = Color(0xFFE0E5E1),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "${folder.fileCount} ملف",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    lineHeight = 16.sp,
+                    color = Color(0xFFA9B4AD),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+/** لون الهالة الذهبية لـ [SunColumn] — نفس ذهب الغبار النيزكي في الشاشة. */
+private val SUN_GOLD = Color(0xFFFFD54F)
+
+/**
  * مع اسمه وعدد ملفاته — العنصر قابل للنقر لفتح مجلده.
  * التوهج والتدرج الشعاعي نفس روح النسخ السابقة، بحجمين: أم وابن.
  */

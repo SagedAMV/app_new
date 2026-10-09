@@ -159,6 +159,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    // اختبارات الوحدة على JVM — بدونها لا تُترجم ملفات test/ أصلاً
+    // (إصلاح جلسة التحقق العميق: GalaxyGeometryTest استوردت org.junit بلا تبعية)
+    testImplementation(libs.junit)
+
     // أدوات التطوير
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

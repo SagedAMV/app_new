@@ -202,12 +202,39 @@ internal object GalaxyGeometry {
     fun columnOffsetYDp(dyFromCenterDp: Float): Float = dyFromCenterDp + LABEL_BLOCK_DP / 2f
 
     /**
-     * زاوية المقعد داخل الحلقة: ستة اتجاهات ثابتة تشبه عقد النجوم، مع تدوير
-     * بسيط للحلقة الثانية حتى لا تقع العقد فوق بعضها بصرياً.
+     * نصف قطر الحلقة الواقية لعنقود بلا أبناء — بنفس قيم التصميم الأصلي
+     * (نصف الكوكب + 14) بلا أي تغيير بصري؛ تجميعها هنا فقط لتوحيد المصدر.
+     *
+     * (إصلاح جلسة التحقق العميق) كانت هذه الدالة قد حُذفت بالخطأ في commit
+     * إعادة تصميم المجرة 443d3d6 ضمن تفكيك الدوال الميتة، مع أن GalaxyScreen
+     * لا يزال يستدعيها لرسم الحلقة الواقية للعنقود الوحيد — ففشل البناء.
      */
+    fun guardianRingRadiusDp(parentFileCount: Int): Float =
+        parentPlanetSizeDp(parentFileCount) / 2f + 14f
 
-    /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود. */
-
+    /**
+     * بصمة العنقود بوحدات dp المستقلة — القطر الكامل لمحيطه الحاضن
+     * (أو الحلقة الواقية إن كان وحيداً) مضافاً إليه هامش الخلية.
+     * تستعملها [computeGalaxyLayout] للتحجيم النسبي بين العناقيد.
+     *
+     * (إصلاح جلسة التحقق العميق) حُذفت بالخطأ في commit 443d3d6 مع أن
+     * clusterFootprint في GalaxyLayoutEngine يستدعيها — ففشل البناء.
+     */
+    fun footprintDp(
+        childCount: Int,
+        maxChildFileCount: Int,
+        parentFileCount: Int
+    ): Float {
+        val radius = if (childCount <= 0) {
+            // الحلقة الواقية تبقى كما هي بصرياً (لا تغيير في الرسم)، لكن
+            // البصمة — وهي ما يحجز مساحة الخلية — يجب أن تسع عمود الأم
+            // وتسميته أيضاً، وإلا تداخلت التسميات بين المجلدات المتجاورة.
+            max(guardianRingRadiusDp(parentFileCount), parentColumnReachDp(parentFileCount))
+        } else {
+            confinementRadiusDp(childCount, maxChildFileCount, parentFileCount)
+        }
+        return radius * 2f + OUTER_MARGIN_DP
+    }
 
     /**
      * زاوية المقعد داخل الحلقة مع إضافة إزاحة الدوران (Orbit Rotation).
