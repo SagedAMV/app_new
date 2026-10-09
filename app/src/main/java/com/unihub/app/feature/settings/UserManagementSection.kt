@@ -447,7 +447,7 @@ fun UserManagementSection(
     deleteTargetUser?.let { target ->
         ConfirmDialog(
             title = "حذف المستخدم «${target.username}»؟",
-            message = "سيتم حذف حساب المستخدم «${target.username}» من السحابة وإلغاء جلسته فوراً.",
+            message = "سيُحذف حساب «${target.username}» من السحابة.",
             confirmLabel = "حذف المستخدم",
             onConfirm = {
                 viewModel.deleteUser(target.username)

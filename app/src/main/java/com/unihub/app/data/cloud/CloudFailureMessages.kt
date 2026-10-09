@@ -24,22 +24,22 @@ import javax.net.ssl.SSLException
 object CloudFailureMessages {
 
     // ── المعجم المعتمد: كل ما يجوز أن يراه المستخدم عند العطل ──
-    const val GENERIC = "تعذّر إتمام العملية؛ تحقّق من الاتصال ثم أعد المحاولة"
-    const val OFFLINE = "لا يتوفر إنترنت؛ العملية محفوظة وستُستأنف عند عودة الاتصال"
-    const val INTERRUPTED = "أُوقف النقل؛ سيُستأنف من حيث توقف"
-    const val UNREACHABLE = "تعذّر الوصول إلى خادم السحابة — تحقّق من الاتصال بالإنترنت"
-    const val TIMEOUT = "انتهت مهلة الاتصال بالخادم؛ سيُعاد المحاولة تلقائيًا"
-    const val TLS = "تعذّر إتمام اتصال آمن بخادم السحابة؛ تحقّق من بيانات الخادم"
-    const val DROPPED = "انقطع الاتصال أثناء النقل؛ ستُعاد المحاولة من حيث توقف"
-    const val MISSING_LOCAL = "الملف لم يعد موجودًا على الجهاز"
-    const val FOLDER_ACCESS = "تعذّر الوصول إلى المجلد المحفوظ؛ أعد اختياره من الإعدادات"
-    const val NO_SPACE = "لا تكفي مساحة التخزين على الجهاز"
-    const val SESSION = "انتهت صلاحية الدخول أو لا تملك صلاحية لهذا الإجراء"
-    const val GONE_REMOTE = "الملف لم يعد موجودًا على الخادم"
-    const val CONFLICT = "تغيّرت البيانات على الخادم؛ أعد الفحص ثم حاول مجددًا"
-    const val TOO_BIG = "الملف أكبر من الحد المسموح به على الخادم"
-    const val THROTTLED = "عدد محاولات كثير جدًا أو انتهت مهلة الخادم؛ انتظر قليلًا ثم أعد المحاولة"
-    const val SERVER = "خادم السحابة لا يستجيب حاليًا؛ ستُعاد المحاولة تلقائيًا"
+    const val GENERIC = "تعذّر الإتمام، تحقق من الاتصال"
+    const val OFFLINE = "لا إنترنت، سيُستأنف تلقائياً"
+    const val INTERRUPTED = "توقف، سيُستأنف"
+    const val UNREACHABLE = "تعذّر الوصول للسحابة"
+    const val TIMEOUT = "انتهت المهلة"
+    const val TLS = "فشل الاتصال الآمن"
+    const val DROPPED = "انقطع الاتصال"
+    const val MISSING_LOCAL = "الملف غير موجود"
+    const val FOLDER_ACCESS = "تعذّر الوصول للمجلد"
+    const val NO_SPACE = "المساحة غير كافية"
+    const val SESSION = "انتهت الصلاحية"
+    const val GONE_REMOTE = "الملف غير موجود بالسحابة"
+    const val CONFLICT = "تعارض البيانات"
+    const val TOO_BIG = "الملف كبير جداً"
+    const val THROTTLED = "محاولات كثيرة، انتظر"
+    const val SERVER = "الخادم لا يستجيب"
 
     /** معجم كامل لا سواه: أي مخرج خارج هذه القائمة عند مدخل خام يُعدّ تسريبًا (اختبار P1) */
     val USER_FACING: Set<String> = setOf(

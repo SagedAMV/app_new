@@ -170,8 +170,8 @@ class CloudFilesViewModel @Inject constructor(
         viewModelScope.launch {
             manager.moveRemoteFiles(files.map { it.remoteKey }, destinationFolderKey).fold(
                 onSuccess = { moved ->
-                    if (moved == 0) messenger.notify("لا يلزم نقل؛ الملفات في الوجهة نفسها")
-                    else messenger.notify("تغيّر مسار ${Formatters.fileCountLabel(moved)} في السحابة")
+                    if (moved == 0) messenger.notify("الملفات في الوجهة نفسها")
+                    else messenger.notify("تغير مسار ${Formatters.fileCountLabel(moved)}")
                 },
                 onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّر تغيير المسار")) }
             )

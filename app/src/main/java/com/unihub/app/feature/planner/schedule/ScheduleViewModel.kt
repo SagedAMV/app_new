@@ -63,7 +63,7 @@ class ScheduleViewModel @Inject constructor(
             }.getOrNull()
             if (clash != null) {
                 messenger.notifyError(
-                    "تعارض في الجدول: «${clash.subject}» تبدأ " +
+                    "تعارض: «${clash.subject}» تبدأ " +
                         "${DateFormats.formatTime12(clash.timeFrom)} في نفس اليوم والوقت"
                 )
                 return@launch

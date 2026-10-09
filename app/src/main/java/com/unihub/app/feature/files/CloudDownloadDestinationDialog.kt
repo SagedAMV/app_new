@@ -75,15 +75,15 @@ fun CloudDownloadDestinationDialog(
                     )
                 }
                 if (mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL) OutlinedTextField(
-                    value = rootName, onValueChange = { rootName = it }, label = { Text("اسم المجلد الجديد عندك") },
+                    value = rootName, onValueChange = { rootName = it }, label = { Text("اسم المجلد") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 // جولة المحاكمة (هجوم سيناريو S8): زر معطّل بلا تفسير يربك المستخدم —
                 // رسالة صريحة عندما يكون الاسم فارغاً
                 if (mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL && rootName.isBlank()) Text(
-                    "اكتب اسماً للمجلد الجديد لتفعيل زر التنزيل",
+                    "أدخل اسماً للمجلد",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لن ننشئ مجلدات السحابة أو نغيّر اسم وجهتك."
-                    else "سنحفظ الجزء المختار فقط داخل وجهتك.", style = MaterialTheme.typography.bodySmall)
+                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لن تتغير المجلدات أو الاسم."
+                    else "سيُحفظ المحدد فقط.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }, confirmButton = {

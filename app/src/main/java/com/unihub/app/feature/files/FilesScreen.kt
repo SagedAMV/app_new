@@ -560,7 +560,7 @@ fun FilesScreen(
         deleteFolderTarget?.let { folder ->
             ConfirmDialog(
                 title = "حذف المجلد؟",
-                message = "سيُحذف المجلد \"${folder.name}\" مع كل المجلدات والملفات داخله نهائياً.",
+                message = "سيُحذف المجلد «${folder.name}» وكل محتوياته.",
                 onConfirm = {
                     viewModel.deleteFolder(folder)
                     deleteFolderTarget = null
@@ -574,7 +574,7 @@ fun FilesScreen(
             ConfirmDialog(
                 title = if (selectedFiles.size == 1) "حذف الملف؟"
                 else "حذف " + Formatters.fileCountLabel(selectedFiles.size) + "؟",
-                message = "ستُحذف الملفات المحددة نهائياً من التخزين ولا يمكن التراجع.",
+                message = "ستُحذف الملفات المحددة نهائياً.",
                 onConfirm = {
                     viewModel.deleteFiles(selectedFiles)
                     confirmBulkDelete = false

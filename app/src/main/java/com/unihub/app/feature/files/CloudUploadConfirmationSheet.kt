@@ -41,11 +41,11 @@ fun CloudUploadConfirmationSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(plan.title, style = MaterialTheme.typography.titleLarge)
             Text(plan.summary, style = MaterialTheme.typography.titleMedium)
-            Text("سيُرفع المحدد فقط مع حفظ بنية المجلدات. الملفات الأخرى لن تُرفع.",
+            Text("سيُرفع المحدد فقط مع بنية المجلدات.",
                 style = MaterialTheme.typography.bodyMedium)
-            if (plan.missingFiles.isNotEmpty()) Text("غير متاح محلياً: ${plan.missingFiles.take(4).joinToString("، ")}",
+            if (plan.missingFiles.isNotEmpty()) Text("غير متاح: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            if (!isOnline) Text("لا إنترنت الآن — سيبدأ الرفع عند عودة الاتصال", style = MaterialTheme.typography.bodySmall)
+            if (!isOnline) Text("لا إنترنت، سيُرفع عند العودة", style = MaterialTheme.typography.bodySmall)
             CloudTransferProgressCard(
                 state = transfer,
                 queue = queue,
@@ -63,7 +63,7 @@ fun CloudUploadConfirmationSheet(
                 // فلا سبب أن يبدو الزر ميتًا (وهو بعينه ما شكا منه المستخدم). والإلغاء صريح.
                 Button(onClick = onConfirm, enabled = plan.fileIds.isNotEmpty() || plan.folderIds.isNotEmpty()) {
                     Icon(Icons.Filled.CloudUpload, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text("رفع المحدد إلى السحابة")
+                    Spacer(Modifier.width(8.dp)); Text("رفع")
                 }
             }
         }

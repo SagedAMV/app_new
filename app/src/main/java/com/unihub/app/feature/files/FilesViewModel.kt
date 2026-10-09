@@ -146,7 +146,7 @@ class FilesViewModel @Inject constructor(
             cloudTransferScheduler.enqueueTransfers()
             cloudTransferControls.announceQueued()
             val missing = if (plan.missingFiles.isEmpty()) "" else " • لن يُرفع ${plan.missingFiles.size} ملفًا (لم تعد موجودة)"
-            messenger.notify("أُضيف ${plan.title} إلى النقل في الخلفية — يمكنك إغلاق التطبيق وسيكمل النظام$missing")
+            messenger.notify("أُضيف للنقل في الخلفية$missing")
             clearSelection()
         }
     }
@@ -359,7 +359,7 @@ class FilesViewModel @Inject constructor(
                     )
                 )
             }.onSuccess { messenger.notify("تم إنشاء المجلد") }
-                .onFailure { messenger.notifyError("فشل إنشاء المجلد — ربما الاسم مكرر أو القاعدة مشغولة") }
+                .onFailure { messenger.notifyError("فشل إنشاء المجلد") }
         }
     }
 
@@ -408,7 +408,7 @@ class FilesViewModel @Inject constructor(
                 FolderRepository.MoveResult.SAME_PLACE ->
                     messenger.notify("المجلد موجود هنا بالفعل")
                 FolderRepository.MoveResult.CYCLE ->
-                    messenger.notifyError("لا يمكن نقل المجلد داخل أحد مجلداته الفرعية")
+                    messenger.notifyError("لا يمكن النقل داخل مجلد فرعي")
                 FolderRepository.MoveResult.MISSING_PARENT ->
                     messenger.notifyError("المجلد الهدف لم يعد موجوداً")
             }
@@ -443,7 +443,7 @@ class FilesViewModel @Inject constructor(
             importing.value = false
             when {
                 ok > 0 && failedMsg == null -> messenger.notify("تم استيراد $ok ملف بنجاح")
-                ok > 0 -> messenger.notify("تم استيراد $ok ملف — $failedMsg")
+                ok > 0 -> messenger.notify("استُورد $ok ملف، فشل $failedMsg")
                 else -> messenger.notifyError(failedMsg ?: "فشل الاستيراد")
             }
         }
@@ -478,7 +478,7 @@ class FilesViewModel @Inject constructor(
                     copyTree(root, folderId, 0)
                     copied to failed
                 }
-                messenger.notify("استُورد ${result.first} ملف مع بنية المجلد؛ تعذّر ${result.second}. اضغط مطولاً على المجلد لرفعه للسحابة.")
+                messenger.notify("استُورد ${result.first} ملف، تعذّر ${result.second}.")
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) { messenger.notifyError(CloudFailureMessages.or(error, "تعذّر استيراد المجلد"))
             } finally { importing.value = false }
@@ -511,7 +511,7 @@ class FilesViewModel @Inject constructor(
                 ok > 0 && failed == 0 -> messenger.notify(
                     if (ok == 1) "أُضيفت الصورة إلى الملفات" else "أُضيفت $ok صور إلى الملفات"
                 )
-                ok > 0 -> messenger.notifyError("أُضيفت $ok صور وتعذّر حفظ $failed")
+                ok > 0 -> messenger.notifyError("حُفظت $ok صور، فشل $failed")
                 else -> messenger.notifyError("تعذّر حفظ الصور الملتقطة")
             }
         }

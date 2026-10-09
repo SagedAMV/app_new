@@ -354,7 +354,7 @@ fun CloudFilesScreen(
         val label = if (targets.size == 1) "«${targets.first().fullDisplayName}»" else Formatters.fileCountLabel(targets.size)
         ConfirmDialog(
             title = "حذف من السحابة؟",
-            message = "سيُحذف $label نهائيًا من السحابة ولا يمكن التراجع. نسخك المحلية على هذا الجهاز لن تُحذف.",
+            message = "سيُحذف $label من السحابة نهائياً. النسخ المحلية ستبقى.",
             confirmLabel = "حذف من السحابة",
             onConfirm = { viewModel.deleteFiles(targets); deleteFileTargets = null },
             onDismiss = { deleteFileTargets = null }
@@ -363,7 +363,7 @@ fun CloudFilesScreen(
     deleteFolderTarget?.let { folder ->
         ConfirmDialog(
             title = "حذف المجلد من السحابة؟",
-            message = "سيُحذف المجلد «${folder.name}» من قائمة السحابة. المجلد فارغ من الملفات، ولن تُحذف أي نسخة محلية.",
+            message = "سيُحذف المجلد «${folder.name}» من السحابة. النسخ المحلية ستبقى.",
             confirmLabel = "حذف المجلد",
             onConfirm = { viewModel.deleteFolder(folder); deleteFolderTarget = null },
             onDismiss = { deleteFolderTarget = null }

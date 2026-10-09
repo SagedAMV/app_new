@@ -261,7 +261,7 @@ fun SettingsScreen(
         if (showClearConfirm) {
             ConfirmDialog(
                 title = "مسح جميع البيانات؟",
-                message = "سيُحذف كل شيء نهائياً: المجلدات، الملفات المستوردة، المهام، الملاحظات، الامتحانات والجدول. لا يمكن التراجع.",
+                message = "سيُحذف كل شيء نهائياً. لا يمكن التراجع.",
                 confirmLabel = "مسح الكل",
                 onConfirm = {
                     viewModel.clearAllData()

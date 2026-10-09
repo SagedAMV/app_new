@@ -329,7 +329,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
         deleteTarget?.let { note ->
             ConfirmDialog(
                 title = "حذف الملاحظة؟",
-                message = "ستُحذف \"${note.title}\" نهائياً بجميع بطاقاتها وجداولها ورسوماتها.",
+                message = "ستُحذف «${note.title}» نهائياً بكل محتوياتها.",
                 onConfirm = {
                     viewModel.delete(note)
                     deleteTarget = null
@@ -1334,7 +1334,7 @@ private fun NoteWorkspaceDialog(
         if (showDiscardDialog) {
             ConfirmDialog(
                 title = "تجاهل التعديلات؟",
-                message = "هناك محتوى غير محفوظ في الورقة، هل تريد إغلاق الملاحظة دون حفظ؟",
+                message = "محتوى غير محفوظ، هل تريد الإغلاق؟",
                 confirmLabel = "تجاهل",
                 onConfirm = {
                     showDiscardDialog = false

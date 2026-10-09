@@ -78,7 +78,7 @@ class ExamsViewModel @Inject constructor(
     fun delete(exam: ExamEntity) {
         viewModelScope.launch {
             runCatching { examRepository.delete(exam) }
-                .onSuccess { messenger.notify("حُذف الامتحان وأُلغيت تذكيراته") }
+                .onSuccess { messenger.notify("حُذف الامتحان") }
                 .onFailure { messenger.notifyError("تعذّر حذف الامتحان") }
         }
     }
