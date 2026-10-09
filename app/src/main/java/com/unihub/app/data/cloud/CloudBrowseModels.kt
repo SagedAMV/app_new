@@ -24,7 +24,11 @@ data class CloudTransferState(
     val totalFiles: Int = 0,
     val bytesDone: Long = 0,
     val bytesTotal: Long = 0,
-    val phase: String = ""
+    val phase: String = "",
+    /** مجموع بايتات الملفات السابقة التي اكتملت/تجاوزت بأمان داخل الدفعة الحالية. */
+    val bytesCompletedBeforeCurrentFile: Long = 0,
+    /** مجموع أحجام الملفات التي تشملها هذه الدفعة، حتى تكون النسبة موزونة بالبايتات لا بعدد الملفات. */
+    val batchBytesTotal: Long = 0
 ) {
     val active: Boolean get() = kind != CloudTransferKind.NONE
     val progress: Float? get() = if (bytesTotal > 0) (bytesDone.toDouble() / bytesTotal).toFloat().coerceIn(0f, 1f) else null

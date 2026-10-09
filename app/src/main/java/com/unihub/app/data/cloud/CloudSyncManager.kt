@@ -367,6 +367,7 @@ class CloudSyncManager @Inject constructor(
         downloadJob = jobContext.job
         val failed = mutableListOf<String>()
         var completed = 0
+        var bytesCompletedBeforeCurrentFile = 0L
         try {
             for ((index, chosen) in choices.withIndex()) {
                 currentCoroutineContext().ensureActive()
@@ -396,15 +397,37 @@ class CloudSyncManager @Inject constructor(
                 }
                 val parent = resolveDestination(remote.cloudFolderKey)
                 if (matchExistingInDestination(remote, parent?.id, remote.sha256) != null) {
+                    // حجم الملف داخل الإجمالي، لكنه موجود محليًا بالفعل؛ اعتبره متجاوزًا بأمان.
+                    _transferState.value = CloudTransferState(
+                        kind = CloudTransferKind.DOWNLOAD,
+                        fileName = remote.fullDisplayName,
+                        index = index + 1,
+                        totalFiles = choices.size,
+                        bytesDone = remote.size,
+                        bytesTotal = remote.size,
+                        bytesCompletedBeforeCurrentFile = bytesCompletedBeforeCurrentFile,
+                        batchBytesTotal = totalBytes
+                    )
+                    bytesCompletedBeforeCurrentFile = (bytesCompletedBeforeCurrentFile + remote.size).coerceAtMost(totalBytes)
                     continue
                 }
                 val staging = File(context.filesDir, "cloud-downloads").apply { mkdirs() }
                 // اسم ثابت لكل مفتاح سحابي — لا createTempFile العشوائي: حتى يجد الاستئناف
                 // بعد انقطاع الشبكة (أو بعد إعادة تشغيل التطبيق) جزأه ويستكمل من نصفه.
                 val temp = CloudDownloadPart.fileFor(staging, remote.remoteKey)
-                _transferState.value = CloudTransferState(CloudTransferKind.DOWNLOAD, remote.fullDisplayName, index + 1, choices.size, bytesTotal = remote.size)
+                val resumedBytes = (if (temp.isFile) temp.length() else 0L).coerceIn(0L, remote.size.coerceAtLeast(0L))
+                _transferState.value = CloudTransferState(
+                    kind = CloudTransferKind.DOWNLOAD,
+                    fileName = remote.fullDisplayName,
+                    index = index + 1,
+                    totalFiles = choices.size,
+                    bytesDone = resumedBytes,
+                    bytesTotal = remote.size,
+                    bytesCompletedBeforeCurrentFile = bytesCompletedBeforeCurrentFile,
+                    batchBytesTotal = totalBytes
+                )
                 _downloadingKeys.value = setOf(remote.remoteKey)
-                _downloadProgress.value = mapOf(remote.remoteKey to CloudDownloadProgress(0, remote.size))
+                _downloadProgress.value = mapOf(remote.remoteKey to CloudDownloadProgress(resumedBytes, remote.size))
                 var keepPart = false
                 try {
                     val remaining = remote.size - (if (temp.isFile) temp.length() else 0L)
@@ -423,6 +446,8 @@ class CloudSyncManager @Inject constructor(
                         ?: throw IOException("لم تكتمل بصمة التنزيل")
                     if (remote.sha256.isNotBlank() && hash != remote.sha256) throw IOException("بصمة الملف لا تطابق الفهرس")
                     if (matchExistingInDestination(remote, parent?.id, hash) != null) {
+                        // اكتشفنا نسخة مطابقة بعد التنزيل؛ لا نحفظ نسخة مكررة لكن حجمها أُنجز.
+                        bytesCompletedBeforeCurrentFile = (bytesCompletedBeforeCurrentFile + remote.size).coerceAtMost(totalBytes)
                         continue
                     }
                     val state = catalog.snapshot(activeConnection)
@@ -448,7 +473,10 @@ class CloudSyncManager @Inject constructor(
                         )
                     }
                     completed++
+                    // نُشر آخر callback عادةً عند اكتمال البايتات؛ ثبّته صراحةً قبل الانتقال للملف التالي.
+                    _transferState.value = _transferState.value.copy(bytesDone = remote.size, bytesTotal = remote.size)
                     refreshAvailable(catalog.snapshot(activeConnection))
+                    bytesCompletedBeforeCurrentFile = (bytesCompletedBeforeCurrentFile + remote.size).coerceAtMost(totalBytes)
                 } catch (cancelled: CancellationException) {
                     keepPart = true // مقاطعة المستخدم أو إيقاف النظام: الجزء للاستئناف لا للنفايات
                     throw cancelled
@@ -871,6 +899,10 @@ class CloudSyncManager @Inject constructor(
         val ctx = currentCoroutineContext()
         var uploaded = 0; var present = 0
         val failed = mutableListOf<String>()
+        val batchBytesTotal = plan.fileIds.sumOf { id ->
+            records[id]?.let { record -> File(record.filePath).takeIf { it.isFile }?.length() ?: 0L } ?: 0L
+        }
+        var bytesCompletedBeforeCurrentFile = 0L
         // نشر المجلدات حتى عندما تكون فارغة، قبل بدء الملفات الكبيرة.
         if (folderDescriptions.isNotEmpty()) publish()
         for ((index, id) in plan.fileIds.withIndex()) {
@@ -878,8 +910,17 @@ class CloudSyncManager @Inject constructor(
             if (file == null) { failed += "ملف محلي غير متاح ($id)"; continue }
             val disk = File(file.filePath)
             if (!disk.isFile) { failed += file.name; continue }
-            _transferState.value = CloudTransferState(CloudTransferKind.UPLOAD, file.name, index + 1, plan.fileIds.size,
-                bytesTotal = disk.length(), phase = "تحضير بصمة ${file.name}")
+            val currentFileBytes = disk.length()
+            _transferState.value = CloudTransferState(
+                kind = CloudTransferKind.UPLOAD,
+                fileName = file.name,
+                index = index + 1,
+                totalFiles = plan.fileIds.size,
+                bytesTotal = currentFileBytes,
+                phase = "تحضير بصمة ${file.name}",
+                bytesCompletedBeforeCurrentFile = bytesCompletedBeforeCurrentFile,
+                batchBytesTotal = batchBytesTotal
+            )
             try {
                 val length = disk.length(); val modified = disk.lastModified()
                 val parentKey = file.folderId?.let { folderKeys[it] }
@@ -910,7 +951,11 @@ class CloudSyncManager @Inject constructor(
                     }.getOrThrow()
                     obj = R2ObjectSummary(key, length, response.etag, System.currentTimeMillis()); objects[key] = obj
                     uploaded++
-                } else present++
+                } else {
+                    present++
+                    // الملف مطابق وموجود في السحابة؛ لا يوجد نقل بايتات لهذا الملف.
+                    _transferState.value = _transferState.value.copy(phase = "", bytesDone = length, bytesTotal = length)
+                }
                 if (disk.length() != length || disk.lastModified() != modified) throw IOException("تغير الملف أثناء الرفع")
                 val descriptor = RemoteCloudFile(key, 0L, file.name, file.extension, length, file.mimeType, file.kind,
                     folderId = null, folderName = file.folderId?.let { localFolders[it]?.name }, createdAt = file.createdAt,
@@ -918,7 +963,10 @@ class CloudSyncManager @Inject constructor(
                 descriptions += descriptor
                 val link = CloudFileLink(id, key, descriptor.versionToken, hash, length, modified, file.createdAt)
                 catalog.update(activeConnection) { it.copy(links = it.links.filterNot { oldLink -> oldLink.localId == id } + link) }
+                // لا نحتسب الملف السابق في مقام الدفعة إلا بعد اكتمال رفعه/تجاوزه وحفظ رابط البيان.
+                _transferState.value = _transferState.value.copy(bytesDone = length, bytesTotal = length)
                 publish()
+                bytesCompletedBeforeCurrentFile = (bytesCompletedBeforeCurrentFile + length).coerceAtMost(batchBytesTotal)
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) {
                 if (error is CloudConflictException) throw error

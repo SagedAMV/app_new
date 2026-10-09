@@ -11,6 +11,11 @@ import com.unihub.app.notifications.CloudTransferNotifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * محرك النقل في الخلفية: يسحب دفعات [CloudTransferQueueStore] واحدًا تلو الآخر عبر
@@ -50,7 +55,7 @@ class CloudTransferWorker @AssistedInject constructor(
             val batch = CloudTransferQueueLogic.nextPending(snapshot) ?: break
             if (!manager.checkIsOnline()) break // القرار النهائي يقيس الشبكة مجددًا عند الخروج
             publishProgress(snapshot, batch)
-            when (val outcome = runCatching { runBatch(batch) }
+            when (val outcome = runCatching { runBatchWithProgress(batch) }
                 .getOrElse { error ->
                     if (error is CancellationException) throw error else classify(error)
                 }) {
@@ -85,6 +90,65 @@ class CloudTransferWorker @AssistedInject constructor(
             CloudTransferRearm.NONE -> Result.success()
         }
     }
+
+    /**
+     * يربط إشعار النظام بالتقدّم الحقيقي الذي تنشره CloudSyncManager من حلقات نسخ البايتات.
+     * كان الإشعار يتحدث مرة واحدة فقط عند بداية الدفعة، كما أن مقام الشريط كان pending.size
+     * (الذي يستثني المنتهي) بينما بسطه يحسب الدفعات المنتهية أيضًا؛ لذلك قد يبدو مكتملًا فورًا.
+     * نراقب StateFlow طوال النقل ونحدّث الإشعار عند تغيّر الملف/المرحلة أو تقدّم البايتات،
+     * ثم نوقف المراقب دائمًا حتى لا يبقى تحديث شبح بعد نهاية الدفعة.
+     */
+    private suspend fun runBatchWithProgress(batch: CloudTransferBatch): BatchOutcome = coroutineScope {
+        val progressJob = launch {
+            manager.transferState
+                .distinctUntilChangedBy { state ->
+                    TransferNotificationUpdateKey(
+                        kind = state.kind,
+                        fileName = state.fileName,
+                        index = state.index,
+                        totalFiles = state.totalFiles,
+                        phase = state.phase,
+                        bytesTotal = state.bytesTotal,
+                        bytesCompletedBeforeCurrentFile = state.bytesCompletedBeforeCurrentFile,
+                        batchBytesTotal = state.batchBytesTotal,
+                        fileProgressBucket = if (state.bytesTotal > 0L) {
+                            ((state.bytesDone.coerceAtLeast(0L) * 100L) / state.bytesTotal).toInt().coerceIn(0, 100)
+                        } else 0,
+                        completed = state.bytesTotal > 0L && state.bytesDone >= state.bytesTotal
+                    )
+                }
+                .collect { state ->
+                    if (state.kind == batch.kind && state.kind != CloudTransferKind.NONE) {
+                        // أي عطل في تحديث واجهة الإشعار لا يجوز أن يوقف نقل الملف نفسه.
+                        runCatching {
+                            val currentSnapshot = queue.snapshot()
+                            CloudTransferNotifier.show(
+                                appContext,
+                                CloudTransferNotifier.progress(appContext, currentSnapshot, batch, state)
+                            )
+                        }.onFailure { Log.w(TAG, "تعذّر تحديث تقدّم إشعار النقل", it) }
+                    }
+                }
+        }
+        try {
+            runBatch(batch)
+        } finally {
+            progressJob.cancelAndJoin()
+        }
+    }
+
+    private data class TransferNotificationUpdateKey(
+        val kind: CloudTransferKind,
+        val fileName: String,
+        val index: Int,
+        val totalFiles: Int,
+        val phase: String,
+        val bytesTotal: Long,
+        val bytesCompletedBeforeCurrentFile: Long,
+        val batchBytesTotal: Long,
+        val fileProgressBucket: Int,
+        val completed: Boolean
+    )
 
     private suspend fun runBatch(batch: CloudTransferBatch): BatchOutcome = when (batch.kind) {
         CloudTransferKind.UPLOAD -> runUpload(batch)
@@ -165,6 +229,7 @@ class CloudTransferWorker @AssistedInject constructor(
 
     private companion object {
         private const val TAG = "CloudTransferWorker"
+        // تُحدَّث إشعارات النظام عند تغيّر نسبة الملف، لا مع كل قطعة شبكة صغيرة.
     }
 
 }

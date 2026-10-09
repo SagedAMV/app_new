@@ -16,10 +16,11 @@ import com.unihub.app.data.cloud.CloudSyncManager
 import com.unihub.app.data.cloud.CloudSyncScheduler
 import com.unihub.app.data.cloud.CloudTransferBatch
 import com.unihub.app.data.cloud.CloudTransferKind
+import com.unihub.app.data.cloud.CloudTransferState
+import com.unihub.app.data.cloud.CloudTransferNotificationProgressFactory
 import com.unihub.app.data.cloud.CloudTransferQueueLogic
 import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferQueueStore
-import com.unihub.app.data.cloud.CloudTransferStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,18 +67,31 @@ object CloudTransferNotifier {
         post(context, RESULT_ID, notification)
     }
 
-    fun progress(context: Context, snapshot: CloudTransferQueueSnapshot, batch: CloudTransferBatch): Notification {
+    fun progress(
+        context: Context,
+        snapshot: CloudTransferQueueSnapshot,
+        batch: CloudTransferBatch,
+        transfer: CloudTransferState? = null
+    ): Notification {
         val verb = if (batch.kind == CloudTransferKind.UPLOAD) "رفع" else "تنزيل"
-        val total = snapshot.pending.size.coerceAtLeast(1)
-        val done = snapshot.batches.count { it.status == CloudTransferStatus.DONE }
-        val text = "جارٍ تنفيذ الدفعة الأولى من $total • اكتمل $done"
+        val activeTransfer = transfer?.takeIf { it.kind == batch.kind && it.kind != CloudTransferKind.NONE }
+        val presentation = CloudTransferNotificationProgressFactory.from(activeTransfer)
+        val text = if (activeTransfer == null) {
+            "$verb الملفات • جارٍ التجهيز • 0%"
+        } else {
+            val filePosition = if (activeTransfer.totalFiles > 0) " • ${activeTransfer.index.coerceIn(1, activeTransfer.totalFiles)}/${activeTransfer.totalFiles}" else ""
+            val overallPercent = " • إجمالي النقل ${presentation.percentage}%"
+            val filePercent = presentation.currentFilePercentage?.let { " • $it% من الملف" }.orEmpty()
+            "$verb ${activeTransfer.fileName.ifBlank { "الملفات" }}$filePosition$overallPercent$filePercent"
+        }
         val expanded = buildString {
-            append(text).append('\n').append(snapshot.summary)
+            append(text).append('\n').append(presentation.detail).append('\n').append(snapshot.summary)
             if (batch.lastError.isNotBlank()) append("\nسبب التوقف: ${batch.lastError}")
         }
         return baseBuilder(context, "${batch.title} ($verb)", text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
-            .setProgress(total, done.coerceAtMost(total), false)
+            // نسبة محسوبة من حالة نقل البايتات، لا من عدد الدفعات المنتهية في طابور متغير.
+            .setProgress(100, presentation.percentage, false)
             .setOngoing(true)
             .addAction(0, if (snapshot.paused) "استئناف" else "إيقاف مؤقت",
                 action(context, if (snapshot.paused) CloudTransferActionsReceiver.ACTION_RESUME else CloudTransferActionsReceiver.ACTION_PAUSE, REQUEST_PAUSE))
