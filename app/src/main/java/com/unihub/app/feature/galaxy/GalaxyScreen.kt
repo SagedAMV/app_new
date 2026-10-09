@@ -375,6 +375,40 @@ private fun FolderClusterView(
     val parentColumnWidth = (GalaxyGeometry.PARENT_COLUMN_HALF_WIDTH_DP * 2f).dp
     val discY = GalaxyGeometry.columnOffsetYDp(0f).dp
 
+    // حركة الدوران للمدارات (Orbit Rotation) — سرعات متفاوتة لكل حلقة
+    // الحلقات الداخلية تدور أسرع من الخارجية (محاكاة بسيطة لقوانين كبلر)
+    val orbitTransition = rememberInfiniteTransition(label = "OrbitRotation")
+    
+    // مدة الدوران للحلقة الأولى (أسرع) - 40 ثانية للدورة الكاملة
+    val ring1Angle by orbitTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(40_000, easing = LinearEasing)
+        ),
+        label = "ring1Angle"
+    )
+    
+    // مدة الدوران للحلقة الثانية (أبطأ) - 60 ثانية للدورة الكاملة
+    val ring2Angle by orbitTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(60_000, easing = LinearEasing)
+        ),
+        label = "ring2Angle"
+    )
+    
+    // مدة الدوران للحلقة الثالثة (الأبطأ) - 80 ثانية للدورة الكاملة
+    val ring3Angle by orbitTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(80_000, easing = LinearEasing)
+        ),
+        label = "ring3Angle"
+    )
+
     // نبض النسيج الكوكبي الهادئ (المقترح #1 المعتمد) — حركة نبض نورانية رقيقة في خيوط المسار
     val transition = rememberInfiniteTransition(label = "ConstellationPulse")
     val pulsePhase by transition.animateFloat(
@@ -406,7 +440,8 @@ private fun FolderClusterView(
                     )
                 )
             }
-            PlanetColumn(
+            // الشمس (المجلد الأم) مع توهج أقوى
+            SunColumn(
                 folder = cluster.parent,
                 planetSize = parentSize,
                 color = parentColor,
@@ -421,6 +456,17 @@ private fun FolderClusterView(
             val confinementRadius = GalaxyGeometry
                 .confinementRadiusDp(count, maxChildFileCount, cluster.parent.fileCount)
                 .dp
+
+            // حساب الزوايا الحالية لكل حلقة بناءً على Animation
+            // دالة مساعدة للحصول على زاوية الدوران للحلقة المحددة
+            fun getOrbitAngleForRing(ringIndex: Int): Double {
+                return when (ringIndex) {
+                    0 -> ring1Angle.toDouble()
+                    1 -> ring2Angle.toDouble()
+                    2 -> ring3Angle.toDouble()
+                    else -> ring3Angle.toDouble() // الحلقات الأبعد تدور بنفس سرعة الحلقة الثالثة
+                }
+            }
 
             Canvas(Modifier.matchParentSize()) {
                 val c = center
@@ -437,8 +483,8 @@ private fun FolderClusterView(
                         )
                     )
                 )
-                // بدلاً من مدار واحد مزدحم: حلقات ثابتة خافتة توضّح «المقاعد»
-                // التي تُوزّع عليها المجلدات. الحلقات لا تدور ولا تتحرك.
+                
+                // رسم مدارات ثابتة خافتة (للتوضيح البصري للمسار)
                 val lastRing = GalaxyGeometry.childRing(count - 1)
                 for (ring in 0..lastRing) {
                     drawCircle(
@@ -453,10 +499,14 @@ private fun FolderClusterView(
                     floatArrayOf(7.dp.toPx(), 6.dp.toPx()),
                     pulsePhase
                 )
+                
+                // حساب المواقع الحالية للكواكب مع دوران المدارات
                 val positions = cluster.children.indices.map { i ->
+                    val ringIndex = GalaxyGeometry.childRing(i)
+                    val orbitAngle = getOrbitAngleForRing(ringIndex)
                     Offset(
-                        x = c.x + GalaxyGeometry.childCenterDxDp(i, count).dp.toPx(),
-                        y = c.y + GalaxyGeometry.childCenterDyDp(i, count).dp.toPx()
+                        x = c.x + GalaxyGeometry.childCenterDxDpWithOrbit(i, count, orbitAngle).dp.toPx(),
+                        y = c.y + GalaxyGeometry.childCenterDyDpWithOrbit(i, count, orbitAngle).dp.toPx()
                     )
                 }
 
@@ -502,10 +552,10 @@ private fun FolderClusterView(
                 }
             }
 
-            // كوكب الأم في مركز العنقود تماماً: إزاحة أفقية صفر عن نقطة أصل
+            // الشمس (المجلد الأم) في مركز العنقود تماماً: إزاحة أفقية صفر عن نقطة أصل
             // متمركزة ⇒ مركز القرص ينطبق على مركز الدائرة الحاضنة المرسومة
             // على Canvas، في LTR وRTL على حد سواء.
-            PlanetColumn(
+            SunColumn(
                 folder = cluster.parent,
                 planetSize = parentSize,
                 color = parentColor,
@@ -517,13 +567,17 @@ private fun FolderClusterView(
 
             // كواكب الأبناء: كل واحد منها له مقعد ثابت داخل شبكة الحلقات؛
             // العدد لا يضغط العناصر فوق بعضها، بل يفتح حلقة جديدة عند الحاجة.
+            // الآن الكواكب تدور مع مداراتها!
             cluster.children.forEachIndexed { index, child ->
                 val childSize = GalaxyGeometry.childPlanetSizeDp(child.fileCount).dp
+                val ringIndex = GalaxyGeometry.childRing(index)
+                val orbitAngle = getOrbitAngleForRing(ringIndex)
+                
                 // الإحداثيات نسبةً لمركز العنقود — نفس الزوايا التي يرسم بها
-                // Canvas المدار والخيوط (GalaxyGeometry.childAngleRad)، فلا
+                // Canvas المدار والخيوط (GalaxyGeometry.childAngleRadWithOrbit)، فلا
                 // يمكن أن يفترق الكوكب عن خيطه مهما كان اتجاه الجهاز.
-                val dx = GalaxyGeometry.childCenterDxDp(index, count)
-                val dy = GalaxyGeometry.childCenterDyDp(index, count)
+                val dx = GalaxyGeometry.childCenterDxDpWithOrbit(index, count, orbitAngle)
+                val dy = GalaxyGeometry.childCenterDyDpWithOrbit(index, count, orbitAngle)
                 PlanetColumn(
                     folder = child,
                     planetSize = childSize,
@@ -544,8 +598,7 @@ private fun FolderClusterView(
     }
 }
 
-/**
- * كوكب واحد (مجلد) مع اسمه وعدد ملفاته — العنصر قابل للنقر لفتح مجلده.
+ مع اسمه وعدد ملفاته — العنصر قابل للنقر لفتح مجلده.
  * التوهج والتدرج الشعاعي نفس روح النسخ السابقة، بحجمين: أم وابن.
  */
 @Composable

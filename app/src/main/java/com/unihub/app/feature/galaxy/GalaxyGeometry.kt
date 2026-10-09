@@ -205,47 +205,29 @@ internal object GalaxyGeometry {
      * زاوية المقعد داخل الحلقة: ستة اتجاهات ثابتة تشبه عقد النجوم، مع تدوير
      * بسيط للحلقة الثانية حتى لا تقع العقد فوق بعضها بصرياً.
      */
-    fun childAngleRad(index: Int, childCount: Int): Double {
+
+    /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود. */
+
+
+    /**
+     * زاوية المقعد داخل الحلقة مع إضافة إزاحة الدوران (Orbit Rotation).
+     * هذا هو التغيير الجذري لجعل المجلدات تدور حول الشمس بسرعات متفاوتة.
+     * [orbitAngleOffset]: زاوية الدوران الحالية للمدار (تُمرر من Animation في الشاشة).
+     */
+    fun childAngleRadWithOrbit(index: Int, childCount: Int, orbitAngleOffset: Double): Double {
         val ring = childRing(index)
         val slot = childSlot(index)
         val slots = ringChildCount(childCount, ring).coerceAtLeast(1)
         val ringOffset = if (ring % 2 == 0) 0.0 else PI / 6.0
-        return -PI / 2 + ringOffset + slot * (2.0 * PI / slots)
+        // الزاوية الأصلية + إزاحة الدوران
+        return -PI / 2 + ringOffset + slot * (2.0 * PI / slots) + orbitAngleOffset
     }
 
-    /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود. */
-    fun childCenterDxDp(index: Int, childCount: Int): Float =
-        childRingRadiusDp(index) * cos(childAngleRad(index, childCount)).toFloat()
+    /** إزاحة مركز قرص الابن أفقياً عن مركز العنقود مع دوران المدار. */
+    fun childCenterDxDpWithOrbit(index: Int, childCount: Int, orbitAngleOffset: Double): Float =
+        childRingRadiusDp(index) * cos(childAngleRadWithOrbit(index, childCount, orbitAngleOffset)).toFloat()
 
-    /** إزاحة مركز قرص الابن رأسياً عن مركز العنقود. */
-    fun childCenterDyDp(index: Int, childCount: Int): Float =
-        childRingRadiusDp(index) * sin(childAngleRad(index, childCount)).toFloat()
-
-    /**
-     * نصف قطر الحلقة الواقية لعنقود بلا أبناء — بنفس قيم التصميم الأصلي
-     * (نصف الكوكب + 14) بلا أي تغيير بصري؛ تجميعها هنا فقط لتوحيد المصدر.
-     */
-    fun guardianRingRadiusDp(parentFileCount: Int): Float =
-        parentPlanetSizeDp(parentFileCount) / 2f + 14f
-
-    /**
-     * بصمة العنقود بوحدات dp المستقلة — القطر الكامل لمحيطه الحاضن
-     * (أو الحلقة الواقية إن كان وحيداً) مضافاً إليه هامش الخلية.
-     * تستعملها [computeGalaxyLayout] للتحجيم النسبي بين العناقيد.
-     */
-    fun footprintDp(
-        childCount: Int,
-        maxChildFileCount: Int,
-        parentFileCount: Int
-    ): Float {
-        val radius = if (childCount <= 0) {
-            // الحلقة الواقية تبقى كما هي بصرياً (لا تغيير في الرسم)، لكن
-            // البصمة — وهي ما يحجز مساحة الخلية — يجب أن تسع عمود الأم
-            // وتسميته أيضاً، وإلا تداخلت التسميات بين المجلدات المتجاورة.
-            max(guardianRingRadiusDp(parentFileCount), parentColumnReachDp(parentFileCount))
-        } else {
-            confinementRadiusDp(childCount, maxChildFileCount, parentFileCount)
-        }
-        return radius * 2f + OUTER_MARGIN_DP
-    }
+    /** إزاحة مركز قرص الابن رأسياً عن مركز العنقود مع دوران المدار. */
+    fun childCenterDyDpWithOrbit(index: Int, childCount: Int, orbitAngleOffset: Double): Float =
+        childRingRadiusDp(index) * sin(childAngleRadWithOrbit(index, childCount, orbitAngleOffset)).toFloat()
 }
