@@ -171,13 +171,16 @@ def report(root=ROOT, instrumentation=False, minimum_tests=1):
     if instrumentation:
         summary.append(f"- Required device coverage: **at least {minimum_tests} executed tests**.")
     if device_failed:
-        for name, title in (("ui-device-status.log", "Android device connection"),
+        for name, title in (("ui-emulator.log", "Android emulator process"),
+                            ("ui-device-status.log", "Android device connection"),
                             ("ui-host-memory.log", "Android host memory"),
                             ("ui-host-kernel.log", "Android host kernel")):
             path = root / name
             if path.is_file():
                 content = path.read_text(encoding="utf-8", errors="replace").strip()
                 if content:
+                    if name == "ui-emulator.log":
+                        content = "\n".join(content.splitlines()[-80:])[-12000:]
                     critical = [line for line in content.splitlines()
                                 if re.search(r"out of memory|oom-kill|killed process|segfault", line, re.IGNORECASE)]
                     if name == "ui-host-kernel.log" and critical:

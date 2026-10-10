@@ -293,6 +293,17 @@ class AndroidCiTest(unittest.TestCase):
         self.assertIn("Android host memory", output.getvalue())
         self.assertIn("emulator-5554 offline", output.getvalue())
 
+    @patch.dict(os.environ, {}, clear=True)
+    def test_emulator_process_log_surfaces_the_final_messages(self):
+        startup = "omitted startup line\n" + "\n".join(f"startup message {index}" for index in range(120))
+        (self.root / "ui-emulator.log").write_text(startup + "\nFATAL emulator exit fixture\n")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True)
+        self.assertIn("Android emulator process", output.getvalue())
+        self.assertIn("FATAL emulator exit fixture", output.getvalue())
+        self.assertNotIn("omitted startup line", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
