@@ -111,6 +111,7 @@ import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.UiMessagesHost
 import com.unihub.app.ui.theme.SemanticSuccess
 
@@ -391,6 +392,12 @@ fun CloudFilesScreen(
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FeatureHeroCard(
+                title = "مكتبة الملفات السحابية",
+                subtitle = if (isOnline) "تصفّح الملفات، تحقّق من النسخ المحلية، ونزّل ما تحتاجه." else "أنت دون اتصال؛ يمكنك مراجعة آخر قائمة محفوظة على الجهاز.",
+                icon = if (isOnline) Icons.Filled.CloudQueue else Icons.Filled.CloudOff,
+                badge = if (isOnline) "متصل" else "أوفلاين"
+            )
             Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)

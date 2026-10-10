@@ -129,6 +129,7 @@ import com.unihub.app.data.local.entity.NoteEntity
 import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.UiMessagesHost
 import com.unihub.app.ui.theme.PaperSurface
@@ -188,6 +189,15 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                FeatureHeroCard(
+                    title = "مساحة العمل",
+                    subtitle = "ملاحظات وملخصات وبطاقات أفكار وجداول في مكان واحد.",
+                    icon = Icons.AutoMirrored.Outlined.StickyNote2,
+                    badge = notes.size.toString() + " ملاحظة",
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
             item {
                 OutlinedTextField(
                     value = searchQuery,

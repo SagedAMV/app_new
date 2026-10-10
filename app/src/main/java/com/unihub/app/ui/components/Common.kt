@@ -194,3 +194,53 @@ fun StatCard(
         }
     }
 }
+
+
+/** بطاقة افتتاحية موحّدة للشاشات الرئيسية: عنوان واضح ووصف قصير وأيقونة دلالية. */
+@Composable
+fun FeatureHeroCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    badge: String? = null
+) {
+    androidx.compose.material3.ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            androidx.compose.material3.Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                modifier = Modifier.size(48.dp)
+            ) {
+                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(25.dp))
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f))
+            }
+            if (!badge.isNullOrBlank()) {
+                Text(badge, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.background(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), RoundedCornerShape(10.dp)
+                    ).padding(horizontal = 9.dp, vertical = 6.dp))
+            }
+        }
+    }
+}

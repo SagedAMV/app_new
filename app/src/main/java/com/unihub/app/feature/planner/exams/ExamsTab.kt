@@ -47,6 +47,7 @@ import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.DateField
 import com.unihub.app.ui.components.EmptyState
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
@@ -89,6 +90,19 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp)
         ) {
+            val nextExam = upcoming.minByOrNull { it.daysRemaining ?: Long.MAX_VALUE }
+            FeatureHeroCard(
+                title = "العدّ التنازلي للامتحانات",
+                subtitle = nextExam?.let { exam ->
+                    val days = exam.daysRemaining
+                    if (days == 0L) "الامتحان القادم اليوم: ${exam.subject}"
+                    else if (days != null && days > 0) "أقرب امتحان: ${exam.subject} • متبقٍ ${days} يوم"
+                    else "تابع مواعيد امتحاناتك واستعد مبكراً."
+                } ?: "سجّل مواعيد امتحاناتك لتتابع الاستعداد والوقت المتبقي.",
+                icon = Icons.Outlined.School,
+                badge = upcoming.size.toString() + " قادمة"
+            )
+            Spacer(Modifier.height(12.dp))
             if (exams.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.School,

@@ -48,6 +48,7 @@ import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
@@ -127,6 +128,13 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 18.dp)
             ) {
+                Spacer(Modifier.height(8.dp))
+                FeatureHeroCard(
+                    title = "مخطط الأسبوع",
+                    subtitle = "نظرة مرتبة على المحاضرات ومواعيدها حسب اليوم.",
+                    icon = Icons.AutoMirrored.Outlined.MenuBook,
+                    badge = "${lectures.size} محاضرة"
+                )
                 Weekday.entries.forEach { day ->
                     val dayLectures = lectures.filter { it.day == day }
                     if (dayLectures.isEmpty()) return@forEach

@@ -50,6 +50,7 @@ import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.DateField
 import com.unihub.app.ui.components.EmptyState
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.UiMessagesHost
@@ -90,6 +91,13 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
                 .padding(padding)
                 .padding(horizontal = 18.dp)
         ) {
+            Spacer(Modifier.height(10.dp))
+            FeatureHeroCard(
+                title = "لوحة الأولويات",
+                subtitle = "رتّب يومك، تابع الإنجاز، ولا تفوّت المهام المتأخرة.",
+                icon = Icons.Outlined.AddTask,
+                badge = tasks.size.toString() + " ظاهرة"
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = searchQuery,

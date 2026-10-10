@@ -109,6 +109,7 @@ import com.unihub.app.feature.share.InboxItem
 import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.UiMessagesHost
@@ -318,6 +319,17 @@ fun FilesScreen(
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            if (folderId == null && !isSelecting && !searchActive) {
+                item(key = "files_overview") {
+                    FeatureHeroCard(
+                        title = "مكتبتك الجامعية",
+                        subtitle = "ملفاتك ومجلداتك مرتبة محلياً، مع إمكانية الوصول إلى السحابة.",
+                        icon = Icons.Filled.Folder,
+                        badge = if (isOnline) "${files.size} ملف" else "دون اتصال",
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
             // شريط وضع الملفات المشتركة — يظهر بأي مجلد دخلته لتضعها فيه
             item(key = "inbox_banner") {
                 AnimatedVisibility(

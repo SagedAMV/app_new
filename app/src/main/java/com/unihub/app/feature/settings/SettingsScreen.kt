@@ -97,6 +97,7 @@ import com.unihub.app.data.auth.DeviceApprovalStatus
 import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.UiMessagesHost
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -312,6 +313,12 @@ private fun SettingsCategoriesHome(
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        FeatureHeroCard(
+            title = "مركز إعدادات UniHub",
+            subtitle = "خصّص المظهر، النسخ الاحتياطي، البيانات وإدارة الحساب.",
+            icon = Icons.Outlined.Info,
+            badge = "${categories.size} فئات"
+        )
         Text(
             text = "اختر الصنف لعرض وضبط إعداداته الخاصة",
             style = MaterialTheme.typography.bodyMedium,
@@ -629,6 +636,34 @@ private fun AppearanceCategoryContent(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("معاينة لوحة UniHub", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.secondary,
+                            MaterialTheme.colorScheme.tertiary,
+                            MaterialTheme.colorScheme.surfaceVariant
+                        ).forEach { color ->
+                            Surface(
+                                modifier = Modifier.weight(1f).height(24.dp),
+                                shape = MaterialTheme.shapes.small,
+                                color = color
+                            ) { }
+                        }
+                    }
+                    Text(
+                        "ألوان هادئة وتباين واضح للقراءة الطويلة.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             ThemeMode.entries.forEach { mode ->
                 val isSelected = themeMode == mode

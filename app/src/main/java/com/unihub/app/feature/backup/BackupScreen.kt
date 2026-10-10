@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.SectionHeader
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -129,6 +130,14 @@ fun BackupScreen(
                 .padding(horizontal = 18.dp)
                 .padding(bottom = 24.dp)
         ) {
+            FeatureHeroCard(
+                title = "حماية بياناتك",
+                subtitle = "إدارة النسخ الاحتياطي المحلي ومزامنة السحابة من مكان واحد.",
+                icon = Icons.Outlined.CloudSync,
+                badge = if (isOnline) "متصل" else "دون اتصال",
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Spacer(Modifier.height(8.dp))
             // ─── قسم خادم Cloudflare R2 (أونلاين / أوفلاين + سحب اختياري) ────
             SectionHeader(title = "خادم Cloudflare R2 (أونلاين / أوفلاين)")
             ElevatedCard(
