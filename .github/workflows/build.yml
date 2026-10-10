@@ -69,7 +69,7 @@ jobs:
           target: default
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2 > ui-emulator.log 2>&1
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2 > ui-emulator.log 2>&1
           script: bash scripts/run_android_ui_tests.sh
 
       - name: Build Release Full APK
