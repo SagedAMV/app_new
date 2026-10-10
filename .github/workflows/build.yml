@@ -35,21 +35,23 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
+        with:
+          cache-read-only: false
 
       - name: Check build verification helpers
         run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
 
       - name: Run JVM unit tests
-        run: ./gradlew testReleaseFullUnitTest --no-daemon --stacktrace --console=plain 2>&1 | tee unit-tests.log
+        run: ./gradlew testReleaseFullUnitTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee unit-tests.log
 
       - name: Run Android lint
-        run: ./gradlew lintReleaseFull --no-daemon --stacktrace --console=plain 2>&1 | tee lint.log
+        run: ./gradlew lintReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee lint.log
 
       - name: Build installable Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee debug-build.log
+        run: ./gradlew assembleDebug --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee debug-build.log
 
       - name: Compile Galaxy UI tests
-        run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee ui-test-build.log
+        run: ./gradlew assembleDebugAndroidTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee ui-test-build.log
 
       - name: Enable Android emulator acceleration
         run: |
@@ -66,10 +68,10 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2
-          script: bash -o pipefail -c './gradlew connectedDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee ui-tests.log'
+          script: bash -o pipefail -c './gradlew connectedDebugAndroidTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee ui-tests.log'
 
       - name: Build Release Full APK
-        run: ./gradlew assembleReleaseFull --no-daemon --stacktrace --console=plain 2>&1 | tee release-build.log
+        run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
 
       - name: Verify Debug APK alignment and signature
         id: debug-apk
