@@ -154,6 +154,34 @@ class AndroidCiTest(unittest.TestCase):
         self.assertIn("tests are not verified", output.getvalue())
         self.assertIn("lint is not verified", output.getvalue())
 
+    @patch.dict(os.environ, {}, clear=True)
+    def test_device_reports_are_found_in_nested_result_directories(self):
+        folder = self.root / "app/build/outputs/androidTest-results/connected/debug/device"
+        folder.mkdir(parents=True)
+        (folder / "TEST-galaxy.xml").write_text('<testsuite tests="11" failures="0" errors="0" skipped="0"/>')
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            android_ci.report(self.root, instrumentation=True)
+        self.assertIn("Android UI test results", output.getvalue())
+        self.assertIn("11 tests, 0 failures", output.getvalue())
+        self.assertNotIn("JVM unit", output.getvalue())
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_missing_device_results_fail_instead_of_claiming_success(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "executed tests"):
+                android_ci.report(self.root, instrumentation=True)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_device_test_failures_are_annotated_and_fail_the_gate(self):
+        folder = self.root / "app/build/outputs/androidTest-results/connected/debug"
+        folder.mkdir(parents=True)
+        (folder / "TEST-galaxy.xml").write_text('<testsuite tests="1" failures="1" errors="0" skipped="0"><testcase classname="Galaxy" name="disk"><failure message="disk center is wrong"/></testcase></testsuite>')
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True)
+        self.assertIn("Android UI test failure", output.getvalue())
+        self.assertIn("disk center is wrong", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

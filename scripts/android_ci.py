@@ -102,36 +102,42 @@ def test_totals(files):
     return totals, failures
 
 
-def report(root=ROOT):
-    summary = ["## Android build verification", ""]
-    test_files = sorted((root / "app/build/test-results/testReleaseFullUnitTest").glob("TEST-*.xml"))
+def report(root=ROOT, instrumentation=False):
+    summary = ["## Android UI verification" if instrumentation else "## Android build verification", ""]
+    kind = "Android UI" if instrumentation else "JVM unit"
+    if instrumentation:
+        test_files = sorted((root / "app/build/outputs/androidTest-results/connected").rglob("TEST-*.xml"))
+    else:
+        test_files = sorted((root / "app/build/test-results/testReleaseFullUnitTest").glob("TEST-*.xml"))
+    totals = dict(tests=0, failures=0, errors=0, skipped=0)
     if test_files:
         totals, failures = test_totals(test_files)
-        text = ", ".join(f"{value} {key}" for key, value in totals.items())
-        summary.append(f"- JVM unit tests: **{text}** ({len(test_files)} test classes).")
-        annotation("notice", "JVM unit test results", text)
+        counts = ", ".join(f"{value} {key}" for key, value in totals.items())
+        summary.append(f"- {kind} tests: **{counts}** ({len(test_files)} test classes).")
+        annotation("notice", f"{kind} test results", counts)
         for message in failures[:10]:
-            annotation("error", "JVM test failure", message)
+            annotation("error", f"{kind} test failure", message)
     else:
-        summary.append("- No JVM test report was produced; tests are not verified.")
+        summary.append(f"- No {kind} test report was produced; tests are not verified.")
 
-    lint_file = root / "app/build/reports/lint-results-releaseFull.xml"
-    if lint_file.is_file():
-        issues = ET.parse(lint_file).getroot().findall("issue")
-        errors = [issue for issue in issues if issue.get("severity") in ("Error", "Fatal")]
-        warnings = sum(issue.get("severity") == "Warning" for issue in issues)
-        summary.append(f"- Android lint: **{len(errors)} errors, {warnings} warnings**.")
-        annotation("notice", "Android lint results", f"{len(errors)} errors, {warnings} warnings")
-        for issue in errors[:10]:
-            location = issue.find("location")
-            where = "" if location is None else f"{location.get('file')}:{location.get('line', '?')}: "
-            annotation("error", issue.get("id", "Lint error"), where + issue.get("message", ""))
-    else:
-        summary.append("- No Android lint report was produced; lint is not verified.")
+    if not instrumentation:
+        lint_file = root / "app/build/reports/lint-results-releaseFull.xml"
+        if lint_file.is_file():
+            issues = ET.parse(lint_file).getroot().findall("issue")
+            errors = [issue for issue in issues if issue.get("severity") in ("Error", "Fatal")]
+            warnings = sum(issue.get("severity") == "Warning" for issue in issues)
+            summary.append(f"- Android lint: **{len(errors)} errors, {warnings} warnings**.")
+            annotation("notice", "Android lint results", f"{len(errors)} errors, {warnings} warnings")
+            for issue in errors[:10]:
+                location = issue.find("location")
+                where = "" if location is None else f"{location.get('file')}:{location.get('line', '?')}: "
+                annotation("error", issue.get("id", "Lint error"), where + issue.get("message", ""))
+        else:
+            summary.append("- No Android lint report was produced; lint is not verified.")
 
-    # Kotlin/Gradle errors are also annotations so they remain accessible through
-    # the GitHub checks API when downloading the full logs is not possible.
-    for name in ("unit-tests.log", "lint.log", "debug-build.log", "release-build.log"):
+    logs = ("ui-tests.log",) if instrumentation else (
+        "unit-tests.log", "lint.log", "debug-build.log", "release-build.log", "ui-test-build.log")
+    for name in logs:
         path = root / name
         if not path.is_file():
             continue
@@ -150,6 +156,8 @@ def report(root=ROOT):
     if summary_file:
         with Path(summary_file).open("a", encoding="utf-8") as stream:
             stream.write(text)
+    if instrumentation and (totals["tests"] == 0 or any(totals[key] for key in ("failures", "errors", "skipped"))):
+        raise ValueError("Android UI verification requires executed tests with no failures, errors, or skips")
 
 
 def main():
@@ -158,13 +166,14 @@ def main():
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("variant", choices=("debug", "release", "releaseFull"))
     verify_parser.add_argument("--require-signed", action="store_true")
-    commands.add_parser("report")
+    report_parser = commands.add_parser("report")
+    report_parser.add_argument("--instrumentation", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "verify":
             verify(args.variant, args.require_signed)
         else:
-            report()
+            report(instrumentation=args.instrumentation)
     except (ValueError, OSError, ET.ParseError, subprocess.CalledProcessError) as error:
         annotation("error", "Android verification", error)
         return 1
