@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,7 +10,8 @@ plugins {
 }
 
 val signingPropertiesFile = rootProject.file("keystore.properties")
-val signingProperties = java.util.Properties().apply {
+// Import the type explicitly: Gradle's `java` extension shadows the package here.
+val signingProperties = Properties().apply {
     if (signingPropertiesFile.isFile) {
         signingPropertiesFile.inputStream().use { load(it) }
     }

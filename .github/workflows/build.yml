@@ -63,7 +63,7 @@ jobs:
         run: python3 scripts/android_ci.py verify releaseFull
 
       - name: Upload installable Debug APK
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: UniHub-debug
           path: ${{ steps.debug-apk.outputs.path }}
@@ -71,7 +71,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Release Full APK
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: UniHub-releaseFull-${{ steps.release-apk.outputs.signed == 'true' && 'signed' || 'unsigned' }}
           path: ${{ steps.release-apk.outputs.path }}
@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload diagnostic reports
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: UniHub-build-reports
           path: |
