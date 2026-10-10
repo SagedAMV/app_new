@@ -97,7 +97,7 @@ class GalaxyScreenTest {
         var opened: Long? = null
         setUniverse(roots(5_000), LayoutDirection.Rtl, onOpen = { opened = it })
         compose.onNodeWithTag("galaxy-folder-list").performClick()
-        compose.onNodeWithTag("galaxy-folder-search").performTextInput("مجلد 4999")
+        compose.onNodeWithTag("galaxy-folder-search").performTextInput("4999")
         compose.onNodeWithText("مجلد 4999").performClick()
         compose.runOnIdle { assertEquals(4_999L, opened) }
     }

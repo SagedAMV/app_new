@@ -182,6 +182,52 @@ class AndroidCiTest(unittest.TestCase):
         self.assertIn("Android UI test failure", output.getvalue())
         self.assertIn("disk center is wrong", output.getvalue())
 
+    def test_device_failure_details_include_the_xml_body(self):
+        path = self.root / "TEST-galaxy.xml"
+        path.write_text('<testsuite tests="1" failures="1"><testcase classname="Galaxy" name="resize"><failure>java.lang.AssertionError: wrong native center\n at GalaxyScreenTest.kt:160</failure></testcase></testsuite>')
+        _, failures = android_ci.test_totals([path])
+        self.assertIn("wrong native center", failures[0])
+        self.assertIn("GalaxyScreenTest.kt:160", failures[0])
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_partial_device_suite_cannot_pass_the_expected_minimum(self):
+        folder = self.root / "app/build/outputs/androidTest-results/connected/debug"
+        folder.mkdir(parents=True)
+        (folder / "TEST-galaxy.xml").write_text('<testsuite tests="1" failures="0" errors="0" skipped="0"/>')
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "at least 11 executed tests"):
+                android_ci.report(self.root, instrumentation=True, minimum_tests=11)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_device_process_crash_is_reported_even_without_test_xml(self):
+        (self.root / "ui-logcat.log").write_text(
+            "10-10 10:00:00 E AndroidRuntime: FATAL EXCEPTION: main\n"
+            "10-10 10:00:00 E AndroidRuntime: java.lang.IllegalStateException: native crash fixture\n")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True)
+        self.assertIn("Android process crash", output.getvalue())
+        self.assertIn("native crash fixture", output.getvalue())
+
+    def test_device_script_preserves_gradle_status_when_logcat_succeeds_or_fails(self):
+        script = Path(android_ci.__file__).with_name("run_android_ui_tests.sh")
+        binary = self.root / "bin"
+        binary.mkdir()
+        adb = binary / "adb"
+        gradle = self.root / "gradlew"
+        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}")
+        for gradle_status in (0, 7):
+            for logcat_status in (0, 23):
+                with self.subTest(gradle_status=gradle_status, logcat_status=logcat_status):
+                    adb.write_text(f'#!/usr/bin/env bash\nif [[ "${{2:-}}" == "-d" ]]; then echo "native logcat fixture"; exit {logcat_status}; fi\nexit 0\n')
+                    gradle.write_text(f'#!/usr/bin/env bash\necho "device test fixture"\nexit {gradle_status}\n')
+                    adb.chmod(0o700)
+                    gradle.chmod(0o700)
+                    result = subprocess.run(["bash", str(script)], cwd=self.root, env=environment, capture_output=True, text=True)
+                    self.assertEqual(gradle_status, result.returncode, result.stderr)
+                    self.assertIn("device test fixture", (self.root / "ui-tests.log").read_text())
+                    self.assertIn("native logcat fixture", (self.root / "ui-logcat.log").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

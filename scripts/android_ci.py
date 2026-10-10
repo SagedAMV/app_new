@@ -98,11 +98,18 @@ def test_totals(files):
         for case in suite.iter("testcase"):
             for kind in ("failure", "error"):
                 for failure in case.findall(kind):
-                    failures.append(f"{case.get('classname')}.{case.get('name')}: {failure.get('message', '')}")
+                    message = failure.get("message", "").strip()
+                    body = (failure.text or "").strip()
+                    details = "\n".join(part for part in (message, body) if part)
+                    if not details:
+                        details = "The test runner supplied no failure details; inspect the device log."
+                    failures.append(f"{case.get('classname')}.{case.get('name')}: {details[:12000]}")
     return totals, failures
 
 
-def report(root=ROOT, instrumentation=False):
+def report(root=ROOT, instrumentation=False, minimum_tests=1):
+    if instrumentation and minimum_tests < 1:
+        raise ValueError("The device test minimum must be positive")
     summary = ["## Android UI verification" if instrumentation else "## Android build verification", ""]
     kind = "Android UI" if instrumentation else "JVM unit"
     if instrumentation:
@@ -150,14 +157,28 @@ def report(root=ROOT, instrumentation=False):
             if message.strip():
                 annotation("error", name, message)
 
+    device_failed = instrumentation and (
+        totals["tests"] < minimum_tests or any(totals[key] for key in ("failures", "errors", "skipped")))
+    if instrumentation:
+        summary.append(f"- Required device coverage: **at least {minimum_tests} executed tests**.")
+    if device_failed:
+        logcat = root / "ui-logcat.log"
+        if logcat.is_file():
+            runtime = [line for line in logcat.read_text(encoding="utf-8", errors="replace").splitlines()
+                       if re.search(r"\b[EF]\s+(?:AndroidRuntime|DEBUG|libc)\s*:", line)]
+            if any(marker in line for line in runtime
+                   for marker in ("FATAL EXCEPTION", "Fatal signal", "Abort message")):
+                annotation("error", "Android process crash", "\n".join(runtime[-100:]))
+
     text = "\n".join(summary) + "\n"
     print(text)
     summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_file:
         with Path(summary_file).open("a", encoding="utf-8") as stream:
             stream.write(text)
-    if instrumentation and (totals["tests"] == 0 or any(totals[key] for key in ("failures", "errors", "skipped"))):
-        raise ValueError("Android UI verification requires executed tests with no failures, errors, or skips")
+    if device_failed:
+        raise ValueError(f"Android UI verification requires at least {minimum_tests} executed tests "
+                         f"with no failures, errors, or skips; got {totals['tests']} tests")
 
 
 def main():
@@ -168,12 +189,13 @@ def main():
     verify_parser.add_argument("--require-signed", action="store_true")
     report_parser = commands.add_parser("report")
     report_parser.add_argument("--instrumentation", action="store_true")
+    report_parser.add_argument("--minimum-tests", type=int, default=1)
     args = parser.parse_args()
     try:
         if args.command == "verify":
             verify(args.variant, args.require_signed)
         else:
-            report(instrumentation=args.instrumentation)
+            report(instrumentation=args.instrumentation, minimum_tests=args.minimum_tests)
     except (ValueError, OSError, ET.ParseError, subprocess.CalledProcessError) as error:
         annotation("error", "Android verification", error)
         return 1

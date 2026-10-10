@@ -68,7 +68,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2
-          script: bash -o pipefail -c './gradlew connectedDebugAndroidTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee ui-tests.log'
+          script: bash scripts/run_android_ui_tests.sh
 
       - name: Build Release Full APK
         run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
@@ -106,7 +106,7 @@ jobs:
 
       - name: Summarize Android UI test results
         if: always()
-        run: python3 scripts/android_ci.py report --instrumentation
+        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 11
 
       - name: Upload diagnostic reports
         if: always()
@@ -118,6 +118,7 @@ jobs:
             unit-tests.log
             lint.log
             ui-tests.log
+            ui-logcat.log
             app/build/outputs/androidTest-results/connected/
             app/build/reports/androidTests/connected/
             app/build/test-results/testReleaseFullUnitTest/
