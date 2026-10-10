@@ -83,7 +83,7 @@ class CloudSyncPreferences @Inject constructor(@ApplicationContext private val c
     }
 
     private suspend fun migrateLegacyCredentials(prefs: Preferences) {
-        for ((key, purpose) in listOf(accessKey to "r2-access", secretKey to "r2-secret")) {
+        for ((key, purpose) in listOf(kotlin.Pair(accessKey, "r2-access"), kotlin.Pair(secretKey, "r2-secret"))) {
             val old = prefs[key].orEmpty()
             if (!secretVault.needsMigration(old)) continue
             val encoded = secretVault.encode(secretVault.decodeOrLegacy(old, purpose), purpose)
