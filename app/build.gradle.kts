@@ -117,7 +117,8 @@ android {
     }
 
     lint {
-        abortOnError = false
+        // Lint is a quality gate: a broken build must not be reported as successful.
+        abortOnError = true
         checkReleaseBuilds = true
     }
 }
