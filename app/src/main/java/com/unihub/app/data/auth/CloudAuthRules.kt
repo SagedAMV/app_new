@@ -8,9 +8,6 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.Locale
 import java.util.UUID
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * القواعد النقية لنظام المصادقة السحابية وإدارة المستخدمين والأجهزة والصلاحيات.
@@ -19,18 +16,26 @@ import javax.crypto.spec.SecretKeySpec
 object CloudAuthRules {
 
     const val ADMIN_USERNAME: String = "saged"
-    const val DEFAULT_ADMIN_PASSWORD: String = "192168"
     const val PENDING_APPROVAL_MESSAGE: String = "سيرد لك مشرف"
     const val MAX_RESOLVED_DEVICE_REQUESTS: Int = 50
+    const val MAX_PENDING_DEVICE_REQUESTS: Int = 100
+    const val MAX_USER_ACCOUNTS: Int = 500
+    const val MIN_USER_PASSWORD_LENGTH: Int = 10
+    const val MIN_ADMIN_BOOTSTRAP_PASSWORD_LENGTH: Int = 12
+    const val MAX_PASSWORD_LENGTH: Int = 256
+    const val MAX_USERNAME_LENGTH: Int = 64
 
-    private const val SCHEMA_VERSION: Int = 1
-    private const val GCM_IV_BYTES: Int = 12
-    private const val GCM_TAG_BITS: Int = 128
-    private const val CRYPTO_PEPPER: String = "UniHub::CloudAuth::2026::SagedAdminVaultKey::v1"
+    private const val SCHEMA_VERSION: Int = 2
+    private const val PASSWORD_HASH_PREFIX: String = "pbkdf2-sha256"
+    private const val PASSWORD_HASH_ITERATIONS: Int = 210_000
+    private const val PASSWORD_SALT_BYTES: Int = 16
+    private const val PASSWORD_HASH_BYTES: Int = 32
+    // Compatibility only: used to validate old SHA-256 hashes during one-time password migration.
+    // This value is public application code, not a secret or a cryptographic protection boundary.
+    private const val LEGACY_HASH_PEPPER: String = "UniHub::CloudAuth::2026::SagedAdminVaultKey::v1"
 
     /** تطبيع اسم المستخدم للمقارنة المفتاحية مع إزالة المسافات الزائدة وتوحيد الأحرف اللاتينية. */
-    fun normalizeUsername(raw: String): String =
-        raw.trim().lowercase(Locale.US)
+    fun normalizeUsername(raw: String): String = raw.trim().lowercase(Locale.US)
 
     /** حساب بصمة الجهاز الموحدة من مُعرّفات العتاد والنظام. */
     fun computeDeviceFingerprint(
@@ -50,66 +55,76 @@ object CloudAuthRules {
         return sha256Hex("unihub-device-fp::$canonical")
     }
 
-    /** بصمة تحقق أحادية الاتجاه لكلمة المرور مرتبطة باسم المستخدم المطبّع. */
+    /** Store salted PBKDF2-HMAC-SHA256 verifiers; no code path can recover the original password. */
     fun hashPassword(username: String, plainPassword: String): String {
         val normalized = normalizeUsername(username)
-        return sha256Hex("$CRYPTO_PEPPER::$normalized::${plainPassword.trim()}")
+        val password = plainPassword.trim()
+        require(password.isNotEmpty() && password.length <= MAX_PASSWORD_LENGTH) {
+            "كلمة المرور يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"
+        }
+        val salt = ByteArray(PASSWORD_SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val derived = derivePasswordHash(normalized, password, salt, PASSWORD_HASH_ITERATIONS)
+        return listOf(
+            PASSWORD_HASH_PREFIX,
+            PASSWORD_HASH_ITERATIONS.toString(),
+            Base64.getEncoder().withoutPadding().encodeToString(salt),
+            Base64.getEncoder().withoutPadding().encodeToString(derived)
+        ).joinToString("\$")
     }
 
-    /**
-     * تشفير موثق (AES-GCM) لكلمة المرور بحيث لا تُحفظ كنص مكشوف في JSON السحابي،
-     * مع تمكين المشرف الرئيسي (saged) من فك تشفيرها ورؤيتها حتى لو غيّرها المستخدم.
-     */
-    fun encryptPassword(plainPassword: String): String {
-        val clean = plainPassword.trim()
-        val iv = ByteArray(GCM_IV_BYTES).also { SecureRandom().nextBytes(it) }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, deriveAesKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
-        val encrypted = cipher.doFinal(clean.toByteArray(Charsets.UTF_8))
-        val combined = ByteArray(iv.size + encrypted.size)
-        System.arraycopy(iv, 0, combined, 0, iv.size)
-        System.arraycopy(encrypted, 0, combined, iv.size, encrypted.size)
-        return Base64.getEncoder().encodeToString(combined)
-    }
+    fun isCurrentPasswordHash(encoded: String): Boolean = encoded.startsWith("${PASSWORD_HASH_PREFIX}\$")
 
-    /** فك تشفير كلمة المرور لعرضها للمشرف الرئيسي في واجهة إدارة المستخدمين. */
-    fun decryptPasswordForAdmin(encryptedPassword: String): String = runCatching {
-        if (encryptedPassword.isBlank()) return@runCatching ""
-        val combined = Base64.getDecoder().decode(encryptedPassword.trim())
-        if (combined.size <= GCM_IV_BYTES) return@runCatching ""
-        val iv = combined.copyOfRange(0, GCM_IV_BYTES)
-        val cipherBytes = combined.copyOfRange(GCM_IV_BYTES, combined.size)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, deriveAesKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
-        String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
-    }.getOrDefault("")
-
-    /** التحقق من تطابق كلمة المرور المدخلة مع حساب المستخدم. */
+    /** Legacy SHA-256 hashes are accepted only to upgrade a user's verifier at the next successful login. */
     fun verifyPassword(plainPassword: String, account: CloudUserAccount): Boolean {
         val candidate = plainPassword.trim()
-        if (candidate.isEmpty()) return false
-        val expectedHash = hashPassword(account.username, candidate)
-        if (MessageDigest.isEqual(
-                expectedHash.toByteArray(Charsets.UTF_8),
-                account.passwordHash.toByteArray(Charsets.UTF_8)
-            )
-        ) {
-            return true
+        if (candidate.isEmpty() || candidate.length > MAX_PASSWORD_LENGTH || account.passwordHash.isBlank()) return false
+        if (isCurrentPasswordHash(account.passwordHash)) {
+            val parts = account.passwordHash.split('$')
+            if (parts.size != 4 || parts[0] != PASSWORD_HASH_PREFIX) return false
+            val iterations = parts[1].toIntOrNull() ?: return false
+            // Bound encoded work factors to prevent a corrupt registry from forcing unbounded CPU work.
+            if (iterations !in MIN_PASSWORD_HASH_ITERATIONS..MAX_PASSWORD_HASH_ITERATIONS) return false
+            val salt = runCatching { Base64.getDecoder().decode(parts[2]) }.getOrNull() ?: return false
+            val expected = runCatching { Base64.getDecoder().decode(parts[3]) }.getOrNull() ?: return false
+            if (salt.size !in 12..32 || expected.size != PASSWORD_HASH_BYTES) return false
+            val actual = runCatching {
+                derivePasswordHash(normalizeUsername(account.username), candidate, salt, iterations)
+            }.getOrNull() ?: return false
+            return MessageDigest.isEqual(expected, actual)
         }
-        val decrypted = decryptPasswordForAdmin(account.encryptedPassword)
-        return decrypted.isNotEmpty() && MessageDigest.isEqual(
-            candidate.toByteArray(Charsets.UTF_8),
-            decrypted.toByteArray(Charsets.UTF_8)
+        if (!account.passwordHash.matches(Regex("[0-9a-fA-F]{64}"))) return false
+        val legacy = sha256Hex("$LEGACY_HASH_PEPPER::${normalizeUsername(account.username)}::$candidate")
+        return MessageDigest.isEqual(
+            legacy.toByteArray(Charsets.US_ASCII),
+            account.passwordHash.lowercase(Locale.US).toByteArray(Charsets.US_ASCII)
         )
     }
 
-    /** إنشاء حساب المشرف الرئيسي الافتراضي (saged / 192168) بكامل الصلاحيات. */
-    fun createDefaultAdminAccount(now: Long = System.currentTimeMillis()): CloudUserAccount =
-        CloudUserAccount(
+    private fun derivePasswordHash(username: String, password: String, salt: ByteArray, iterations: Int): ByteArray {
+        val spec = javax.crypto.spec.PBEKeySpec("$username\u0000$password".toCharArray(), salt, iterations, PASSWORD_HASH_BYTES * 8)
+        return try {
+            javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    private const val MIN_PASSWORD_HASH_ITERATIONS = 100_000
+    private const val MAX_PASSWORD_HASH_ITERATIONS = 500_000
+
+    /** إنشاء حساب مشرف بكلمة مرور اختارها مالك التطبيق، وليس بكلمة افتراضية مضمنة. */
+    fun createDefaultAdminAccount(password: String, now: Long = System.currentTimeMillis()): CloudUserAccount {
+        val cleanPassword = password.trim()
+        require(cleanPassword.length >= MIN_ADMIN_BOOTSTRAP_PASSWORD_LENGTH) {
+            "كلمة مرور المشرف يجب أن تتكون من 12 خانة على الأقل"
+        }
+        require(cleanPassword.length <= MAX_PASSWORD_LENGTH) {
+            "كلمة مرور المشرف يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"
+        }
+        return CloudUserAccount(
             username = ADMIN_USERNAME,
             displayName = ADMIN_USERNAME,
-            passwordHash = hashPassword(ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD),
-            encryptedPassword = encryptPassword(DEFAULT_ADMIN_PASSWORD),
+            passwordHash = hashPassword(ADMIN_USERNAME, cleanPassword),
             isAdmin = true,
             isActive = true,
             permissions = UserPermissions.FULL,
@@ -117,15 +132,19 @@ object CloudAuthRules {
             createdAt = now,
             updatedAt = now
         )
+    }
 
-    /** إنشاء سجل مصادقة سحابي ابتدائي يحتوي على حساب المشرف الرئيسي saged. */
-    fun createInitialRegistry(now: Long = System.currentTimeMillis()): CloudAuthRegistry =
+    /** Create a new auth registry with a password supplied by the owner on first setup. */
+    fun createInitialRegistry(adminPassword: String, now: Long = System.currentTimeMillis()): CloudAuthRegistry =
         CloudAuthRegistry(
             schemaVersion = SCHEMA_VERSION,
             updatedAt = now,
-            users = listOf(createDefaultAdminAccount(now)),
+            users = listOf(createDefaultAdminAccount(adminPassword, now)),
             deviceRequests = emptyList()
         )
+
+    private fun emptyRegistry(now: Long = System.currentTimeMillis()): CloudAuthRegistry =
+        CloudAuthRegistry(schemaVersion = SCHEMA_VERSION, updatedAt = now, users = emptyList(), deviceRequests = emptyList())
 
     /**
      * فرض ثوابت حساب المشرف (Inv1):
@@ -138,38 +157,35 @@ object CloudAuthRules {
         val existingAdmin = registry.users.firstOrNull {
             normalizeUsername(it.username) == ADMIN_USERNAME
         }
-        val enforcedAdmin = if (existingAdmin == null) {
-            createDefaultAdminAccount(now)
-        } else {
-            val validPasswordHash = existingAdmin.passwordHash.ifBlank {
-                hashPassword(ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD)
-            }
-            val validEncrypted = existingAdmin.encryptedPassword.ifBlank {
-                encryptPassword(DEFAULT_ADMIN_PASSWORD)
-            }
-            existingAdmin.copy(
-                username = ADMIN_USERNAME,
-                displayName = existingAdmin.displayName.ifBlank { ADMIN_USERNAME },
-                passwordHash = validPasswordHash,
-                encryptedPassword = validEncrypted,
-                isAdmin = true,
-                isActive = true,
-                permissions = UserPermissions.FULL
-            )
-        }
+        // Never recreate a missing administrator with a known default password.
+        // An absent admin is treated as a damaged/uninitialized registry by the login flow.
+        val enforcedAdmin = existingAdmin?.copy(
+            username = ADMIN_USERNAME,
+            displayName = existingAdmin.displayName.ifBlank { ADMIN_USERNAME },
+            isAdmin = true,
+            isActive = true,
+            permissions = UserPermissions.FULL
+        )
         val otherUsers = registry.users
             .filterNot { normalizeUsername(it.username) == ADMIN_USERNAME }
+            .filter { normalizeUsername(it.username).length <= MAX_USERNAME_LENGTH }
             .groupBy { normalizeUsername(it.username) }
             .mapNotNull { (normName, accounts) ->
                 if (normName.isBlank()) null
                 else accounts.maxByOrNull { it.updatedAt }?.copy(username = normName)
             }
-        val allUsers = listOf(enforcedAdmin) + otherUsers
+            .sortedByDescending { it.updatedAt }
+            .take(MAX_USER_ACCOUNTS - 1)
+        val allUsers = listOfNotNull(enforcedAdmin) + otherUsers
         val validUsernames = allUsers.mapTo(mutableSetOf()) { normalizeUsername(it.username) }
         val validRequests = registry.deviceRequests.filter {
             normalizeUsername(it.username) in validUsernames
         }
-        val pendingRequests = validRequests.filter { it.status == DeviceApprovalStatus.PENDING }
+        val pendingRequests = validRequests
+            .filter { it.status == DeviceApprovalStatus.PENDING }
+            .sortedByDescending { it.requestedAt }
+            .take(MAX_PENDING_DEVICE_REQUESTS)
+            .sortedBy { it.requestedAt }
         val cappedResolved = validRequests
             .filter { it.status != DeviceApprovalStatus.PENDING }
             .sortedByDescending { maxOf(it.decidedAt, it.requestedAt) }
@@ -177,6 +193,7 @@ object CloudAuthRules {
             .sortedBy { it.requestedAt }
 
         return registry.copy(
+            schemaVersion = SCHEMA_VERSION,
             users = allUsers,
             deviceRequests = cappedResolved + pendingRequests
         )
@@ -200,49 +217,89 @@ object CloudAuthRules {
         now: Long = System.currentTimeMillis()
     ): AuthLoginOutcome {
         if (!isOnline) {
-            return AuthLoginOutcome.Rejected(
-                "يجب توفر اتصال بالإنترنت لتسجيل الدخول؛ السحابة هي التي تقرر في التسجيل"
-            )
+            return AuthLoginOutcome.Rejected("يجب توفر اتصال بالإنترنت لتسجيل الدخول؛ السحابة هي التي تقرر في التسجيل")
         }
         val normalizedUser = normalizeUsername(usernameInput)
         val cleanPass = passwordInput.trim()
         if (normalizedUser.isBlank() || cleanPass.isBlank()) {
             return AuthLoginOutcome.Rejected("أدخل اسم المستخدم وكلمة المرور")
         }
+        if (cleanPass.length > MAX_PASSWORD_LENGTH || normalizedUser.length > MAX_USERNAME_LENGTH) {
+            return AuthLoginOutcome.Rejected("اسم المستخدم أو كلمة المرور أطول من الحد المسموح")
+        }
         if (currentDevice.fingerprint.isBlank()) {
             return AuthLoginOutcome.Rejected("تعذّر التحقق من بصمة الجهاز")
         }
 
-        val baseRegistry = ensureAdminInvariants(registry ?: createInitialRegistry(now), now)
-        val wasUninitialized = registry == null || registry.users.none {
-            normalizeUsername(it.username) == ADMIN_USERNAME
+        // First-run bootstrap is allowed only when the auth object is genuinely absent.
+        // A malformed/present registry must not silently reset ownership.
+        if (registry == null) {
+            if (normalizedUser != ADMIN_USERNAME) {
+                return AuthLoginOutcome.Rejected("إعداد السحابة الأولي يتطلب اسم المشرف saged")
+            }
+            if (cleanPass.length < MIN_ADMIN_BOOTSTRAP_PASSWORD_LENGTH) {
+                return AuthLoginOutcome.Rejected("أنشئ كلمة مرور للمشرف من 12 خانة على الأقل")
+            }
+            val admin = createDefaultAdminAccount(cleanPass, now).copy(
+                boundDevice = currentDevice.copy(boundAt = currentDevice.boundAt.takeIf { it > 0L } ?: now)
+            )
+            val initial = CloudAuthRegistry(
+                schemaVersion = SCHEMA_VERSION,
+                updatedAt = now,
+                users = listOf(admin),
+                deviceRequests = emptyList()
+            )
+            return AuthLoginOutcome.Authenticated(admin, initial, registryChanged = true)
         }
 
-        val account = baseRegistry.users.firstOrNull {
+        var baseRegistry = ensureAdminInvariants(registry, now)
+        if (baseRegistry.users.none { normalizeUsername(it.username) == ADMIN_USERNAME }) {
+            return AuthLoginOutcome.Rejected(
+                "سجل المصادقة الموجود لا يحتوي على حساب المشرف؛ أعده من نسخة موثوقة بدل إعادة تهيئته تلقائيًا"
+            )
+        }
+        var account = baseRegistry.users.firstOrNull {
             normalizeUsername(it.username) == normalizedUser
         } ?: return AuthLoginOutcome.Rejected("اسم المستخدم أو كلمة المرور غير صحيحة")
 
-        // التحقق من كلمة المرور يسبق فحص الجهاز والحالة لمنع ربط جهاز مهاجم أو إرسال طلبات كاذبة
+        // Verify the password before exposing account status or creating a device request.
         if (!verifyPassword(cleanPass, account)) {
             return AuthLoginOutcome.Rejected("اسم المستخدم أو كلمة المرور غير صحيحة")
+        }
+
+        // Migrate legacy fast SHA-256 hashes after (and only after) a successful verification.
+        val passwordHashUpgraded = !isCurrentPasswordHash(account.passwordHash)
+        if (passwordHashUpgraded) {
+            account = account.copy(
+                passwordHash = hashPassword(account.username, cleanPass),
+                updatedAt = now
+            )
+            baseRegistry = baseRegistry.copy(
+                updatedAt = now,
+                users = baseRegistry.users.map {
+                    if (normalizeUsername(it.username) == normalizedUser) account else it
+                }
+            )
         }
 
         if (!account.isActive && !account.isAdmin) {
             return AuthLoginOutcome.Rejected("تم إيقاف هذا الحساب من قبل المشرف")
         }
 
-        val stampedDevice = currentDevice.copy(boundAt = if (currentDevice.boundAt > 0L) currentDevice.boundAt else now)
+        val stampedDevice = currentDevice.copy(
+            boundAt = currentDevice.boundAt.takeIf { it > 0L } ?: now
+        )
 
-        // المشرف الرئيسي saged هو مالك التطبيق، أو مستخدم يسجل من جهازه الأول
-        if (account.isAdmin || account.boundDevice == null) {
-            val deviceChanged = account.boundDevice?.fingerprint != stampedDevice.fingerprint
+        // Snapshot the nullable property before branching. `account` is reassigned during
+        // legacy hash migration, so Kotlin correctly refuses to smart-cast account.boundDevice.
+        val boundDevice = account.boundDevice
+        if (account.isAdmin || boundDevice == null) {
+            val deviceChanged = boundDevice?.fingerprint != stampedDevice.fingerprint
             val updatedAccount = if (deviceChanged) {
                 account.copy(boundDevice = stampedDevice, updatedAt = now)
-            } else {
-                account
-            }
+            } else account
             val updatedRegistry = baseRegistry.copy(
-                updatedAt = if (deviceChanged || wasUninitialized) now else baseRegistry.updatedAt,
+                updatedAt = if (deviceChanged) now else baseRegistry.updatedAt,
                 users = baseRegistry.users.map {
                     if (normalizeUsername(it.username) == normalizedUser) updatedAccount else it
                 }
@@ -250,20 +307,19 @@ object CloudAuthRules {
             return AuthLoginOutcome.Authenticated(
                 user = updatedAccount,
                 registry = updatedRegistry,
-                registryChanged = deviceChanged || wasUninitialized
+                registryChanged = deviceChanged || passwordHashUpgraded
             )
         }
 
-        // الجهاز مطابق للجهاز المعتمد في السحابة
-        if (account.boundDevice.fingerprint == stampedDevice.fingerprint) {
+        if (boundDevice.fingerprint == stampedDevice.fingerprint) {
             return AuthLoginOutcome.Authenticated(
                 user = account,
                 registry = baseRegistry,
-                registryChanged = wasUninitialized
+                registryChanged = passwordHashUpgraded
             )
         }
 
-        // جهاز مختلف ("جهاز غريب") -> لا يُسمح بالدخول إلا بموافقة المشرف
+        // Unknown device: store one pending request per (user, device) pair.
         val existingPending = baseRegistry.deviceRequests.firstOrNull {
             normalizeUsername(it.username) == normalizedUser &&
                 it.requestedDevice.fingerprint == stampedDevice.fingerprint &&
@@ -281,18 +337,12 @@ object CloudAuthRules {
             requestedAt = now,
             status = DeviceApprovalStatus.PENDING
         )
-
         val updatedRequests = baseRegistry.deviceRequests.filterNot {
             normalizeUsername(it.username) == normalizedUser &&
                 it.requestedDevice.fingerprint == stampedDevice.fingerprint &&
                 it.status == DeviceApprovalStatus.PENDING
         } + request
-
-        val updatedRegistry = baseRegistry.copy(
-            updatedAt = now,
-            deviceRequests = updatedRequests
-        )
-
+        val updatedRegistry = baseRegistry.copy(updatedAt = now, deviceRequests = updatedRequests)
         return AuthLoginOutcome.PendingAdminApproval(
             username = account.username,
             message = PENDING_APPROVAL_MESSAGE,
@@ -424,11 +474,17 @@ object CloudAuthRules {
         if (cleanName.length < 2) {
             return Result.failure(IOException("اسم المستخدم يجب أن يتكون من حرفين على الأقل"))
         }
+        if (cleanName.length > MAX_USERNAME_LENGTH) {
+            return Result.failure(IOException("اسم المستخدم يجب ألا يتجاوز $MAX_USERNAME_LENGTH حرفًا"))
+        }
         if (cleanName.any { it.isWhitespace() || it == '/' || it == '\\' }) {
             return Result.failure(IOException("اسم المستخدم لا يجب أن يحتوي على مسافات أو شرطات مائلة"))
         }
-        if (cleanPass.length < 3) {
-            return Result.failure(IOException("كلمة المرور يجب أن تتكون من 3 خانات على الأقل"))
+        if (cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور يجب أن تتكون من 10 خانات على الأقل"))
+        }
+        if (cleanPass.length > MAX_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"))
         }
         val base = ensureAdminInvariants(registry, now)
         if (base.users.any { normalizeUsername(it.username) == cleanName }) {
@@ -439,7 +495,6 @@ object CloudAuthRules {
             username = cleanName,
             displayName = newUsername.trim(),
             passwordHash = hashPassword(cleanName, cleanPass),
-            encryptedPassword = encryptPassword(cleanPass),
             isAdmin = false,
             isActive = true,
             permissions = permissions,
@@ -558,8 +613,11 @@ object CloudAuthRules {
         requireAdminActor(registry, actorUsername).getOrElse { return Result.failure(it) }
         val target = normalizeUsername(targetUsername)
         val cleanPass = newPassword.trim()
-        if (cleanPass.length < 3) {
-            return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 3 خانات على الأقل"))
+        if (cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 10 خانات على الأقل"))
+        }
+        if (cleanPass.length > MAX_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور الجديدة يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"))
         }
         val base = ensureAdminInvariants(registry, now)
         if (base.users.none { normalizeUsername(it.username) == target }) {
@@ -572,7 +630,6 @@ object CloudAuthRules {
                     if (normalizeUsername(it.username) == target) {
                         it.copy(
                             passwordHash = hashPassword(target, cleanPass),
-                            encryptedPassword = encryptPassword(cleanPass),
                             updatedAt = now
                         )
                     } else it
@@ -581,7 +638,7 @@ object CloudAuthRules {
         )
     }
 
-    /** تغيير المستخدم لكلمة مروره الخاصة (وتحفظ مشفرة بحيث تظهر للمشرف أيضاً). */
+    /** تغيير المستخدم لكلمة مروره الخاصة؛ تُخزَّن بصمة مملّحة ولا يمكن للمشرف استرجاعها. */
     fun userChangeOwnPassword(
         registry: CloudAuthRegistry,
         username: String,
@@ -591,8 +648,11 @@ object CloudAuthRules {
     ): Result<CloudAuthRegistry> {
         val target = normalizeUsername(username)
         val cleanNew = newPassword.trim()
-        if (cleanNew.length < 3) {
-            return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 3 خانات على الأقل"))
+        if (cleanNew.length < MIN_USER_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 10 خانات على الأقل"))
+        }
+        if (cleanNew.length > MAX_PASSWORD_LENGTH) {
+            return Result.failure(IOException("كلمة المرور الجديدة يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"))
         }
         val base = ensureAdminInvariants(registry, now)
         val account = base.users.firstOrNull { normalizeUsername(it.username) == target }
@@ -609,7 +669,6 @@ object CloudAuthRules {
                     if (normalizeUsername(it.username) == target) {
                         it.copy(
                             passwordHash = hashPassword(target, cleanNew),
-                            encryptedPassword = encryptPassword(cleanNew),
                             updatedAt = now
                         )
                     } else it
@@ -730,7 +789,6 @@ object CloudAuthRules {
             u.put("username", user.username)
             u.put("displayName", user.displayName)
             u.put("passwordHash", user.passwordHash)
-            u.put("encryptedPassword", user.encryptedPassword)
             u.put("isAdmin", user.isAdmin)
             u.put("isActive", user.isActive)
             u.put("permissions", JSONObject().apply {
@@ -762,9 +820,9 @@ object CloudAuthRules {
     }
 
     fun fromJson(jsonText: String?, now: Long = System.currentTimeMillis()): CloudAuthRegistry {
-        if (jsonText.isNullOrBlank()) return createInitialRegistry(now)
+        if (jsonText.isNullOrBlank()) return emptyRegistry(now)
         val root = runCatching { JSONObject(jsonText) }.getOrElse {
-            return createInitialRegistry(now)
+            return emptyRegistry(now)
         }
         val schemaVersion = root.optInt("schemaVersion", SCHEMA_VERSION)
         val updatedAt = root.optLong("updatedAt", now)
@@ -774,7 +832,7 @@ object CloudAuthRules {
         for (i in 0 until usersArray.length()) {
             val u = usersArray.optJSONObject(i) ?: continue
             val username = normalizeUsername(u.optString("username"))
-            if (username.isBlank()) continue
+            if (username.isBlank() || username.length > MAX_USERNAME_LENGTH) continue
             val permsObj = u.optJSONObject("permissions")
             val isAdmin = u.optBoolean("isAdmin", username == ADMIN_USERNAME)
             val perms = if (isAdmin) {
@@ -791,7 +849,6 @@ object CloudAuthRules {
                 username = username,
                 displayName = u.optString("displayName", username).ifBlank { username },
                 passwordHash = u.optString("passwordHash"),
-                encryptedPassword = u.optString("encryptedPassword"),
                 isAdmin = isAdmin,
                 isActive = if (isAdmin) true else u.optBoolean("isActive", true),
                 permissions = perms,
@@ -855,12 +912,6 @@ object CloudAuthRules {
             androidVersion = obj.optString("androidVersion"),
             boundAt = obj.optLong("boundAt", 0L)
         )
-    }
-
-    private fun deriveAesKey(): SecretKeySpec {
-        val keyBytes = MessageDigest.getInstance("SHA-256")
-            .digest(CRYPTO_PEPPER.toByteArray(Charsets.UTF_8))
-        return SecretKeySpec(keyBytes, "AES")
     }
 
     private fun sha256Hex(input: String): String {

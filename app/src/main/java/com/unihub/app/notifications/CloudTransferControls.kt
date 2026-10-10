@@ -42,13 +42,17 @@ object CloudTransferNotifier {
     /** إشعار النتيجة على قناة أخرى برقم آخر: لا يُلغي المستمر ولا يُبطل أزراره */
     private const val RESULT_ID = 9046
 
-    /** لحظة القبول: أول ما يطمن عليه المستخدم أن طلبه دخل الطابور فعلًا، قبل أي خدمة أمامية */
-    fun queued(context: Context, snapshot: CloudTransferQueueSnapshot): Notification =
-        baseBuilder(context, "أُضيف إلى النقل في الخلفية", snapshot.summary)
-            .setProgress(0, 0, true)
+    /** إشعار الانتظار مختصر أيضًا: نوع العملية ونسبة البداية فقط. */
+    fun queued(context: Context, snapshot: CloudTransferQueueSnapshot): Notification {
+        val kind = snapshot.pending.lastOrNull()?.kind
+            ?: snapshot.batches.lastOrNull()?.kind
+            ?: CloudTransferKind.NONE
+        return baseBuilder(context, titleFor(kind), "0%")
+            .setProgress(100, 0, false)
             .setOngoing(false)
             .setAutoCancel(true)
             .build()
+    }
 
     /**
      * إشعار النتيجة. يُنشر على قناة «ملفات سحابية جديدة» لأنها عالية الأهمية فيصل تنبيهها
@@ -73,37 +77,22 @@ object CloudTransferNotifier {
         batch: CloudTransferBatch,
         transfer: CloudTransferState? = null
     ): Notification {
-        val verb = if (batch.kind == CloudTransferKind.UPLOAD) "رفع" else "تنزيل"
         val activeTransfer = transfer?.takeIf { it.kind == batch.kind && it.kind != CloudTransferKind.NONE }
-        val presentation = CloudTransferNotificationProgressFactory.from(activeTransfer)
-        val text = if (activeTransfer == null) {
-            "$verb الملفات • جارٍ التجهيز • 0%"
-        } else {
-            val filePosition = if (activeTransfer.totalFiles > 0) " • ${activeTransfer.index.coerceIn(1, activeTransfer.totalFiles)}/${activeTransfer.totalFiles}" else ""
-            val overallPercent = " • إجمالي النقل ${presentation.percentage}%"
-            val filePercent = presentation.currentFilePercentage?.let { " • $it% من الملف" }.orEmpty()
-            "$verb ${activeTransfer.fileName.ifBlank { "الملفات" }}$filePosition$overallPercent$filePercent"
-        }
-        val expanded = buildString {
-            append(text).append('\n').append(presentation.detail).append('\n').append(snapshot.summary)
-            if (batch.lastError.isNotBlank()) append("\nسبب التوقف: ${batch.lastError}")
-        }
-        return baseBuilder(context, "${batch.title} ($verb)", text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
-            // نسبة محسوبة من حالة نقل البايتات، لا من عدد الدفعات المنتهية في طابور متغير.
-            .setProgress(100, presentation.percentage, false)
+        val percentage = CloudTransferNotificationProgressFactory.from(activeTransfer).percentage
+        // الإشعار الجاري لا يعرض اسم الملف أو أحجامه أو عدد العناصر أو المرحلة:
+        // سطر عنوان قصير، ونسبة مئوية، وشريط التقدم فقط.
+        return baseBuilder(context, titleFor(batch.kind), "$percentage%")
+            .setProgress(100, percentage, false)
             .setOngoing(true)
             .addAction(0, if (snapshot.paused) "استئناف" else "إيقاف مؤقت",
                 action(context, if (snapshot.paused) CloudTransferActionsReceiver.ACTION_RESUME else CloudTransferActionsReceiver.ACTION_PAUSE, REQUEST_PAUSE))
-            .addAction(0, "إلغاء ما لم يبدأ", action(context, CloudTransferActionsReceiver.ACTION_CANCEL, REQUEST_CANCEL))
+            .addAction(0, "إلغاء", action(context, CloudTransferActionsReceiver.ACTION_CANCEL, REQUEST_CANCEL))
             .build()
     }
 
-    /** إشعار يبقى بعد توقف العامل حتى يكون «استئناف» في متناول اليد من شاشة القفل */
-    fun paused(context: Context, snapshot: CloudTransferQueueSnapshot): Notification =
-        baseBuilder(context, "النقل موقوف مؤقتًا", snapshot.summary)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(
-                "ما لم يبدأ محفوظ، وما اكتمل لن يُعاد. سيُستأنف التنزيل من حيث توقف."))
+    /** إشعار الإيقاف موجز مع الإبقاء على زر الاستئناف. */
+    fun paused(context: Context): Notification =
+        baseBuilder(context, "النقل متوقف", "مؤقتًا")
             .setOngoing(false)
             .setAutoCancel(true)
             .addAction(0, "استئناف", action(context, CloudTransferActionsReceiver.ACTION_RESUME, REQUEST_PAUSE))
@@ -124,6 +113,12 @@ object CloudTransferNotifier {
 
     fun cancel(context: Context) {
         runCatching { NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID) }
+    }
+
+    private fun titleFor(kind: CloudTransferKind): String = when (kind) {
+        CloudTransferKind.UPLOAD -> "رفع الملفات"
+        CloudTransferKind.DOWNLOAD -> "تنزيل الملفات"
+        CloudTransferKind.NONE -> "نقل الملفات"
     }
 
     private fun baseBuilder(
@@ -183,13 +178,13 @@ class CloudTransferControls @Inject constructor(
     suspend fun pause() {
         queue.update { CloudTransferQueueLogic.setPaused(it, true) }
         manager.cancelDownloads()
-        CloudTransferNotifier.show(context, CloudTransferNotifier.paused(context, queue.snapshot()))
+        CloudTransferNotifier.show(context, CloudTransferNotifier.paused(context))
     }
 
-    suspend fun resume() {
+    suspend fun resume(): Boolean {
         queue.update { CloudTransferQueueLogic.setPaused(it, false) }
         CloudTransferNotifier.cancel(context)
-        scheduler.enqueueTransfers()
+        return scheduler.enqueueTransfers()
     }
 
     /** إلغاء ما لم يبدأ فقط؛ المكتمل لا يُمسّ، والفاشل يبقى للاستثناءات */
@@ -199,10 +194,10 @@ class CloudTransferControls @Inject constructor(
         CloudTransferNotifier.cancel(context)
     }
 
-    suspend fun retryFailed() {
+    suspend fun retryFailed(): Boolean {
         queue.update { CloudTransferQueueLogic.retryFailed(it) }
         CloudTransferNotifier.cancel(context)
-        scheduler.enqueueTransfers()
+        return scheduler.enqueueTransfers()
     }
 
     suspend fun dismissFailed(batchId: String) {

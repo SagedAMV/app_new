@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -90,8 +91,22 @@ class FileStorage @Inject constructor(
             // 4) نسخ التدفق
             try {
                 val input = context.contentResolver.openInputStream(uri)
-                    ?: throw java.io.IOException("تعذّر قراءة الملف المحدد")
-                input.use { stream -> FileOutputStream(target).use { stream.copyTo(it) } }
+                    ?: throw IOException("تعذّر قراءة الملف المحدد")
+                input.use { stream ->
+                    FileOutputStream(target).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var copied = 0L
+                        while (true) {
+                            val count = stream.read(buffer)
+                            if (count < 0) break
+                            if (copied > InputValidator.MAX_UPLOAD_SIZE_BYTES - count.toLong()) {
+                                throw InputValidationException(InputValidator.InputError.FileTooLarge)
+                            }
+                            output.write(buffer, 0, count)
+                            copied += count
+                        }
+                    }
+                }
             } catch (error: Exception) {
                 target.delete()
                 throw error
@@ -104,7 +119,8 @@ class FileStorage @Inject constructor(
                 extension = validExt,
                 mimeType = mimeType,
                 // بعض مزودي المحتوى لا يعيدون SIZE (أو يعيدون 0) — حجم النسخة هو الموثوق حينها
-                size = if (size > 0) size else target.length(),
+                // Never trust a provider's advertised size; use the bytes actually copied.
+                size = target.length(),
                 absolutePath = target.absolutePath
             )
         }
@@ -135,7 +151,10 @@ class FileStorage @Inject constructor(
         extension: String,
         mimeType: String
     ): ImportedFile {
-        if (!source.isFile) throw java.io.IOException("الملف المؤقت لم يعد متاحاً")
+        if (!source.isFile) throw IOException("الملف المؤقت لم يعد متاحاً")
+        if (source.length() > InputValidator.MAX_UPLOAD_SIZE_BYTES) {
+            throw InputValidationException(InputValidator.InputError.FileTooLarge)
+        }
         val safeBase = InputValidator.sanitizeName(rawBase).ifBlank { "ملف" }
         val target = uniqueTarget(safeBase, extension)
         try { source.copyTo(target, overwrite = true) } catch (error: Exception) {
@@ -168,9 +187,12 @@ class FileStorage @Inject constructor(
      */
     suspend fun rename(oldAbsolutePath: String, newDisplayName: String, extension: String): String =
         withContext(Dispatchers.IO) {
-            val source = File(oldAbsolutePath)
+            if (!isManagedFilePath(oldAbsolutePath)) {
+                throw IOException("مسار الملف غير صالح أو خارج مكتبة التطبيق")
+            }
+            val source = File(oldAbsolutePath).canonicalFile
             if (!source.isFile) {
-                throw java.io.IOException("النسخة الفعلية للملف لم تعد موجودة على القرص")
+                throw IOException("النسخة الفعلية للملف لم تعد موجودة على القرص")
             }
 
             val safeBase = InputValidator.sanitizeName(newDisplayName).ifBlank { "ملف" }
@@ -224,6 +246,18 @@ class FileStorage @Inject constructor(
             target.absolutePath
         }
 
+    /**
+     * Verify that a persisted path points to an existing regular file strictly inside
+     * the app-managed library. Canonical paths prevent `../` traversal and symlink escapes.
+     * This must be used before cloud upload or backup operations that consume database paths.
+     */
+    fun isManagedFilePath(rawPath: String): Boolean = runCatching {
+        if (rawPath.isBlank()) return@runCatching false
+        val root = libraryDir.canonicalFile
+        val candidate = File(rawPath).canonicalFile
+        candidate.isFile && candidate.path.startsWith(root.path + File.separator)
+    }.getOrDefault(false)
+
     /** حذف ملف فيزيائي بصمت — فشله لا يجب أن يُفشل حذف السجل */
     fun delete(absolutePath: String) {
         if (absolutePath.isBlank()) return
@@ -232,6 +266,22 @@ class FileStorage @Inject constructor(
             // أمان: نحذف فقط داخل مجلد المكتبة الخاص بالتطبيق
             if (file.isFile && file.canonicalPath.startsWith(libraryDir.canonicalPath + File.separator)) {
                 file.delete()
+            }
+        }
+    }
+
+    /** حذف الملفات اليتيمة بعد استعادة ناجحة، مع الحفاظ على كل المسارات التي أصبحت في Room. */
+    fun removeUnreferencedFiles(keepPaths: Set<String>) {
+        runCatching {
+            val root = libraryDir.canonicalFile
+            val keepCanonical = keepPaths.mapNotNullTo(mutableSetOf()) { raw ->
+                runCatching { File(raw).canonicalPath }.getOrNull()
+            }
+            root.listFiles()?.forEach { file ->
+                val canonical = runCatching { file.canonicalPath }.getOrNull() ?: return@forEach
+                if (canonical.startsWith(root.path + File.separator) && canonical !in keepCanonical) {
+                    if (file.isFile) file.delete()
+                }
             }
         }
     }

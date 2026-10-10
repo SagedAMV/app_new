@@ -74,7 +74,7 @@ class CloudTransferWorker @AssistedInject constructor(
         }
         val snapshot = queue.snapshot()
         // عند الإيقاف المؤقت يبقى إشعار «استئناف» ظاهرًا وإلا يُمحى — وإلا صار الزر بلا أثر
-        if (snapshot.paused) CloudTransferNotifier.show(appContext, CloudTransferNotifier.paused(appContext, snapshot))
+        if (snapshot.paused) CloudTransferNotifier.show(appContext, CloudTransferNotifier.paused(appContext))
         else CloudTransferNotifier.cancel(appContext)
         // إشعار نتيجة على قناة عالية الأهمية: هو ما ينتبه له المستخدم وهو في تطبيق آخر.
         // مشروط بعمل هذا التشغيل حتى لا يُعاد التنبيه لنفس الاستثناءات القديمة كل جولة.

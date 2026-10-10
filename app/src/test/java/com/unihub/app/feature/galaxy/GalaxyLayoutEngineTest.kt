@@ -4,102 +4,136 @@ import com.unihub.app.data.local.model.FolderWithFileCount
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.math.hypot
-import kotlin.math.sin
 import kotlin.math.PI
+import kotlin.math.sin
 
-/** اختبارات هندسة المجرة الكونية على JVM، دون Compose أو Android. */
+/** اختبارات هندسة المجرة الهرمية على JVM، دون Compose أو Android. */
 class GalaxyLayoutEngineTest {
 
     @Test
-    fun rootAndChildFoldersAreAllIndependentOrbitersAroundOneSun() {
+    fun everyFolderIsPlacedOnceAndEveryChildIsConnectedToItsParent() {
         val folders = listOf(
-            folder(1L, parentId = null),
+            folder(1L),
             folder(2L, parentId = 1L),
             folder(3L, parentId = 2L),
-            folder(4L, parentId = null)
+            folder(4L),
+            folder(5L, parentId = 4L),
+            folder(6L, parentId = 5L)
         )
 
         val layout = layout(folders)
 
-        assertEquals(folders.size, layout.placements.size)
         assertEquals(folders.map { it.folderId }.toSet(), layout.placements.map { it.folder.folderId }.toSet())
-        assertTrue(layout.placements.all { it.ringIndex >= 0 && it.radiusDp >= GALAXY_FIRST_ORBIT_RADIUS_DP })
-        assertTrue(layout.placements.any { it.folder.folderId == 2L && it.folder.parentId == 1L })
+        assertEquals(folders.size, layout.placements.size)
+        assertEquals(folders.size - 2, layout.connections.size)
+        val byId = layout.placements.associateBy { it.folder.folderId }
+        layout.connections.forEach { connection ->
+            val parent = byId.getValue(connection.parentFolderId)
+            val child = byId.getValue(connection.childFolderId)
+            assertEquals(parent.ringIndex + 1, child.ringIndex)
+            assertTrue("child should be farther than its parent", child.radiusDp > parent.radiusDp)
+        }
     }
 
     @Test
-    fun changingParentRelationshipsDoesNotChangeAnyOrbitalPlacement() {
-        val ungrouped = (1L..40L).map { folder(it, parentId = null) }
-        val hierarchical = (1L..40L).map { id -> folder(id, parentId = if (id == 1L) null else 1L) }
-
-        val first = layout(ungrouped).placements
-        val second = layout(hierarchical).placements
-
-        assertEquals(first.map { it.folder.folderId }, second.map { it.folder.folderId })
-        assertEquals(first.map { it.ringIndex to it.indexInRing }, second.map { it.ringIndex to it.indexInRing })
-        assertEquals(first.map { it.radiusDp }, second.map { it.radiusDp })
-        assertEquals(first.map { it.startAngleRadians }, second.map { it.startAngleRadians })
+    fun rootFoldersStayNearTheSunAndEachNestedLevelMovesOutward() {
+        val layout = layout(
+            listOf(
+                folder(1L),
+                folder(2L, parentId = 1L),
+                folder(3L, parentId = 2L),
+                folder(4L, parentId = 3L)
+            )
+        )
+        assertEquals(GALAXY_FIRST_ORBIT_RADIUS_DP, layout.placements.first { it.folder.folderId == 1L }.radiusDp)
+        assertTrue(layout.placements.first { it.folder.folderId == 2L }.radiusDp >= GALAXY_FIRST_ORBIT_RADIUS_DP + GALAXY_ORBIT_RADIAL_STEP_DP)
+        assertTrue(layout.placements.first { it.folder.folderId == 3L }.radiusDp > layout.placements.first { it.folder.folderId == 2L }.radiusDp)
+        assertTrue(layout.placements.first { it.folder.folderId == 4L }.radiusDp > layout.placements.first { it.folder.folderId == 3L }.radiusDp)
     }
 
     @Test
-    fun adjacentFoldersOnSameOrbitKeepSafeMinimumChordDistance() {
-        val layout = layout((1L..500L).map { folder(it) })
+    fun childrenOccupyTheirParentSectorRatherThanBeingScatteredAcrossTheWholeGalaxy() {
+        val layout = layout(
+            listOf(
+                folder(1L),
+                folder(2L, parentId = 1L),
+                folder(3L, parentId = 1L),
+                folder(4L),
+                folder(5L, parentId = 4L)
+            )
+        )
+        val roots = layout.placements.filter { it.parentFolderId == null }
+        val firstRoot = roots.first { it.folder.folderId == 1L }
+        val children = layout.placements.filter { it.parentFolderId == 1L }
+        assertEquals(2, children.size)
+        // مع جذرين، يشغل كل جذر نصف الدائرة، لذا يبقى أبناؤه ضمن نصفه الزاوي.
+        assertTrue(children.all { angularDistance(it.startAngleRadians, firstRoot.startAngleRadians) < PI / 2.0 })
+    }
 
-        layout.placements.groupBy { it.ringIndex }.values.forEach { ring ->
-            if (ring.size > 1) {
-                ring.forEachIndexed { index, item ->
-                    val next = ring[(index + 1) % ring.size]
-                    val distance = 2f * item.radiusDp *
-                        sin(PI * absAngle(item.startAngleRadians - next.startAngleRadians) / (2.0 * PI)).toFloat()
-                    assertTrue(
-                        "ring ${item.ringIndex} has too-small adjacent spacing: $distance dp",
-                        distance + 0.02f >= GALAXY_MIN_ORBITER_SPACING_DP
-                    )
+    @Test
+    fun adjacentFoldersAtTheSameDepthHaveSafeTouchSpacing() {
+        val folders = buildList {
+            repeat(25) { rootIndex ->
+                val rootId = rootIndex + 1L
+                add(folder(rootId))
+                repeat((rootIndex % 7) + 1) { childIndex ->
+                    val childId = 10_000L + rootId * 100L + childIndex
+                    add(folder(childId, parentId = rootId))
+                    if (childIndex % 2 == 0) add(folder(childId + 50_000L, parentId = childId))
                 }
+            }
+        }
+        val result = layout(folders)
+        result.placements.groupBy { it.ringIndex }.values.forEach { level ->
+            if (level.size > 1) {
+                val sortedAngles = level.map { normalize(it.startAngleRadians) }.sorted()
+                val smallestGap = sortedAngles.indices.minOf { index ->
+                    val next = if (index == sortedAngles.lastIndex) sortedAngles[0] + 2.0 * PI else sortedAngles[index + 1]
+                    next - sortedAngles[index]
+                }
+                val chord = 2f * level.first().radiusDp * sin(smallestGap / 2.0).toFloat()
+                assertTrue("level has a crowded pair: $chord dp", chord + 0.05f >= GALAXY_MIN_ORBITER_SPACING_DP)
             }
         }
     }
 
     @Test
-    fun ringsAreFarEnoughApartToPreventOrbiterBoxOverlapAtAnyRotationPhase() {
-        val layout = layout((1L..1_000L).map { folder(it) })
-        assertTrue(layout.ringRadiiDp.size > 1)
-        layout.ringRadiiDp.zipWithNext().forEach { (inner, outer) ->
-            assertTrue(outer - inner >= GALAXY_ORBIT_RADIAL_STEP_DP)
-            assertTrue(outer - inner > hypot(GALAXY_ORBITER_WIDTH_DP.toDouble(), GALAXY_ORBITER_HEIGHT_DP.toDouble()))
-        }
+    fun malformedOrCyclicParentRelationshipsDoNotDropFoldersOrLoopForever() {
+        val malformed = listOf(
+            folder(1L, parentId = 2L),
+            folder(2L, parentId = 1L),
+            folder(3L, parentId = 999L),
+            folder(4L, parentId = 4L),
+            folder(5L, parentId = 3L)
+        )
+        val layout = layout(malformed)
+        assertEquals(malformed.map { it.folderId }.toSet(), layout.placements.map { it.folder.folderId }.toSet())
+        assertEquals(malformed.size, layout.placements.size)
+        assertTrue(layout.placements.map { it.folder.folderId }.toSet().containsAll(malformed.map { it.folderId }))
     }
 
     @Test
-    fun thousandsOfFoldersHaveUniquePlacementsAndFitScaleRemainsPositive() {
-        val layout = layout((1L..5_000L).map { id ->
+    fun thousandsOfFoldersHaveUniquePlacementsAndPositiveScale() {
+        val folders = (1L..5_000L).map { id ->
             folder(id, parentId = if (id % 2L == 0L) id - 1L else null)
-        }, width = 360f, height = 780f, density = 1f)
-
-        assertEquals(5_000, layout.placements.size)
-        assertEquals(5_000, layout.placements.map { it.folder.folderId }.toSet().size)
-        assertTrue(layout.ringRadiiDp.zipWithNext().all { (a, b) -> b > a })
-        assertTrue(layout.fitAllScale > 0f)
-        assertTrue(layout.contentSizePx * layout.fitAllScale <= 360.01f)
-        assertTrue(layout.contentSizePx * layout.fitAllScale <= 780.01f)
+        }
+        val result = layout(folders, width = 360f, height = 780f, density = 1f)
+        assertEquals(5_000, result.placements.size)
+        assertEquals(5_000, result.placements.map { it.folder.folderId }.toSet().size)
+        assertTrue(result.ringRadiiDp.zipWithNext().all { (a, b) -> b > a })
+        assertTrue(result.fitAllScale > 0f && result.fitAllScale <= 1f)
+        assertTrue(result.contentSizePx * result.fitAllScale <= 360.01f)
+        assertTrue(result.contentSizePx * result.fitAllScale <= 780.01f)
     }
 
     @Test
-    fun orbitSpeedsDifferByRingAndAlternateDirection() {
-        assertTrue(orbitDurationMillis(0) < orbitDurationMillis(1))
-        assertTrue(orbitDurationMillis(1) < orbitDurationMillis(2))
-        assertEquals(120_000, orbitDurationMillis(20))
+    fun everyLevelUsesTheSameAngularDirectionAndSpeed() {
+        assertEquals(orbitDurationMillis(0), orbitDurationMillis(1))
+        assertEquals(orbitDurationMillis(1), orbitDurationMillis(20))
+        assertEquals(GALAXY_SHARED_ORBIT_DURATION_MILLIS, orbitDurationMillis(0))
         assertEquals(360f, orbitDirectionDegrees(0))
-        assertEquals(-360f, orbitDirectionDegrees(1))
-    }
-
-    @Test
-    fun largerViewportProducesAtLeastAsLargeFitScale() {
-        val folders = (1L..250L).map { folder(it) }
-        val small = layout(folders, width = 360f, height = 780f, density = 1f)
-        val large = layout(folders, width = 720f, height = 1560f, density = 1f)
-        assertTrue(large.fitAllScale >= small.fitAllScale)
+        assertEquals(360f, orbitDirectionDegrees(1))
+        assertEquals(360f, orbitDirectionDegrees(20))
     }
 
     @Test
@@ -107,8 +141,18 @@ class GalaxyLayoutEngineTest {
         val empty = layout(emptyList())
         assertTrue(empty.placements.isEmpty())
         assertTrue(empty.ringRadiiDp.isEmpty())
+        assertTrue(empty.connections.isEmpty())
         assertTrue(empty.contentSizeDp > 0f)
         assertTrue(empty.fitAllScale > 0f && empty.fitAllScale <= 1f)
+    }
+
+    @Test
+    fun deepChainsAreLaidOutWithoutRecursiveTraversal() {
+        val folders = (1L..2_500L).map { id -> folder(id, parentId = if (id == 1L) null else id - 1L) }
+        val result = layout(folders, width = 360f, height = 780f, density = 1f)
+        assertEquals(2_500, result.placements.size)
+        assertEquals(2_499, result.connections.size)
+        assertTrue(result.placements.last().radiusDp > result.placements.first().radiusDp)
     }
 
     private fun layout(
@@ -126,8 +170,10 @@ class GalaxyLayoutEngineTest {
         parentId = parentId
     )
 
-    private fun absAngle(angle: Double): Double {
-        val normalized = angle % (2.0 * PI)
-        return if (normalized < 0) normalized + 2.0 * PI else normalized
+    private fun normalize(angle: Double): Double = ((angle % (2.0 * PI)) + 2.0 * PI) % (2.0 * PI)
+
+    private fun angularDistance(first: Double, second: Double): Double {
+        val difference = kotlin.math.abs(normalize(first) - normalize(second))
+        return minOf(difference, 2.0 * PI - difference)
     }
 }

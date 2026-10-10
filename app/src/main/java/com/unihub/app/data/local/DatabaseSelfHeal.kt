@@ -18,9 +18,10 @@ import java.io.File
  * الاستثناء مباشرة من `RoomOpenHelper.checkIdentity`.
  *
  * الحل: قبل أن يلمس أي مكوّن (Hilt/ViewModel) القاعدة، نفتح الملف فعلياً عبر
- * نسخة اختبار مهملة. نجح الفتح؟ نغلقها ويكمل التطبيق طبيعياً. فشل؟ نحذف الملف
- * مع ملحقاته ويُنشئ Room قاعدة نظيفة عند أول استخدام. التطبيق شخصي وبياناته
- * محلية، فالإعادة النظيفة أفضل من حلقة كراش لا نهائية عند الإقلاع.
+ * نسخة اختبار مهملة. نجح الفتح؟ نغلقها ويكمل التطبيق طبيعياً. فشل؟ نحاول أولاً
+ * حفظ قاعدة البيانات وملفات SQLite المرافقة في مجلد إنقاذ خاص بالتطبيق، ثم نعيد
+ * إنشاء القاعدة النشطة فقط بعد التحقق من النسخة المحفوظة. إنقاذ البيانات يسبق
+ * الإصلاح التلقائي لتقليل احتمال الفقد غير القابل للاسترداد.
  *
  * تحصين الجلسة الحالية (ما أُضيف على النسخة السابقة):
  * 1) شبكة أمان خارجية حول الفحص كله — المُداوي نفسه لا يجوز أن يكون سبب كراش
@@ -63,7 +64,67 @@ object DatabaseSelfHeal {
                     "السبب: ${error.message}"
             )
             runCatching { probe.close() }
-            wipeDatabaseFiles(context, dbFile)
+            // Never destroy the only copy of a user's academic data. Preserve the database
+            // and SQLite sidecars first; only create a fresh DB after a verified copy exists.
+            if (preserveDatabaseFiles(context, dbFile)) {
+                wipeDatabaseFiles(context, dbFile)
+            } else {
+                Log.e(TAG, "لم تُحذف قاعدة البيانات القديمة لأن إنشاء نسخة إنقاذ موثوقة فشل؛ يلزم استرداد يدوي")
+            }
+        }
+    }
+
+
+    /**
+     * Copies the main database and any SQLite sidecars to app-private recovery storage.
+     * Recovery copies are kept separate from the active DB and the two newest snapshots
+     * are retained. If any copy fails or has a different size, the active database is left
+     * untouched rather than risking irreversible loss.
+     */
+    private fun preserveDatabaseFiles(context: Context, dbFile: File): Boolean {
+        if (!dbFile.isFile) return false
+        val recoveryRoot = File(context.filesDir, "database-recovery")
+        if (!recoveryRoot.exists() && !recoveryRoot.mkdirs()) return false
+        val snapshot = File(recoveryRoot, "unihub-${System.currentTimeMillis()}-${java.util.UUID.randomUUID().toString().take(8)}")
+        if (!snapshot.mkdirs()) return false
+
+        val sources = listOf(
+            dbFile to "unihub.sqlite",
+            sibling(dbFile, "-wal") to "unihub.sqlite-wal",
+            sibling(dbFile, "-shm") to "unihub.sqlite-shm",
+            sibling(dbFile, "-journal") to "unihub.sqlite-journal"
+        ).filter { it.first.isFile }
+        if (sources.none { it.first.absoluteFile == dbFile.absoluteFile }) {
+            snapshot.deleteRecursively()
+            return false
+        }
+
+        return try {
+            sources.forEach { (source, name) ->
+                val destination = File(snapshot, name)
+                source.copyTo(destination, overwrite = false)
+                if (!destination.isFile || destination.length() != source.length()) {
+                    throw java.io.IOException("Database recovery copy verification failed")
+                }
+            }
+            File(snapshot, "RECOVERY_INFO.txt").writeText(
+                "UniHub database recovery snapshot\n" +
+                    "Created: ${System.currentTimeMillis()}\n" +
+                    "The database was not readable by the current app build. Keep this folder until data recovery is confirmed.\n",
+                Charsets.UTF_8
+            )
+            // Keep the latest two successful snapshots only; never trim until this one is verified.
+            recoveryRoot.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("unihub-") && it != snapshot }
+                ?.sortedByDescending { it.lastModified() }
+                ?.drop(1)
+                ?.forEach { old -> runCatching { old.deleteRecursively() } }
+            Log.w(TAG, "حُفظت نسخة إنقاذ من قاعدة البيانات في ${snapshot.absolutePath}")
+            true
+        } catch (error: Exception) {
+            Log.e(TAG, "تعذّر التحقق من نسخة إنقاذ قاعدة البيانات؛ ستبقى القاعدة الأصلية دون حذف", error)
+            runCatching { snapshot.deleteRecursively() }
+            false
         }
     }
 

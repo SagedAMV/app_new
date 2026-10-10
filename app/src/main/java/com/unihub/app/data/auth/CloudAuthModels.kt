@@ -81,14 +81,12 @@ data class DeviceChangeRequest(
 
 /**
  * بيانات حساب مستخدم مخزنة في سجل المصادقة السحابي.
- * تُحفظ كلمة المرور كبصمة تحقق (passwordHash) وكنص مشفر بـ AES-GCM (encryptedPassword)
- * ليتمكن المشرف الرئيسي (saged) من عرض كلمة المرور الحالية حتى لو غيّرها المستخدم.
+ * passwordHash هو مُتحقّق PBKDF2 مملّح، ولا توجد نسخة قابلة لفك التشفير من كلمة المرور.
  */
 data class CloudUserAccount(
     val username: String,
     val displayName: String,
     val passwordHash: String,
-    val encryptedPassword: String,
     val isAdmin: Boolean = false,
     val isActive: Boolean = true,
     val permissions: UserPermissions = UserPermissions.FULL,

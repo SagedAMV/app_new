@@ -64,7 +64,7 @@ sealed interface SettingsBackOutcome {
 }
 
 /**
- * الحالة النقية لطي وتوسيع بطاقات المستخدمين وكشف الرموز السرية وبحث المستخدمين
+ * الحالة النقية لطي وتوسيع بطاقات المستخدمين وبحث المستخدمين
  * في قسم «إعدادات المستخدمين وطلبات الأجهزة (للمشرف)».
  *
  * جميع البطاقات تبدأ مطوية افتراضياً (expandedUsernames = emptySet()) لمنع الازدحام
@@ -72,17 +72,11 @@ sealed interface SettingsBackOutcome {
  */
 data class UserCardsExpansionState(
     val expandedUsernames: Set<String> = emptySet(),
-    val revealedPasswordUsernames: Set<String> = emptySet(),
     val searchQuery: String = ""
 ) {
     fun isExpanded(username: String): Boolean {
         val norm = CloudAuthRules.normalizeUsername(username)
         return norm.isNotBlank() && norm in expandedUsernames
-    }
-
-    fun isPasswordRevealed(username: String): Boolean {
-        val norm = CloudAuthRules.normalizeUsername(username)
-        return norm.isNotBlank() && norm in expandedUsernames && norm in revealedPasswordUsernames
     }
 }
 
@@ -128,7 +122,7 @@ object SettingsCatalogRules {
     /**
      * تبديل حالة توسيع/طي بطاقة مستخدم عند النقر عليها:
      * - إذا كانت مطوية: تتوسع لعرض خيارات المستخدم.
-     * - إذا كانت متوسعة: تُطوى، وتُخفى كلمة المرور المكشوفة فوراً (علاج المحاكمة H1).
+     * - إذا كانت متوسعة: تُطوى لإبقاء الواجهة مختصرة.
      */
     fun toggleUserExpanded(
         state: UserCardsExpansionState,
@@ -138,8 +132,7 @@ object SettingsCatalogRules {
         if (norm.isBlank()) return state
         return if (norm in state.expandedUsernames) {
             state.copy(
-                expandedUsernames = state.expandedUsernames - norm,
-                revealedPasswordUsernames = state.revealedPasswordUsernames - norm
+                expandedUsernames = state.expandedUsernames - norm
             )
         } else {
             state.copy(
@@ -148,26 +141,9 @@ object SettingsCatalogRules {
         }
     }
 
-    /** تبديل إظهار/إخفاء كلمة المرور داخل بطاقة مستخدم متوسعة. */
-    fun togglePasswordVisibility(
-        state: UserCardsExpansionState,
-        username: String
-    ): UserCardsExpansionState {
-        val norm = CloudAuthRules.normalizeUsername(username)
-        if (norm.isBlank() || norm !in state.expandedUsernames) return state
-        return if (norm in state.revealedPasswordUsernames) {
-            state.copy(revealedPasswordUsernames = state.revealedPasswordUsernames - norm)
-        } else {
-            state.copy(revealedPasswordUsernames = state.revealedPasswordUsernames + norm)
-        }
-    }
-
-    /** طي جميع بطاقات المستخدمين المفتوحة دفعة واحدة وإخفاء أي رموز مكشوفة (H1). */
+    /** طي جميع بطاقات المستخدمين المفتوحة دفعة واحدة. */
     fun collapseAll(state: UserCardsExpansionState): UserCardsExpansionState =
-        state.copy(
-            expandedUsernames = emptySet(),
-            revealedPasswordUsernames = emptySet()
-        )
+        state.copy(expandedUsernames = emptySet())
 
     /** تحديث نص البحث عن المستخدمين دون المساس بحالة البطاقات المتوسعة (H3). */
     fun updateSearchQuery(
@@ -186,11 +162,7 @@ object SettingsCatalogRules {
         val activeNames = allRegistryUsers
             .mapTo(mutableSetOf()) { CloudAuthRules.normalizeUsername(it.username) }
         val cleanExpanded = state.expandedUsernames.intersect(activeNames)
-        val cleanRevealed = state.revealedPasswordUsernames.intersect(cleanExpanded)
-        return state.copy(
-            expandedUsernames = cleanExpanded,
-            revealedPasswordUsernames = cleanRevealed
-        )
+        return state.copy(expandedUsernames = cleanExpanded)
     }
 
     /**

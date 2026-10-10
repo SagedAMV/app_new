@@ -34,6 +34,8 @@ internal object BackupStream {
     private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
 
     private const val CHUNK_BYTES = 8 * 1024
+    // JSON manifest is metadata, not a payload: keep its peak heap use bounded.
+    private const val MAX_MANIFEST_BYTES = 32L * 1024 * 1024
 
     /**
      * يتخطى سطر شفرة [BackupSignature] إن كان في رأس التدفق، ويعيد هل وُجد.
@@ -71,24 +73,50 @@ internal object BackupStream {
      * ينسخ من [input] إلى [output] بذاكرة ثابتة وبحجم أقصى [maxBytes].
      * الحد يمنع «قنبلة الضغط»: أرشيف صغير يفكّ نفسه إلى غيغابايتات.
      */
-    fun copyBounded(input: InputStream, output: OutputStream, maxBytes: Long) {
-        val chunk = ByteArray(CHUNK_BYTES)
-        var total = 0L
-        while (true) {
-            val n = input.read(chunk)
-            if (n < 0) break
-            total += n
-            if (total > maxBytes) {
-                throw IOException("عنصر داخل النسخة الاحتياطية أكبر من الحد المسموح")
+    private class UncompressedBudget(private val maxTotalBytes: Long) {
+        var consumed: Long = 0L
+            private set
+
+        fun add(count: Int) {
+            if (count <= 0) return
+            if (consumed > maxTotalBytes - count.toLong()) {
+                throw IOException("حجم محتوى النسخة الاحتياطية بعد فك الضغط تجاوز الحد الآمن")
             }
-            output.write(chunk, 0, n)
+            consumed += count
         }
     }
 
-    /** نص عنصر صغير (البيانات الوصفية) بحد أقصى — وحده ما يبقى في الذاكرة */
-    fun readTextBounded(input: InputStream, maxBytes: Long): String {
+    private fun copyBounded(
+        input: InputStream,
+        output: OutputStream?,
+        maxEntryBytes: Long,
+        budget: UncompressedBudget
+    ) {
+        val chunk = ByteArray(CHUNK_BYTES)
+        var entryBytes = 0L
+        while (true) {
+            val n = input.read(chunk)
+            if (n < 0) break
+            if (entryBytes > maxEntryBytes - n.toLong()) {
+                throw IOException("عنصر داخل النسخة الاحتياطية أكبر من الحد المسموح")
+            }
+            budget.add(n)
+            entryBytes += n
+            output?.write(chunk, 0, n)
+        }
+    }
+
+    /** Bounded reader for pre-ZIP JSON backups. */
+    fun readLegacyTextBounded(input: InputStream, maxBytes: Long): String {
         val buffer = ByteArrayOutputStream()
-        copyBounded(input, buffer, maxBytes)
+        copyBounded(input, buffer, maxBytes, UncompressedBudget(maxBytes))
+        return String(buffer.toByteArray(), Charsets.UTF_8)
+    }
+
+    /** نص عنصر صغير (البيانات الوصفية) بحد أقصى — وحده ما يبقى في الذاكرة */
+    private fun readTextBounded(input: InputStream, maxEntryBytes: Long, budget: UncompressedBudget): String {
+        val buffer = ByteArrayOutputStream()
+        copyBounded(input, buffer, maxEntryBytes, budget)
         return String(buffer.toByteArray(), Charsets.UTF_8)
     }
 
@@ -106,29 +134,45 @@ internal object BackupStream {
         manifestEntry: String,
         filesPrefix: String,
         spoolDir: File,
-        maxEntryBytes: Long
+        maxEntryBytes: Long,
+        maxTotalBytes: Long = 1_500L * 1024 * 1024,
+        maxEntries: Int = 20_000
     ): Spooled {
         if (!spoolDir.isDirectory && !spoolDir.mkdirs()) {
             throw IOException("تعذّر تجهيز مساحة مؤقتة لفك النسخة الاحتياطية")
         }
         var manifestText: String? = null
         val files = LinkedHashMap<String, File>()
+        val budget = UncompressedBudget(maxTotalBytes)
         var written = 0
+        var entryCount = 0
+        val seenNames = HashSet<String>()
 
         ZipInputStream(input).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
+                entryCount++
+                if (entryCount > maxEntries) throw IOException("النسخة الاحتياطية تحتوي على عناصر أكثر من الحد المسموح")
                 val name = entry.name
+                if (!seenNames.add(name)) throw IOException("النسخة الاحتياطية تحتوي على أسماء عناصر مكررة")
                 when {
-                    name == manifestEntry -> manifestText = readTextBounded(zip, maxEntryBytes)
-
+                    name == manifestEntry && !entry.isDirectory -> {
+                        if (manifestText != null) throw IOException("النسخة الاحتياطية تحتوي على أكثر من ملف بيانات")
+                        manifestText = readTextBounded(zip, minOf(maxEntryBytes, MAX_MANIFEST_BYTES), budget)
+                    }
                     name.startsWith(filesPrefix) && !entry.isDirectory -> {
                         // اسم رقمي ثابت: لا يعتمد على اسم المدخل، فلا مفاتيح غير صالحة للقرص
                         val target = File(spoolDir, written.toString())
-                        FileOutputStream(target).use { out -> copyBounded(zip, out, maxEntryBytes) }
-                        files[name] = target
-                        written++
+                        try {
+                            FileOutputStream(target).use { out -> copyBounded(zip, out, maxEntryBytes, budget) }
+                            files[name] = target
+                            written++
+                        } catch (error: Exception) {
+                            target.delete()
+                            throw error
+                        }
                     }
+                    else -> copyBounded(zip, null, maxEntryBytes, budget)
                 }
                 zip.closeEntry()
                 entry = zip.nextEntry

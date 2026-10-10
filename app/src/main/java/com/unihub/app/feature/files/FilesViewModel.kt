@@ -89,19 +89,62 @@ class FilesViewModel @Inject constructor(
     )
 
     fun pauseCloudTransfers() {
-        viewModelScope.launch { cloudTransferControls.pause() }
+        viewModelScope.launch {
+            performTransferAction("تعذّر إيقاف النقل مؤقتًا؛ حاول مرة أخرى") { cloudTransferControls.pause() }
+        }
     }
 
     fun resumeCloudTransfers() {
-        viewModelScope.launch { cloudTransferControls.resume() }
+        viewModelScope.launch {
+            performTransferSchedulingAction(
+                scheduledMessage = "تم حفظ الاستئناف، لكن تعذّر تشغيل النقل الآن؛ حاول مرة أخرى",
+                failureMessage = "تعذّر استئناف النقل؛ لم يكتمل تحديث الحالة"
+            ) { cloudTransferControls.resume() }
+        }
     }
 
     fun retryCloudTransfers() {
-        viewModelScope.launch { cloudTransferControls.retryFailed() }
+        viewModelScope.launch {
+            performTransferSchedulingAction(
+                scheduledMessage = "تم تجهيز العناصر لإعادة المحاولة، لكن تعذّر تشغيل النقل الآن",
+                failureMessage = "تعذّرت إعادة تجهيز العناصر؛ حاول مرة أخرى"
+            ) { cloudTransferControls.retryFailed() }
+        }
     }
 
     fun cancelCloudQueued() {
-        viewModelScope.launch { cloudTransferControls.cancelQueued() }
+        viewModelScope.launch {
+            performTransferAction("تعذّر إكمال إلغاء النقل؛ تحقق من بطاقة النقل وحاول مجددًا") {
+                cloudTransferControls.cancelQueued()
+            }
+        }
+    }
+
+    private suspend fun performTransferAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        try {
+            action()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            messenger.notifyError(failureMessage)
+        }
+    }
+
+    private suspend fun performTransferSchedulingAction(
+        scheduledMessage: String,
+        failureMessage: String,
+        action: suspend () -> Boolean
+    ) {
+        try {
+            if (!action()) messenger.notifyError(scheduledMessage)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            messenger.notifyError(failureMessage)
+        }
     }
 
     private val _uploadPlan = MutableStateFlow<CloudUploadPlan?>(null)
@@ -135,19 +178,37 @@ class FilesViewModel @Inject constructor(
     fun confirmUpload() {
         val plan = _uploadPlan.value ?: return
         viewModelScope.launch {
-            cloudTransferQueue.enqueue(CloudTransferBatch(
-                id = UUID.randomUUID().toString(),
-                kind = CloudTransferKind.UPLOAD,
-                title = plan.title,
-                fileIds = plan.fileIds,
-                folderIds = plan.folderIds,
-                totalBytes = plan.totalBytes
-            ))
-            cloudTransferScheduler.enqueueTransfers()
-            cloudTransferControls.announceQueued()
+            try {
+                cloudTransferQueue.enqueue(CloudTransferBatch(
+                    id = UUID.randomUUID().toString(),
+                    kind = CloudTransferKind.UPLOAD,
+                    title = plan.title,
+                    fileIds = plan.fileIds,
+                    folderIds = plan.folderIds,
+                    totalBytes = plan.totalBytes
+                ))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                messenger.notifyError("تعذّر حفظ طلب الرفع؛ لم يبدأ النقل")
+                return@launch
+            }
+
+            clearSelection()
+            if (!cloudTransferScheduler.enqueueTransfers()) {
+                messenger.notifyError("حُفظ طلب الرفع، لكن تعذّر تشغيله الآن؛ افتح شاشة السحابة لإعادة المحاولة")
+                return@launch
+            }
+            // فشل إشعار النظام لا ينبغي أن يُظهر الرفع كأنه فشل بعد حفظه وجدولته.
+            try {
+                cloudTransferControls.announceQueued()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // يستمر العامل المجدول؛ رسالة الشاشة التالية هي التأكيد الأساسي.
+            }
             val missing = if (plan.missingFiles.isEmpty()) "" else " • لن يُرفع ${plan.missingFiles.size} ملفًا (لم تعد موجودة)"
             messenger.notify("أُضيف للنقل في الخلفية$missing")
-            clearSelection()
         }
     }
 

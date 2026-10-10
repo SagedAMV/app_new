@@ -73,21 +73,23 @@ class CloudSyncScheduler @Inject constructor(
      * KEEP لن ينشئ غيره، فيبقى الطابور معلقًا حتى المزامنة الدورية بعد 15 دقيقة؛ أما هنا
      * فتُضمن جولة تالية فور انتهاء الحالية، والجولة على طابور فارغ تنهي نفسها بلا أثر.
      */
-    fun enqueueTransfers() {
+    fun enqueueTransfers(): Boolean {
         val request = OneTimeWorkRequestBuilder<CloudTransferWorker>()
             .setConstraints(networkConstraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         // APPEND_OR_REPLACE عمدًا: بعد انقطاع شبكة يُوقَف العامل لسقوط الشرط فتبقى السلسلة في
-        // حالة لا تقبل الإلحاق؛ APPEND هناك قد يرمي IllegalStateException ولا يستأنف أبدًا —
-        // وهو بعينه عطل «قيد الانتظار ولا يتغيّر». الاستثناء هنا لا يجوز أن يبلغ المستدعي.
-        runCatching {
+        // حالة لا تقبل الإلحاق؛ APPEND هناك قد يرمي IllegalStateException ولا يستأنف أبدًا.
+        // لا نرمي الاستثناء من هذه الطبقة، لكن نعيد نتيجة صريحة كي لا تؤكد الواجهة بدءًا لم يحدث.
+        return runCatching {
             workManager.enqueueUniqueWork(
                 ONCE_CLOUD_TRANSFERS,
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request
             )
+            true
         }.onFailure { android.util.Log.w("CloudSyncScheduler", "تعذّرت جدولة طابور النقل", it) }
+            .getOrDefault(false)
     }
 
     fun cancelTransfers() {

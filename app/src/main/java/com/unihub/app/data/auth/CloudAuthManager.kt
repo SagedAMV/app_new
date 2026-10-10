@@ -46,7 +46,7 @@ class CloudAuthManager @Inject constructor(
     private val _sessionState = MutableStateFlow<AuthSessionState>(AuthSessionState.Initializing)
     val sessionState: StateFlow<AuthSessionState> = _sessionState.asStateFlow()
 
-    private val _registryState = MutableStateFlow<CloudAuthRegistry>(CloudAuthRules.createInitialRegistry())
+    private val _registryState = MutableStateFlow<CloudAuthRegistry>(CloudAuthRules.fromJson(null))
     val registryState: StateFlow<CloudAuthRegistry> = _registryState.asStateFlow()
 
     private val _isBusy = MutableStateFlow(false)
@@ -134,12 +134,6 @@ class CloudAuthManager @Inject constructor(
         }
         return Result.success(user)
     }
-
-    /** فك تشفير كلمة المرور الحالية للمستخدم لعرضها للمشرف (حتى لو غيّرها المستخدم). */
-    fun revealUserPasswordForAdmin(account: CloudUserAccount): String =
-        CloudAuthRules.decryptPasswordForAdmin(account.encryptedPassword)
-            .takeIf { it.isNotBlank() }
-            ?: "غير متاح"
 
     /**
      * التحقق من امتلاك المستخدم الحالي لصلاحية معينة قبل تنفيذ عملية سحابية.
@@ -347,18 +341,20 @@ class CloudAuthManager @Inject constructor(
                     CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
                 ).getOrThrow()
 
-                val registry = if (remoteObj == null) {
-                    val seeded = CloudAuthRules.createInitialRegistry()
-                    val seededJson = CloudAuthRules.toJson(seeded)
-                    r2Client.uploadText(
-                        credentials = creds,
-                        objectKey = CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
-                        text = seededJson,
-                        ifNoneMatch = true
+                val registry = remoteObj?.let { CloudAuthRules.fromJson(it.text) }
+                    ?: run {
+                        authPreferences.clearSession()
+                        _sessionState.value = AuthSessionState.Unauthenticated(
+                            "سجل المصادقة غير موجود على السحابة؛ سجّل الدخول بعد استعادة السجل أو تهيئته من جديد"
+                        )
+                        throw IOException("سجل المصادقة غير موجود على السحابة؛ لم يُنشأ حساب مشرف افتراضي")
+                    }
+                if (registry.users.none { CloudAuthRules.normalizeUsername(it.username) == CloudAuthRules.ADMIN_USERNAME }) {
+                    authPreferences.clearSession()
+                    _sessionState.value = AuthSessionState.Unauthenticated(
+                        "سجل المصادقة لا يحتوي على حساب المشرف؛ يلزم استعادته من نسخة موثوقة"
                     )
-                    seeded
-                } else {
-                    CloudAuthRules.fromJson(remoteObj.text)
+                    throw IOException("سجل المصادقة الموجود لا يحتوي على حساب المشرف")
                 }
 
                 val json = CloudAuthRules.toJson(registry)
@@ -511,8 +507,13 @@ class CloudAuthManager @Inject constructor(
                 )
             }
 
-            val baseRegistry = remoteObj?.text?.let { CloudAuthRules.fromJson(it) }
-                ?: CloudAuthRules.createInitialRegistry()
+            val remoteRegistryObject = remoteObj ?: return@withBusyLock Result.failure(
+                IOException("سجل المصادقة غير موجود على السحابة؛ لن يُعاد إنشاؤه تلقائيًا")
+            )
+            val baseRegistry = CloudAuthRules.fromJson(remoteRegistryObject.text)
+            if (baseRegistry.users.none { CloudAuthRules.normalizeUsername(it.username) == CloudAuthRules.ADMIN_USERNAME }) {
+                return@withBusyLock Result.failure(IOException("سجل المصادقة لا يحتوي على حساب المشرف؛ استعد نسخة موثوقة أولًا"))
+            }
 
             val updatedRegistry = mutation(baseRegistry, currentAuth.user).getOrElse { error ->
                 return@withBusyLock Result.failure(error)
@@ -523,8 +524,8 @@ class CloudAuthManager @Inject constructor(
                 credentials = creds,
                 objectKey = CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
                 text = json,
-                ifMatch = remoteObj?.etag?.takeIf { it.isNotBlank() },
-                ifNoneMatch = remoteObj == null
+                ifMatch = remoteRegistryObject.etag.takeIf { it.isNotBlank() },
+                ifNoneMatch = false
             )
             if (uploaded.isFailure) {
                 val err = uploaded.exceptionOrNull()

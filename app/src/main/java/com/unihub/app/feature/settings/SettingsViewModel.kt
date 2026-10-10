@@ -270,9 +270,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun revealUserPassword(account: CloudUserAccount): String =
-        authManager.revealUserPasswordForAdmin(account)
-
     private companion object {
         private const val TAG = "SettingsViewModel"
     }

@@ -72,9 +72,24 @@ class BackupViewModel @Inject constructor(
                 _status.value = CloudFailureMessages.or(it, "تعديل إعدادات الخادم السحابي متاح للمشرف فقط")
                 return@launch
             }
-            val creds = R2Credentials(accountId.trim(), endpointUrl.trim(), bucketName.trim(), accessKeyId.trim(), secretAccessKey.trim())
-            cloudSyncPreferences.saveCredentials(creds)
-            _status.value = if (creds.isConfigured) "تم حفظ إعدادات R2" else "أكمل بيانات R2؛ التطبيق يعمل محلياً"
+            runCatching {
+                val existing = cloudSyncPreferences.snapshot().credentials
+                val creds = R2Credentials(
+                    accountId = accountId.trim(),
+                    endpointUrl = endpointUrl.trim(),
+                    bucketName = bucketName.trim(),
+                    accessKeyId = accessKeyId.trim().ifBlank { existing.accessKeyId },
+                    secretAccessKey = secretAccessKey.trim().ifBlank { existing.secretAccessKey }
+                )
+                require(creds.isConfigured) {
+                    "إعدادات R2 غير صالحة. تأكد من معرّف الحساب والحاوية والمفتاحين، واستخدم نقطة النهاية الرسمية لحساب Cloudflare نفسه."
+                }
+                cloudSyncPreferences.saveCredentials(creds)
+            }.onSuccess {
+                _status.value = "تم حفظ إعدادات R2 مشفّرة محلياً"
+            }.onFailure {
+                _status.value = CloudFailureMessages.userMessage(it)
+            }
         }
     }
 

@@ -15,11 +15,7 @@ class GalaxyViewModel @Inject constructor(
     folderRepository: FolderRepository
 ) : ViewModel() {
 
-    /**
-     * قائمة مسطّحة بكل المجلدات، بلا تجميع حسب parentId.
-     * كل عنصر في هذه القائمة يظهر ككوكب يدور حول الشمس «جامعتي»؛ وهذا مقصود
-     * حتى لا يتحول المجلد الأم إلى مركز مداري لأبنائه.
-     */
+    /** القائمة الكاملة مع parentId؛ تستخدمها المجرة لبناء خريطة الأبوة والأبناء. */
     val folders: StateFlow<List<FolderWithFileCount>> =
         folderRepository.observeFoldersWithFileCount()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

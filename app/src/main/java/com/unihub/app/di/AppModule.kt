@@ -28,9 +28,9 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): UniHubDatabase =
         Room.databaseBuilder(context, UniHubDatabase::class.java, UniHubDatabase.NAME)
-            // تطبيق شخصي غير منشور: عند أي تعارض مخطط مستقبلي تُبنى القاعدة من جديد
-            // بدل الدخول في حلقة كراش. في تطبيق إنتاجي يجب استبدال هذا بهجرات صريحة.
-            .fallbackToDestructiveMigration()
+            // لا تستخدم fallbackToDestructiveMigration: حذف قاعدة مستخدم بصمت غير مقبول.
+            // DatabaseSelfHeal يحاول أولاً حفظ نسخة إنقاذ موثّقة، ثم يعالج القاعدة غير القابلة للفتح.
+            // عند تغيير المخطط مستقبلاً أضف Migration صريحة واختبرها بدلاً من الاعتماد على الحذف.
             .build()
 
     @Provides fun provideFolderDao(db: UniHubDatabase): FolderDao = db.folderDao()

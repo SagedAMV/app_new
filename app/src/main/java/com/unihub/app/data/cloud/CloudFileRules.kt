@@ -41,7 +41,7 @@ object CloudDeleteRules {
     const val MAX_PER_OPERATION: Int = 200
 
     fun isDeletableObjectKey(objectKey: String): Boolean =
-        objectKey.isNotBlank() && !objectKey.endsWith("/") &&
+        S3Encoding.isSafeObjectKey(objectKey) && !objectKey.endsWith("/") &&
             objectKey != CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY &&
             objectKey != CloudflareR2Config.REMOTE_META_OBJECT_KEY &&
             objectKey != CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY &&

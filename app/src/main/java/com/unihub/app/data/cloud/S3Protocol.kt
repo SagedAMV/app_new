@@ -9,6 +9,14 @@ import java.time.Instant
 import javax.xml.parsers.DocumentBuilderFactory
 
 object S3Encoding {
+    /** Reject URL path traversal and control characters before signing any object request. */
+    fun isSafeObjectKey(value: String): Boolean {
+        if (value.isBlank() || value.startsWith('/') || '\\' in value) return false
+        if (value.toByteArray(Charsets.UTF_8).size > 1024) return false
+        if (value.any { it.code < 0x20 || it.code == 0x7f }) return false
+        return value.split('/').none { it == "." || it == ".." }
+    }
+
     fun component(value: String): String = URLEncoder.encode(value, "UTF-8")
         .replace("+", "%20").replace("*", "%2A").replace("%7E", "~")
     fun path(value: String): String = value.split('/').joinToString("/") { component(it) }

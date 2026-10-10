@@ -31,12 +31,11 @@ class CloudTransferNotificationProgressTest {
     }
 
     @Test
-    fun multiFileBatchIncludesCompletedFilesAndCurrentFileFraction() {
+    fun multiFileBatchIncludesCompletedFilesWhenLegacyStateHasNoBatchTotal() {
         val progress = CloudTransferNotificationProgressFactory.from(
             CloudTransferState(CloudTransferKind.DOWNLOAD, "notes.pdf", 3, 4, 50, 100)
         )
         assertEquals(62, progress.percentage)
-        assertEquals(50, progress.currentFilePercentage)
     }
 
     @Test
@@ -48,24 +47,26 @@ class CloudTransferNotificationProgressTest {
                 bytesCompletedBeforeCurrentFile = 200, batchBytesTotal = 1_000
             )
         )
-        // (200 bytes from earlier files + 300 bytes of the active file) / 1000 total bytes.
         assertEquals(50, progress.percentage)
     }
 
     @Test
-    fun fullBytesDoNotClaimBatchCompleteBeforeManagerFinishes() {
+    fun progressClampsToNinetyNineUntilTheManagerFinishes() {
         val progress = CloudTransferNotificationProgressFactory.from(
-            CloudTransferState(CloudTransferKind.DOWNLOAD, "last.pdf", 3, 3, 100, 100)
+            CloudTransferState(
+                CloudTransferKind.DOWNLOAD, "last.pdf", 3, 3, 100, 100,
+                bytesCompletedBeforeCurrentFile = Long.MAX_VALUE,
+                batchBytesTotal = 100
+            )
         )
         assertEquals(99, progress.percentage)
     }
 
     @Test
-    fun preparationPhaseDoesNotReportHundredPercent() {
+    fun preparationPhaseShowsOnlyZeroPercentInNotificationModel() {
         val progress = CloudTransferNotificationProgressFactory.from(
-            CloudTransferState(CloudTransferKind.UPLOAD, "report.pdf", 1, 2, 0, 2_000, "تحضير بصمة report.pdf")
+            CloudTransferState(CloudTransferKind.UPLOAD, "report.pdf", 1, 2, 0, 2_000, "Preparing")
         )
         assertEquals(0, progress.percentage)
-        assertTrue(progress.detail.contains("تحضير بصمة"))
     }
 }

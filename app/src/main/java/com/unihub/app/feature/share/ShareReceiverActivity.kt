@@ -3,6 +3,7 @@ package com.unihub.app.feature.share
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -92,7 +93,17 @@ class ShareReceiverActivity : ComponentActivity() {
         // النسخ قبل أي تنقل — إذن القراءة على ملفات المشاركة يموت مع هذا النشاط
         lifecycleScope.launch {
             try {
-                shareInbox.ingest(uris)
+                val result = shareInbox.ingest(uris)
+                if (result.rejectedMessages.isNotEmpty()) {
+                    val summary = buildString {
+                        if (result.accepted > 0) append("تم حفظ ${result.accepted} ملف. ")
+                        append(result.rejectedMessages.distinct().take(2).joinToString("؛ "))
+                        if (result.rejectedMessages.size > 2) append("؛ وبعض الملفات الأخرى لم تُقبل")
+                    }
+                    Toast.makeText(this@ShareReceiverActivity, summary, Toast.LENGTH_LONG).show()
+                } else if (result.accepted > 0) {
+                    Toast.makeText(this@ShareReceiverActivity, "تمت إضافة ${result.accepted} ملف إلى صندوق المشاركة", Toast.LENGTH_SHORT).show()
+                }
                 startActivity(
                     Intent(this@ShareReceiverActivity, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

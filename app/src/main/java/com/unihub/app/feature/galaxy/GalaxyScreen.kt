@@ -70,9 +70,9 @@ private val SUN_GOLD = Color(0xFFFFD54F)
 private const val GALAXY_KEEP_VISIBLE_DP = 56f
 
 /**
- * مجرة UniHub: «جامعتي» هي الشمس الوحيدة، وجميع المجلدات — الجذرية والفرعية —
- * كواكب مستقلة تدور حولها على حلقات متحدة المركز بسرعات مختلفة. لا تدور أي
- * مجلدات حول مجلد آخر. الضغط على أي كوكب يفتح ذلك المجلد مباشرة.
+ * مجرة UniHub: الجذور تدور قرب شمس «جامعتي»، ثم يظهر كل مستوى من الأبناء
+ * على حلقات أبعد ومتصلًا بأبيه بخيط مرئي. الحركة الزاوية مشتركة لكل المستويات
+ * كي تظل علاقات المجلدات واضحة أثناء الدوران. الضغط على أي كوكب يفتح مجلده.
  */
 @Composable
 fun GalaxyScreen(
@@ -123,7 +123,7 @@ fun GalaxyScreen(
         } else {
             GalaxyUniverse(folders = folders, onOpenFolder = onOpenFolder)
             Text(
-                text = "كل المجلدات تدور حول «جامعتي» · اسحب لاستكشاف المدارات، وقرّب بإصبعين للتحديد",
+                text = "المجلدات الرئيسية قرب «جامعتي»، والفرعية متصلة بأصولها بخيط · اسحب للتنقل وقرّب بإصبعين",
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFFA9B4AD),
                 textAlign = TextAlign.Center,
@@ -246,6 +246,39 @@ private fun GalaxyUniverse(
                     },
                 contentAlignment = Alignment.Center
             ) {
+                // دوران واحد لجميع المستويات؛ تساوي السرعة الزاوية يحافظ على
+                // ثبات المسافة والاتجاه بين كل أب وابنه أثناء الحركة.
+                val orbitTransition = rememberInfiniteTransition(label = "UnifiedFolderHierarchyOrbit")
+                val rotationDegrees by orbitTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = orbitDirectionDegrees(0),
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = orbitDurationMillis(0),
+                            easing = LinearEasing
+                        )
+                    ),
+                    label = "AllFolderOrbitRotation"
+                )
+                val rotationRadians = rotationDegrees * (PI / 180.0)
+                val placementsById = remember(layout) {
+                    layout.placements.associateBy { it.folder.folderId }
+                }
+                val placementsByRing = remember(layout) { layout.placements.groupBy { it.ringIndex } }
+                val visibleRings = remember(
+                    layout, scale, translation, viewportWidthPx, viewportHeightPx, density.density
+                ) {
+                    visibleOrbitRingIndices(
+                        layout = layout,
+                        contentSizePx = contentSizePx,
+                        scale = scale,
+                        translation = translation,
+                        viewportWidthPx = viewportWidthPx,
+                        viewportHeightPx = viewportHeightPx,
+                        density = density.density
+                    )
+                }
+
                 Canvas(Modifier.matchParentSize()) {
                     layout.ringRadiiDp.forEachIndexed { ringIndex, radiusDp ->
                         val alpha = if (ringIndex % 3 == 0) 0.28f else 0.16f
@@ -261,7 +294,32 @@ private fun GalaxyUniverse(
                             )
                         )
                     }
-                    // نقاط صغيرة على الحلقات تمنح المشهد إحساساً مدارياً دون خطوط ربط بالعائلات.
+
+                    // ترسم الوصلات خلف الكواكب كي تختفي أطرافها تحت قرص كل مجلد،
+                    // فلا تبدو الخيوط وكأنها تمر فوق أسماء المجلدات أو داخل الأقراص.
+                    layout.connections.forEach { connection ->
+                        val parent = placementsById[connection.parentFolderId]
+                        val child = placementsById[connection.childFolderId]
+                        if (parent != null && child != null) {
+                            val parentAngle = parent.startAngleRadians + rotationRadians
+                            val childAngle = child.startAngleRadians + rotationRadians
+                            val start = Offset(
+                                x = center.x + parent.radiusDp.dp.toPx() * kotlin.math.cos(parentAngle).toFloat(),
+                                y = center.y + parent.radiusDp.dp.toPx() * kotlin.math.sin(parentAngle).toFloat()
+                            )
+                            val end = Offset(
+                                x = center.x + child.radiusDp.dp.toPx() * kotlin.math.cos(childAngle).toFloat(),
+                                y = center.y + child.radiusDp.dp.toPx() * kotlin.math.sin(childAngle).toFloat()
+                            )
+                            drawLine(
+                                color = Color(0xFFB7C7D4).copy(alpha = 0.62f),
+                                start = start,
+                                end = end,
+                                strokeWidth = 1.15.dp.toPx()
+                            )
+                        }
+                    }
+
                     drawCircle(
                         color = SUN_GOLD.copy(alpha = 0.45f),
                         radius = 2.dp.toPx(),
@@ -269,25 +327,9 @@ private fun GalaxyUniverse(
                     )
                 }
 
-                val orbitTransition = rememberInfiniteTransition(label = "SolarSystemOrbits")
-                val placementsByRing = remember(layout) { layout.placements.groupBy { it.ringIndex } }
-                val visibleRings = remember(
-                    layout, scale, translation, viewportWidthPx, viewportHeightPx, density.density
-                ) {
-                    visibleOrbitRingIndices(
-                        layout = layout,
-                        contentSizePx = contentSizePx,
-                        scale = scale,
-                        translation = translation,
-                        viewportWidthPx = viewportWidthPx,
-                        viewportHeightPx = viewportHeightPx,
-                        density = density.density
-                    )
-                }
                 layout.ringRadiiDp.indices.forEach { ringIndex ->
                     GalaxyOrbitRingLayer(
-                        transition = orbitTransition,
-                        ringIndex = ringIndex,
+                        rotationDegrees = rotationDegrees,
                         placements = placementsByRing[ringIndex].orEmpty(),
                         visible = ringIndex in visibleRings,
                         onOpenFolder = onOpenFolder
@@ -356,23 +398,13 @@ private fun visibleOrbitRingIndices(
 /** تُحدّث زوايا الكواكب داخل الحلقة مع إبقاء الأسماء أفقية دائماً. */
 @Composable
 private fun GalaxyOrbitRingLayer(
-    transition: androidx.compose.animation.core.InfiniteTransition,
-    ringIndex: Int,
+    rotationDegrees: Float,
     placements: List<OrbitingFolder>,
     visible: Boolean,
     onOpenFolder: (Long) -> Unit
 ) {
-    val rotationDegrees by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = orbitDirectionDegrees(ringIndex),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = orbitDurationMillis(ringIndex), easing = LinearEasing)
-        ),
-        label = "orbitRing$ringIndex"
-    )
-
-    // الحساب الإحداثي يحرك الكواكب من دون إنشاء طبقة رسومية بحجم المجرة كاملة
-    // لكل مدار؛ وهذا مهم عندما تكبر اللوحة إلى آلاف dp أو تحتوي آلاف المجلدات.
+    // الحساب الإحداثي يستخدم دورانًا مشتركًا حتى تظل وصلات الأبوة ملتصقة بالعائلة.
+    // ولا ننشئ طبقة بحجم المجرة كاملة لكل حلقة مهما كبر عدد المجلدات.
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (visible) {
             val rotationRadians = rotationDegrees * (PI / 180.0)

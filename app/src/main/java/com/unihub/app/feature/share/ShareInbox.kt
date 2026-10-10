@@ -63,6 +63,12 @@ class ShareInbox @Inject constructor(
 
     private val itemsKey = stringPreferencesKey("inbox_items")
 
+    private companion object {
+        const val TAG = "ShareInbox"
+        const val MAX_INCOMING_FILES = 20
+        const val MAX_INCOMING_TOTAL_BYTES = 512L * 1024 * 1024
+    }
+
     /** قائمة الصندوق الحية — تظهر فوراً في كل شاشات الملفات */
     val items: Flow<List<InboxItem>> = context.shareInboxDataStore.data
         .map { prefs -> parseItems(prefs[itemsKey].orEmpty()) }
@@ -75,10 +81,23 @@ class ShareInbox @Inject constructor(
     suspend fun ingest(uris: List<Uri>): InboxIngestResult = withContext(Dispatchers.IO) {
         var accepted = 0
         val rejectedMessages = mutableListOf<String>()
+        val existingItems = readItemsOnce()
+        var acceptedBytes = existingItems.fold(0L) { total, item ->
+            if (item.size < 0L || total > MAX_INCOMING_TOTAL_BYTES - item.size) MAX_INCOMING_TOTAL_BYTES
+            else total + item.size
+        }
+        val remainingSlots = (MAX_INCOMING_FILES - existingItems.size).coerceAtLeast(0)
+        if (uris.size > remainingSlots) {
+            rejectedMessages += "يمكن الاحتفاظ بما يصل إلى $MAX_INCOMING_FILES ملفًا في صندوق المشاركة؛ ضع الملفات الحالية أو احذفها أولًا"
+        }
 
-        uris.forEach { uri ->
+        uris.take(remainingSlots).forEach { uri ->
             runCatching {
                 val imported = fileStorage.import(uri, "*/*")
+                if (acceptedBytes > MAX_INCOMING_TOTAL_BYTES - imported.size) {
+                    fileStorage.delete(imported.absolutePath)
+                    throw IOException("تجاوزت الملفات المشتركة الحد الإجمالي البالغ 512 م.ب")
+                }
                 val item = InboxItem(
                     id = java.util.UUID.randomUUID().toString(),
                     name = imported.displayName,
@@ -90,11 +109,16 @@ class ShareInbox @Inject constructor(
                 )
                 appendItem(item)
                 accepted++
+                acceptedBytes += imported.size
             }.onFailure { error ->
                 rejectedMessages += when (error) {
                     is InputValidationException -> error.error.message
                     is SecurityException -> "انتهى إذن الوصول لأحد الملفات — أعد مشاركته"
-                    is IOException -> "تعذّرت قراءة أحد الملفات المشتركة"
+                    is IOException -> if (error.message?.startsWith("تجاوزت الملفات المشتركة") == true) {
+                        error.message ?: "تجاوزت الملفات المشتركة الحد الإجمالي"
+                    } else {
+                        "تعذّرت قراءة أحد الملفات المشتركة"
+                    }
                     else -> "تعذّر حفظ أحد الملفات المشتركة"
                 }
                 Log.w(TAG, "رفض ملف وارد من المشاركة", error)
@@ -113,8 +137,12 @@ class ShareInbox @Inject constructor(
         val current = readItemsOnce()
         if (current.isEmpty()) return emptyList()
         val placedIds = mutableListOf<Long>()
+        val successfullyPlacedIds = mutableSetOf<String>()
         current.forEach { item ->
             runCatching {
+                if (!fileStorage.isManagedFilePath(item.filePath)) {
+                    throw IOException("مسار الملف الوارد غير صالح؛ رُفض إدراجه")
+                }
                 val entity = fileRepository.insertSharedFile(
                     FileEntity(
                         name = item.name,
@@ -127,9 +155,12 @@ class ShareInbox @Inject constructor(
                     )
                 )
                 placedIds += entity.id
+                successfullyPlacedIds += item.id
             }.onFailure { Log.e(TAG, "تعذّر وضع الملف المشترك ${item.name}", it) }
         }
-        clearItems()
+        // Remove only inbox entries committed to Room. Failed entries remain retryable;
+        // clearing all of them here used to orphan physical files and lose the user's inbox.
+        removeItems(successfullyPlacedIds)
         return placedIds
     }
 
@@ -165,8 +196,14 @@ class ShareInbox @Inject constructor(
         }
     }
 
-    private suspend fun clearItems() {
-        context.shareInboxDataStore.edit { prefs -> prefs.remove(itemsKey) }
+    private suspend fun removeItems(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        context.shareInboxDataStore.edit { prefs ->
+            val latest = parseItems(prefs[itemsKey].orEmpty())
+            val remaining = latest.filterNot { it.id in ids }
+            if (remaining.isEmpty()) prefs.remove(itemsKey)
+            else prefs[itemsKey] = serializeItems(remaining)
+        }
     }
 
     private fun parseItems(json: String): List<InboxItem> {
@@ -209,7 +246,4 @@ class ShareInbox @Inject constructor(
         return array.toString()
     }
 
-    companion object {
-        private const val TAG = "ShareInbox"
-    }
 }

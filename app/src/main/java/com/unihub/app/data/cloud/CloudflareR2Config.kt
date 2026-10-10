@@ -5,7 +5,8 @@ import com.unihub.app.data.local.entity.FileKind
 /**
  * الإعدادات المركزية لربط التطبيق بخادم Cloudflare R2.
  *
- * القيم الافتراضية مضبوطة على حاوية المستخدم (class-new) وتعمل تلقائياً.
+ * القيم العامة الافتراضية تساعد على ملء الحقول فقط؛ مفاتيح الوصول لا تُضمّن في التطبيق.
+ * يجب ضبط أسرار R2 على الجهاز قبل استخدام السحابة.
  */
 object CloudflareR2Config {
 
@@ -23,11 +24,9 @@ object CloudflareR2Config {
     /** اسم الحاوية (Bucket Name) في Cloudflare R2 */
     const val DEFAULT_BUCKET_NAME: String = "class-new"
 
-    /** معرّف مفتاح الوصول (R2 Access Key ID) */
-    const val DEFAULT_ACCESS_KEY_ID: String = "b453018aa0b0ad6101792f5d48bac2d1"
-
-    /** مفتاح الوصول السري (R2 Secret Access Key) */
-    const val DEFAULT_SECRET_ACCESS_KEY: String = "955f7969dbd97f17b63f0a6fceaf5711b27744b91387a72dd446700eb6e985e6"
+    /** مفاتيح الوصول لا تُضمّن في المصدر أو APK؛ يضيفها المشرف محليًا. */
+    const val DEFAULT_ACCESS_KEY_ID: String = ""
+    const val DEFAULT_SECRET_ACCESS_KEY: String = ""
 
     /** المنطقة الافتراضية المعتمدة في Cloudflare R2 لتوقيع AWS SigV4 */
     const val DEFAULT_REGION: String = "auto"
@@ -114,8 +113,8 @@ data class R2Credentials(
     val accountId: String = CloudflareR2Config.DEFAULT_ACCOUNT_ID,
     val endpointUrl: String = CloudflareR2Config.DEFAULT_ENDPOINT_URL,
     val bucketName: String = CloudflareR2Config.DEFAULT_BUCKET_NAME,
-    val accessKeyId: String = CloudflareR2Config.DEFAULT_ACCESS_KEY_ID,
-    val secretAccessKey: String = CloudflareR2Config.DEFAULT_SECRET_ACCESS_KEY,
+    val accessKeyId: String = "",
+    val secretAccessKey: String = "",
     val region: String = CloudflareR2Config.DEFAULT_REGION
 ) {
     val resolvedEndpoint: String
@@ -136,15 +135,33 @@ data class R2Credentials(
             }
         }
 
+    /**
+     * R2 credentials are sent only to the canonical HTTPS endpoint for the configured
+     * Cloudflare account. Arbitrary endpoints are rejected to prevent credential exfiltration.
+     */
     val isConfigured: Boolean
         get() {
-            val hasEndpoint = resolvedEndpoint.isNotBlank()
-            val hasS3Keys = bucketName.isNotBlank() &&
-                accessKeyId.isNotBlank() &&
-                secretAccessKey.isNotBlank()
-            return hasEndpoint && (hasS3Keys || (endpointUrl.isNotBlank() && accessKeyId.isBlank() && bucketName.isBlank()))
+            val cleanAccount = accountId.trim().lowercase(java.util.Locale.ROOT)
+            val cleanBucket = bucketName.trim()
+            val cleanAccess = accessKeyId.trim()
+            val cleanSecret = secretAccessKey.trim()
+            if (!cleanAccount.matches(Regex("[0-9a-f]{32}")) ||
+                !cleanBucket.matches(Regex("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")) ||
+                ".." in cleanBucket ||
+                cleanAccess.isEmpty() || cleanAccess.length > 256 ||
+                cleanSecret.isEmpty() || cleanSecret.length > 512 ||
+                cleanAccess.any(Char::isISOControl) || cleanSecret.any(Char::isISOControl)) {
+                return false
+            }
+            val uri = runCatching { java.net.URI(resolvedEndpoint) }.getOrNull() ?: return false
+            val host = uri.host?.lowercase(java.util.Locale.ROOT) ?: return false
+            val expectedHost = "$cleanAccount.r2.cloudflarestorage.com"
+            return uri.scheme.equals("https", ignoreCase = true) &&
+                host == expectedHost && (uri.port == -1 || uri.port == 443) &&
+                uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null &&
+                (uri.rawPath.isNullOrEmpty() || uri.rawPath == "/")
         }
 
     val useS3Protocol: Boolean
-        get() = bucketName.isNotBlank() && accessKeyId.isNotBlank() && secretAccessKey.isNotBlank()
+        get() = isConfigured
 }

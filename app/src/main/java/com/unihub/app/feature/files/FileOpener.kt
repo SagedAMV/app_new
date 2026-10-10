@@ -39,7 +39,7 @@ object FileOpener {
 
     /** يفتح الملف بتطبيق خارجي */
     fun open(context: Context, file: FileEntity): FileOpResult {
-        if (!physicalExists(file)) return FileOpResult.MissingFile
+        if (!physicalExists(context, file)) return FileOpResult.MissingFile
         return runCatching {
             val uri = uriFor(context, file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -55,7 +55,7 @@ object FileOpener {
 
     /** يشارك ملفاً واحداً مع تطبيقات أخرى */
     fun share(context: Context, file: FileEntity): FileOpResult {
-        if (!physicalExists(file)) return FileOpResult.MissingFile
+        if (!physicalExists(context, file)) return FileOpResult.MissingFile
         return shareInternal(context, listOf(file))
     }
 
@@ -64,14 +64,18 @@ object FileOpener {
      * ويعيد [FileOpResult.MissingFile] فقط عندما لا يوجد ملف قابل للإرسال إطلاقاً.
      */
     fun shareMultiple(context: Context, files: List<FileEntity>): FileOpResult {
-        val available = files.filter { physicalExists(it) }
+        val available = files.filter { physicalExists(context, it) }
         if (available.isEmpty()) return FileOpResult.MissingFile
         return shareInternal(context, available)
     }
 
     /** هل النسخة الفيزيائية موجودة فعلاً داخل تخزين التطبيق؟ */
-    fun physicalExists(file: FileEntity): Boolean =
-        file.filePath.isNotBlank() && File(file.filePath).isFile
+    private fun physicalExists(context: Context, file: FileEntity): Boolean = runCatching {
+        if (file.filePath.isBlank()) return@runCatching false
+        val libraryRoot = File(context.filesDir, "library").canonicalFile
+        val candidate = File(file.filePath).canonicalFile
+        candidate.isFile && candidate.path.startsWith(libraryRoot.path + File.separator)
+    }.getOrDefault(false)
 
     private fun shareInternal(context: Context, files: List<FileEntity>): FileOpResult =
         runCatching {

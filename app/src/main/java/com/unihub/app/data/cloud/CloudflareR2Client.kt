@@ -292,6 +292,9 @@ class CloudflareR2Client @Inject constructor() {
         query: Map<String, String> = emptyMap()
     ): HttpURLConnection {
         if (!credentials.isConfigured) throw IOException("بيانات خادم R2 غير مضبوطة")
+        if (objectKey != null && !S3Encoding.isSafeObjectKey(objectKey)) {
+            throw IOException("مفتاح الملف السحابي غير صالح أو يحتوي على مسار غير آمن")
+        }
         val base = credentials.resolvedEndpoint.trimEnd('/')
         val bucket = credentials.bucketName.trim().trim('/')
         val endpoint = if (bucket.isNotBlank() && !base.endsWith("/$bucket")) "$base/${S3Encoding.component(bucket)}" else base
@@ -312,8 +315,7 @@ class CloudflareR2Client @Inject constructor() {
 
     private fun authenticate(conn: HttpURLConnection, url: URL, method: String, hash: String, creds: R2Credentials) {
         if (!creds.useS3Protocol) {
-            if (creds.secretAccessKey.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${creds.secretAccessKey}")
-            return
+            throw IOException("يلزم إعداد مفاتيح Cloudflare R2 S3 الصحيحة قبل الاتصال")
         }
         val now = Instant.now().atZone(ZoneOffset.UTC)
         val amzDate = AMZ_DATE.format(now)
@@ -338,7 +340,7 @@ class CloudflareR2Client @Inject constructor() {
         if (status == 412 || status == 409) throw CloudConflictException()
         if (status !in 200..299) {
             // الرقم وجسم الخادم يذهبان للسجلّ فقط؛ المستخدم يرى سببًا إنسانيًا (طبيعة تطبيق.md §5)
-            Log.w(LOG_TAG, "R2 HTTP $status ${conn.url}")
+            Log.w(LOG_TAG, "R2 HTTP $status on ${conn.requestMethod}")
             throw IOException(CloudFailureMessages.messageFor(status))
         }
     }

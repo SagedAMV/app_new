@@ -12,3 +12,8 @@
 local.properties
 push.sh
 giud.md
+
+# Local release-signing material (never commit or distribute these files)
+/keystore.properties
+*.jks
+*.keystore

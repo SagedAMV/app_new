@@ -17,6 +17,7 @@ import com.unihub.app.data.cloud.CloudTransferQueueStore
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -114,9 +115,27 @@ class CloudFilesViewModel @Inject constructor(
 
     private fun enqueue(batch: CloudTransferBatch, confirmation: String) {
         viewModelScope.launch {
-            queue.enqueue(batch)
-            scheduler.enqueueTransfers()
-            controls.announceQueued()
+            try {
+                queue.enqueue(batch)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                messenger.notifyError("تعذّر حفظ طلب النقل؛ لم يبدأ النقل")
+                return@launch
+            }
+
+            if (!scheduler.enqueueTransfers()) {
+                messenger.notifyError("حُفظ طلب النقل، لكن تعذّر تشغيله الآن؛ افتح شاشة السحابة لإعادة المحاولة")
+                return@launch
+            }
+            // تعذّر نشر إشعار النظام لا يلغي النقل المحفوظ أو العامل المجدول.
+            try {
+                controls.announceQueued()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // تظل رسالة الشاشة وتحديث حالة الطابور هما مصدر التأكيد الأساسي.
+            }
             messenger.notify(confirmation + " — يمكنك إغلاق التطبيق وسيكمل النظام")
         }
     }
@@ -128,21 +147,37 @@ class CloudFilesViewModel @Inject constructor(
      * من مقطعه.
      */
     fun pauseTransfers() {
-        viewModelScope.launch { controls.pause() }
+        viewModelScope.launch {
+            performTransferAction("تعذّر إيقاف النقل مؤقتًا؛ حاول مرة أخرى") { controls.pause() }
+        }
     }
 
     fun resumeTransfers() {
-        viewModelScope.launch { controls.resume() }
+        viewModelScope.launch {
+            performTransferSchedulingAction(
+                scheduledMessage = "تم حفظ الاستئناف، لكن تعذّر تشغيل النقل الآن؛ حاول مرة أخرى",
+                failureMessage = "تعذّر استئناف النقل؛ لم يكتمل تحديث الحالة"
+            ) { controls.resume() }
+        }
     }
 
     /** إعادة المحاولة للاستثناءات فقط — لا تُعيد ما اكتمل ولا تُلغي المنجَز */
     fun retryFailedTransfers() {
-        viewModelScope.launch { controls.retryFailed() }
+        viewModelScope.launch {
+            performTransferSchedulingAction(
+                scheduledMessage = "تم تجهيز العناصر لإعادة المحاولة، لكن تعذّر تشغيل النقل الآن",
+                failureMessage = "تعذّرت إعادة تجهيز العناصر؛ حاول مرة أخرى"
+            ) { controls.retryFailed() }
+        }
     }
 
     /** إلغاء ما لم يبدأ فقط */
     fun cancelQueued() {
-        viewModelScope.launch { controls.cancelQueued() }
+        viewModelScope.launch {
+            performTransferAction("تعذّر إكمال إلغاء النقل؛ تحقق من بطاقة النقل وحاول مجددًا") {
+                controls.cancelQueued()
+            }
+        }
     }
 
     /**
@@ -150,10 +185,39 @@ class CloudFilesViewModel @Inject constructor(
      * ولا يُنسى. لا يمسّ بقية الاستثناءات ولا يرجع عن أي نقل منجز.
      */
     fun dismissFailedBatch(batchId: String) {
-        viewModelScope.launch { controls.dismissFailed(batchId) }
+        viewModelScope.launch {
+            performTransferAction("تعذّر إخفاء العنصر الفاشل؛ حاول مرة أخرى") {
+                controls.dismissFailed(batchId)
+            }
+        }
     }
 
+    private suspend fun performTransferAction(
+        failureMessage: String,
+        action: suspend () -> Unit
+    ) {
+        try {
+            action()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            messenger.notifyError(failureMessage)
+        }
+    }
 
+    private suspend fun performTransferSchedulingAction(
+        scheduledMessage: String,
+        failureMessage: String,
+        action: suspend () -> Boolean
+    ) {
+        try {
+            if (!action()) messenger.notifyError(scheduledMessage)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            messenger.notifyError(failureMessage)
+        }
+    }
 
     /** إعادة تسمية ملف داخل السحابة (الاسم والامتداد في البيان؛ المحتوى والمفتاح ثابتان). */
     fun renameFile(remoteKey: String, newName: String) {

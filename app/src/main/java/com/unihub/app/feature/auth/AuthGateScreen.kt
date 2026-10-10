@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -87,6 +88,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.data.auth.AuthSessionState
 import com.unihub.app.data.auth.DeviceApprovalStatus
 import com.unihub.app.data.auth.DeviceChangeRequest
+import com.unihub.app.data.cloud.CloudflareR2Config
 import kotlinx.coroutines.delay
 
 /**
@@ -109,6 +111,8 @@ fun AuthGateScreen(
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val dismissedIds by viewModel.dismissedRequestIds.collectAsStateWithLifecycle()
+    val cloudSettings by viewModel.cloudSettings.collectAsStateWithLifecycle()
+    val isSavingCloudSettings by viewModel.isSavingCloudSettings.collectAsStateWithLifecycle()
 
     AnimatedContent(
         targetState = session,
@@ -168,7 +172,12 @@ fun AuthGateScreen(
                     isBusy = isBusy,
                     initialError = errorMessage ?: current.message,
                     statusMessage = statusMessage,
-                    onLogin = viewModel::login
+                    cloudSettingsConfigured = cloudSettings?.isConfigured == true,
+                    currentAccountId = cloudSettings?.credentials?.accountId ?: CloudflareR2Config.DEFAULT_ACCOUNT_ID,
+                    currentBucketName = cloudSettings?.credentials?.bucketName ?: CloudflareR2Config.DEFAULT_BUCKET_NAME,
+                    isSavingCloudSettings = isSavingCloudSettings,
+                    onLogin = viewModel::login,
+                    onSaveCloudCredentials = viewModel::saveInitialCloudCredentials
                 )
             }
 
@@ -224,11 +233,26 @@ private fun CloudLoginScreen(
     isBusy: Boolean,
     initialError: String?,
     statusMessage: String?,
-    onLogin: (String, String) -> Unit
+    cloudSettingsConfigured: Boolean,
+    currentAccountId: String,
+    currentBucketName: String,
+    isSavingCloudSettings: Boolean,
+    onLogin: (String, String) -> Unit,
+    onSaveCloudCredentials: (String, String, String, String) -> Unit
 ) {
     var username by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var showCloudSetup by rememberSaveable { mutableStateOf(false) }
+    var cloudAccountId by rememberSaveable { mutableStateOf(currentAccountId) }
+    var cloudBucket by rememberSaveable { mutableStateOf(currentBucketName) }
+    var cloudAccessKey by remember { mutableStateOf("") }
+    var cloudSecretKey by remember { mutableStateOf("") }
+
+    LaunchedEffect(currentAccountId, currentBucketName) {
+        cloudAccountId = currentAccountId
+        cloudBucket = currentBucketName
+    }
 
     // أنيميشن الدخول المتدرج (Staggered Entrance) لعناصر واجهة تسجيل الدخول
     var entered by remember { mutableStateOf(false) }
@@ -488,6 +512,12 @@ private fun CloudLoginScreen(
                             }
                         }
 
+                        Text(
+                            text = "لأول تشغيل بلا سجل مصادقة: استخدم اسم المشرف saged واختر كلمة مرور قوية من 12 خانة على الأقل.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
                         Button(
                             onClick = { onLogin(username, password) },
                             enabled = canSubmit,
@@ -527,10 +557,104 @@ private fun CloudLoginScreen(
                                 }
                             }
                         }
+
+                        OutlinedButton(
+                            onClick = { showCloudSetup = true },
+                            enabled = !isBusy && !isSavingCloudSettings,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (cloudSettingsConfigured) "إصلاح أو تغيير اتصال السحابة"
+                                else "إعداد اتصال السحابة — أول تشغيل"
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    if (showCloudSetup) {
+        AlertDialog(
+            onDismissRequest = { if (!isSavingCloudSettings) showCloudSetup = false },
+            title = { Text(if (cloudSettingsConfigured) "إصلاح اتصال Cloudflare R2" else "إعداد اتصال Cloudflare R2") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "أدخل بيانات الحاوية ومفاتيح R2 من لوحة Cloudflare. تستخدم هذه الشاشة قبل تسجيل الدخول لإعداد الاتصال أو إصلاحه، وتُحفظ المفاتيح مشفّرة على هذا الجهاز فقط.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = cloudAccountId,
+                        onValueChange = { cloudAccountId = it.trim() },
+                        label = { Text("Cloudflare Account ID") },
+                        singleLine = true,
+                        enabled = !isSavingCloudSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = cloudBucket,
+                        onValueChange = { cloudBucket = it.trim() },
+                        label = { Text("اسم الحاوية (Bucket)") },
+                        singleLine = true,
+                        enabled = !isSavingCloudSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = cloudAccessKey,
+                        onValueChange = { cloudAccessKey = it },
+                        label = { Text("R2 Access Key ID") },
+                        singleLine = true,
+                        enabled = !isSavingCloudSettings,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = cloudSecretKey,
+                        onValueChange = { cloudSecretKey = it },
+                        label = { Text("R2 Secret Access Key") },
+                        singleLine = true,
+                        enabled = !isSavingCloudSettings,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (!initialError.isNullOrBlank()) {
+                        Text(
+                            text = initialError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { onSaveCloudCredentials(cloudAccountId, cloudBucket, cloudAccessKey, cloudSecretKey) },
+                    enabled = !isSavingCloudSettings && cloudAccountId.isNotBlank() &&
+                        cloudBucket.isNotBlank() &&
+                        (cloudSettingsConfigured || (cloudAccessKey.isNotBlank() && cloudSecretKey.isNotBlank()))
+                ) {
+                    if (isSavingCloudSettings) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("حفظ الإعدادات")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showCloudSetup = false },
+                    enabled = !isSavingCloudSettings
+                ) { Text("إلغاء") }
+            }
+        )
     }
 }
 

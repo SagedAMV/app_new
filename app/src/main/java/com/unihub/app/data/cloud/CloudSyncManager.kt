@@ -241,8 +241,11 @@ class CloudSyncManager @Inject constructor(
         val records = backupRepository.getLocalFileRecords()
         val plan = CloudFolderTree.plan(title, records, backupRepository.getLocalFolders(), fileIds, folderIds)
         val selected = records.filter { it.id in plan.fileIds }
-        plan.copy(totalBytes = selected.filter { File(it.filePath).isFile }.sumOf { File(it.filePath).length() },
-            missingFiles = selected.filterNot { File(it.filePath).isFile }.map { it.name })
+        val safeSelected = selected.filter { backupRepository.isManagedLocalFile(it.filePath) }
+        plan.copy(
+            totalBytes = safeSelected.sumOf { File(it.filePath).length() },
+            missingFiles = selected.filterNot { backupRepository.isManagedLocalFile(it.filePath) }.map { it.name }
+        )
     }
 
     fun cancelDownloads() { downloadJob?.cancel() }
@@ -902,7 +905,8 @@ class CloudSyncManager @Inject constructor(
         var uploaded = 0; var present = 0
         val failed = mutableListOf<String>()
         val batchBytesTotal = plan.fileIds.sumOf { id ->
-            records[id]?.let { record -> File(record.filePath).takeIf { it.isFile }?.length() ?: 0L } ?: 0L
+            records[id]?.takeIf { backupRepository.isManagedLocalFile(it.filePath) }
+                ?.let { record -> File(record.filePath).length() } ?: 0L
         }
         var bytesCompletedBeforeCurrentFile = 0L
         // نشر المجلدات حتى عندما تكون فارغة، قبل بدء الملفات الكبيرة.
@@ -910,6 +914,10 @@ class CloudSyncManager @Inject constructor(
         for ((index, id) in plan.fileIds.withIndex()) {
             val file = records[id]
             if (file == null) { failed += "ملف محلي غير متاح ($id)"; continue }
+            if (!backupRepository.isManagedLocalFile(file.filePath)) {
+                failed += "${file.name} (مسار محلي غير آمن أو الملف غير موجود)"
+                continue
+            }
             val disk = File(file.filePath)
             if (!disk.isFile) { failed += file.name; continue }
             val currentFileBytes = disk.length()

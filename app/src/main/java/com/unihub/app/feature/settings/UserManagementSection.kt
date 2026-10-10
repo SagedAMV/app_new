@@ -1,7 +1,6 @@
 package com.unihub.app.feature.settings
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -45,8 +44,6 @@ import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.UnfoldLess
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -77,6 +74,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.unihub.app.data.auth.AuthSessionState
 import com.unihub.app.data.auth.CloudAuthRegistry
 import com.unihub.app.data.auth.CloudUserAccount
@@ -374,22 +372,13 @@ fun UserManagementSection(
                     filteredUsers.forEach { account ->
                         key(account.username) {
                             val isExpanded = cardsState.isExpanded(account.username)
-                            val isPasswordRevealed = cardsState.isPasswordRevealed(account.username)
 
                             AdminUserAccountCard(
                                 account = account,
                                 isExpanded = isExpanded,
-                                isPasswordRevealed = isPasswordRevealed,
-                                revealedPassword = viewModel.revealUserPassword(account),
                                 busy = authBusy,
                                 onToggleExpand = {
                                     cardsState = SettingsCatalogRules.toggleUserExpanded(
-                                        cardsState,
-                                        account.username
-                                    )
-                                },
-                                onTogglePasswordReveal = {
-                                    cardsState = SettingsCatalogRules.togglePasswordVisibility(
                                         cardsState,
                                         account.username
                                     )
@@ -424,8 +413,7 @@ fun UserManagementSection(
 
     passwordTargetUser?.let { target ->
         AdminChangePasswordDialog(
-            title = "تغيير رمز المستخدم «${target.username}»",
-            currentPasswordPlain = viewModel.revealUserPassword(target),
+            title = "إعادة تعيين كلمة مرور «${target.username}»",
             onConfirm = { newPass ->
                 viewModel.adminChangeUserPassword(target.username, newPass)
                 passwordTargetUser = null
@@ -517,11 +505,8 @@ private fun PendingDeviceRequestCard(
 private fun AdminUserAccountCard(
     account: CloudUserAccount,
     isExpanded: Boolean,
-    isPasswordRevealed: Boolean,
-    revealedPassword: String,
     busy: Boolean,
     onToggleExpand: () -> Unit,
-    onTogglePasswordReveal: () -> Unit,
     onToggleActive: (Boolean) -> Unit,
     onUpdatePermissions: (UserPermissions) -> Unit,
     onChangePassword: () -> Unit,
@@ -747,7 +732,7 @@ private fun AdminUserAccountCard(
                         }
                     }
 
-                    // عرض الرمز الحالي للمشرف مع إمكانية الإظهار/الإخفاء والتغيير
+                    // Password verifiers are one-way; a reset is possible, recovery is not.
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
@@ -756,7 +741,7 @@ private fun AdminUserAccountCard(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -766,30 +751,13 @@ private fun AdminUserAccountCard(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(Modifier.width(8.dp))
-                            Crossfade(
-                                targetState = isPasswordRevealed,
-                                animationSpec = tween(200),
-                                modifier = Modifier.weight(1f),
-                                label = "PasswordTextCrossfade_${account.username}"
-                            ) { revealed ->
-                                Text(
-                                    text = "الرمز الحالي: " + if (revealed) revealedPassword else "••••••",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            IconButton(onClick = onTogglePasswordReveal) {
-                                Icon(
-                                    imageVector = if (isPasswordRevealed) {
-                                        Icons.Outlined.VisibilityOff
-                                    } else {
-                                        Icons.Outlined.Visibility
-                                    },
-                                    contentDescription = if (isPasswordRevealed) "إخفاء الرمز" else "إظهار الرمز"
-                                )
-                            }
+                            Text(
+                                text = "كلمة المرور محمية ولا يمكن عرضها",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
                             TextButton(onClick = onChangePassword, enabled = !busy) {
-                                Text("تغيير الرمز")
+                                Text("إعادة تعيين")
                             }
                         }
                     }
@@ -946,6 +914,7 @@ private fun UserChangeOwnPasswordDialog(
                     value = currentPassword,
                     onValueChange = { currentPassword = it },
                     label = { Text("الرمز الحالي") },
+                    visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -953,6 +922,7 @@ private fun UserChangeOwnPasswordDialog(
                     value = newPassword,
                     onValueChange = { newPassword = it },
                     label = { Text("الرمز الجديد") },
+                    visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -961,7 +931,7 @@ private fun UserChangeOwnPasswordDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(currentPassword, newPassword) },
-                enabled = currentPassword.isNotBlank() && newPassword.trim().length >= 3
+                enabled = currentPassword.isNotBlank() && newPassword.trim().length >= 10
             ) {
                 Text("حفظ الرمز")
             }
@@ -977,7 +947,6 @@ private fun UserChangeOwnPasswordDialog(
 @Composable
 private fun AdminChangePasswordDialog(
     title: String,
-    currentPasswordPlain: String?,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -988,17 +957,16 @@ private fun AdminChangePasswordDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!currentPasswordPlain.isNullOrBlank()) {
-                    Text(
-                        text = "الرمز الحالي المسجل في السحابة: $currentPasswordPlain",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Text(
+                    text = "تُخزّن كلمات المرور كبصمات آمنة، لذلك لا يمكن استعادة القديمة. اختر كلمة مرور جديدة من 10 خانات على الأقل.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 OutlinedTextField(
                     value = newPassword,
                     onValueChange = { newPassword = it },
-                    label = { Text("الرمز الجديد") },
+                    label = { Text("كلمة المرور الجديدة") },
+                    visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1007,7 +975,7 @@ private fun AdminChangePasswordDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(newPassword) },
-                enabled = newPassword.trim().length >= 3
+                enabled = newPassword.trim().length >= 10
             ) {
                 Text("حفظ الرمز")
             }
@@ -1047,6 +1015,7 @@ private fun AddUserDialog(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("رمز الدخول (كلمة المرور)") },
+                    visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1089,7 +1058,7 @@ private fun AddUserDialog(
                         )
                     )
                 },
-                enabled = username.trim().length >= 2 && password.trim().length >= 3
+                enabled = username.trim().length >= 2 && password.trim().length >= 10
             ) {
                 Text("إضافة المستخدم")
             }

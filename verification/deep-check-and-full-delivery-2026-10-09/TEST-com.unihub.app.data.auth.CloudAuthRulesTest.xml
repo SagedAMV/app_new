@@ -3,7 +3,7 @@
   <properties/>
   <testcase name="h1_suspending_or_resetting_user_clears_pending_device_requests" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.193"/>
   <testcase name="h2_ensure_invariants_deduplicates_users_and_prunes_orphan_requests" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.007"/>
-  <testcase name="s1_initial_registry_seeds_admin_saged_with_192168_and_full_permissions" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.009"/>
+  <testcase name="s1_initial_registry_seeds_admin_saged_with_default_password_and_full_permissions" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.009"/>
   <testcase name="s9_admin_saged_cannot_be_deleted_suspended_or_restricted_and_auth_file_is_protected" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.005"/>
   <testcase name="s7_login_without_internet_is_rejected_immediately" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.004"/>
   <testcase name="s6_suspending_or_deleting_user_immediately_invalidates_session_and_permissions" classname="com.unihub.app.data.auth.CloudAuthRulesTest" time="0.006"/>

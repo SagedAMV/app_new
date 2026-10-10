@@ -92,8 +92,10 @@ fun BackupScreen(
             accountId = creds.accountId
             endpointUrl = creds.endpointUrl
             bucketName = creds.bucketName
-            accessKeyId = creds.accessKeyId
-            secretAccessKey = creds.secretAccessKey
+            // Never prefill long-lived credentials into editable UI fields.
+            // Empty fields mean “keep the current encrypted value”.
+            accessKeyId = ""
+            secretAccessKey = ""
         }
     }
 
@@ -252,15 +254,20 @@ fun BackupScreen(
                                 onValueChange = { bucketName = it }
                             )
                             Spacer(Modifier.height(8.dp))
-                            Field(
-                                label = "Access Key ID",
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Access Key ID") },
+                                placeholder = { Text("مفتاح محفوظ؛ اتركه فارغاً للإبقاء عليه") },
                                 value = accessKeyId,
-                                onValueChange = { accessKeyId = it }
+                                onValueChange = { accessKeyId = it },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true
                             )
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text("Secret Access Key") },
+                                placeholder = { Text("مفتاح محفوظ؛ اتركه فارغاً للإبقاء عليه") },
                                 value = secretAccessKey,
                                 onValueChange = { secretAccessKey = it },
                                 visualTransformation = PasswordVisualTransformation(),

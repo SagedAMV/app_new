@@ -52,19 +52,40 @@ class CloudSyncPreferences @Inject constructor(@ApplicationContext private val c
     private val syncAtKey = longPreferencesKey("last_sync_at")
     private val messageKey = stringPreferencesKey("last_sync_message")
     private val successKey = booleanPreferencesKey("last_sync_success")
+    private val secretVault = CredentialSecretVault()
     private val data = context.cloudSyncDataStore.data.catch { error ->
         if (error is IOException) emit(emptyPreferences()) else throw error
     }
     val settings: Flow<CloudSyncSettings> = data.map(::toSettings)
-    suspend fun snapshot(): CloudSyncSettings = settings.first()
+
+    /** Migrate legacy plaintext credentials to Android Keystore encryption before use. */
+    suspend fun snapshot(): CloudSyncSettings {
+        val prefs = data.first()
+        val oldAccess = prefs[accessKey].orEmpty()
+        val oldSecret = prefs[secretKey].orEmpty()
+        if ((oldAccess.isNotBlank() && !secretVault.isEncoded(oldAccess)) ||
+            (oldSecret.isNotBlank() && !secretVault.isEncoded(oldSecret))) {
+            context.cloudSyncDataStore.edit { mutable ->
+                val currentAccess = mutable[accessKey].orEmpty()
+                val currentSecret = mutable[secretKey].orEmpty()
+                if (currentAccess.isNotBlank() && !secretVault.isEncoded(currentAccess)) {
+                    mutable[accessKey] = secretVault.encode(currentAccess)
+                }
+                if (currentSecret.isNotBlank() && !secretVault.isEncoded(currentSecret)) {
+                    mutable[secretKey] = secretVault.encode(currentSecret)
+                }
+            }
+        }
+        return toSettings(prefs)
+    }
 
     private fun toSettings(prefs: Preferences) = CloudSyncSettings(
         credentials = R2Credentials(
             accountId = prefs[accountIdKey] ?: CloudflareR2Config.DEFAULT_ACCOUNT_ID,
             endpointUrl = prefs[endpointKey] ?: CloudflareR2Config.DEFAULT_ENDPOINT_URL,
             bucketName = prefs[bucketKey] ?: CloudflareR2Config.DEFAULT_BUCKET_NAME,
-            accessKeyId = prefs[accessKey] ?: CloudflareR2Config.DEFAULT_ACCESS_KEY_ID,
-            secretAccessKey = prefs[secretKey] ?: CloudflareR2Config.DEFAULT_SECRET_ACCESS_KEY
+            accessKeyId = decodeSecretSafely(prefs[accessKey].orEmpty()),
+            secretAccessKey = decodeSecretSafely(prefs[secretKey].orEmpty())
         ),
         autoSyncEnabled = prefs[autoKey] ?: true,
         pendingUpload = prefs[pendingKey] ?: false,
@@ -76,14 +97,19 @@ class CloudSyncPreferences @Inject constructor(@ApplicationContext private val c
     )
 
     suspend fun saveCredentials(credentials: R2Credentials) {
+        val encodedAccessKey = secretVault.encode(credentials.accessKeyId.trim())
+        val encodedSecretKey = secretVault.encode(credentials.secretAccessKey.trim())
         context.cloudSyncDataStore.edit { prefs ->
             prefs[accountIdKey] = credentials.accountId.trim()
             prefs[endpointKey] = credentials.endpointUrl.trim()
             prefs[bucketKey] = credentials.bucketName.trim()
-            prefs[accessKey] = credentials.accessKeyId.trim()
-            prefs[secretKey] = credentials.secretAccessKey.trim()
+            prefs[accessKey] = encodedAccessKey
+            prefs[secretKey] = encodedSecretKey
         }
     }
+
+    private fun decodeSecretSafely(value: String): String =
+        runCatching { secretVault.decodeOrLegacy(value) }.getOrDefault("")
 
     suspend fun setAutoSyncEnabled(enabled: Boolean) {
         context.cloudSyncDataStore.edit { it[autoKey] = enabled }

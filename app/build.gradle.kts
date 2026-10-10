@@ -7,6 +7,21 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+val signingPropertiesFile = rootProject.file("keystore.properties")
+val signingProperties = java.util.Properties().apply {
+    if (signingPropertiesFile.isFile) {
+        signingPropertiesFile.inputStream().use { load(it) }
+    }
+}
+val releaseStorePath = signingProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val releaseStoreFile = releaseStorePath?.let { rootProject.file(it) }
+val releaseStorePassword = signingProperties.getProperty("storePassword").orEmpty()
+val releaseKeyAlias = signingProperties.getProperty("keyAlias").orEmpty()
+val releaseKeyPassword = signingProperties.getProperty("keyPassword").orEmpty()
+val releaseSigningReady = releaseStoreFile?.isFile == true && releaseStorePassword.isNotBlank() &&
+    releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
+
+
 android {
     namespace = "com.unihub.app"
     compileSdk = 35
@@ -22,12 +37,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            // توقيع شخصي للنسخة المصغّرة — تطبيق غير منشور (البيانات في keystore/unihub-release.jks)
-            storeFile = file("keystore/unihub-release.jks")
-            storePassword = "unihub2026"
-            keyAlias = "unihub"
-            keyPassword = "unihub2026"
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = requireNotNull(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -54,7 +70,7 @@ android {
             // أي تعديل هنا مستقبلاً: اقرأ تقرير_جلسة_تفعيل_النسخة_المصغرة.md أولاً.
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -73,6 +89,7 @@ android {
             initWith(getByName("release"))
             isMinifyEnabled = false
             isShrinkResources = false
+            if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
         }
     }
 
