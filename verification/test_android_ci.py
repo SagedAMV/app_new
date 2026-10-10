@@ -228,6 +228,46 @@ class AndroidCiTest(unittest.TestCase):
                     self.assertIn("device test fixture", (self.root / "ui-tests.log").read_text())
                     self.assertIn("native logcat fixture", (self.root / "ui-logcat.log").read_text())
 
+    def run_deadline_fixture(self, gradle_body, adb_body, test_timeout="5"):
+        binary = self.root / "bin"
+        binary.mkdir()
+        adb = binary / "adb"
+        gradle = self.root / "gradlew"
+        adb.write_text("#!/usr/bin/env bash\n" + adb_body + "\n")
+        gradle.write_text("#!/usr/bin/env bash\n" + gradle_body + "\n")
+        adb.chmod(0o700)
+        gradle.chmod(0o700)
+        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}",
+                           ANDROID_UI_ADB_TIMEOUT_SECONDS="1", ANDROID_UI_TEST_TIMEOUT_SECONDS=test_timeout)
+        return subprocess.run(["bash", str(Path(android_ci.__file__).with_name("run_android_ui_tests.sh"))],
+                              cwd=self.root, env=environment, capture_output=True, text=True, timeout=10)
+
+    def test_device_test_timeout_stops_the_pipeline_and_captures_diagnostics(self):
+        result = self.run_deadline_fixture(
+            'echo "test started fixture"; sleep 30',
+            'if [[ "${2:-}" == "-d" ]]; then echo "captured after timeout fixture"; fi; exit 0',
+            test_timeout="1")
+        self.assertEqual(124, result.returncode, result.stderr)
+        self.assertIn("Android UI timeout", result.stdout)
+        self.assertIn("Device diagnostics finished", result.stdout)
+        self.assertIn("captured after timeout fixture", (self.root / "ui-logcat.log").read_text())
+
+    def test_device_logcat_timeout_preserves_the_test_failure(self):
+        result = self.run_deadline_fixture(
+            'echo "test failed fixture"; exit 7',
+            'if [[ "${2:-}" == "-d" ]]; then echo "partial capture fixture"; sleep 30; fi; exit 0')
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("Could not finish device log capture", result.stdout)
+        self.assertIn("partial capture fixture", (self.root / "ui-logcat.log").read_text())
+
+    def test_device_log_clear_timeout_does_not_block_test_execution(self):
+        result = self.run_deadline_fixture(
+            'echo "test executed fixture"; exit 0',
+            'if [[ "${2:-}" == "-c" ]]; then sleep 30; else echo "device log fixture"; fi; exit 0')
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Could not clear the device log", result.stdout)
+        self.assertIn("test executed fixture", (self.root / "ui-tests.log").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()
