@@ -28,6 +28,12 @@ class R2CredentialsSecurityTest {
         assertFalse(valid.copy(bucketName = "ab").isConfigured)
     }
 
+    @Test fun diagnosticDescriptionRedactsBothKeys() {
+        assertFalse(valid.toString().contains(valid.accessKeyId))
+        assertFalse(valid.toString().contains(valid.secretAccessKey))
+        assertTrue(valid.toString().contains("<redacted>"))
+    }
+
     @Test fun rejectsControlCharactersAndOversizedCredentials() {
         assertFalse(valid.copy(accessKeyId = "key\nHeader: injected").isConfigured)
         assertFalse(valid.copy(secretAccessKey = "x".repeat(513)).isConfigured)

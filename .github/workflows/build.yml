@@ -41,6 +41,11 @@ jobs:
       - name: Check build verification helpers
         run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
 
+      - name: Test encrypted provisioning service locally
+        run: |
+          node --test service/cloudflare/worker.test.mjs
+          python3 service/cloudflare/schema_test.py
+
       - name: Run JVM unit tests
         run: ./gradlew testReleaseFullUnitTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee unit-tests.log
 
@@ -50,7 +55,7 @@ jobs:
       - name: Build installable Debug APK
         run: ./gradlew assembleDebug --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee debug-build.log
 
-      - name: Compile Galaxy UI tests
+      - name: Compile native Android UI tests
         run: ./gradlew assembleDebugAndroidTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee ui-test-build.log
 
       - name: Enable Android emulator acceleration
@@ -59,7 +64,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Test Galaxy measurement and interaction on Android 35
+      - name: Test Galaxy and authentication UI on Android 35
         timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
         with:
@@ -112,7 +117,7 @@ jobs:
 
       - name: Summarize Android UI test results
         if: always()
-        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 11
+        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 16
 
       - name: Upload diagnostic reports
         if: always()

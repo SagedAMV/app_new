@@ -96,10 +96,14 @@ class CloudSyncScheduler @Inject constructor(
         workManager.cancelUniqueWork(ONCE_CLOUD_TRANSFERS)
     }
 
-    fun cancelAll() {
+    fun cancelSync() {
         workManager.cancelUniqueWork(ONCE_CLOUD_SYNC_WORK)
         workManager.cancelUniqueWork(PERIODIC_CLOUD_SYNC_WORK)
-        workManager.cancelUniqueWork(ONCE_CLOUD_TRANSFERS)
+    }
+
+    fun cancelAll() {
+        cancelSync()
+        cancelTransfers()
     }
 
     companion object {

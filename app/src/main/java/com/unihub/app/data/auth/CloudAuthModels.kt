@@ -16,9 +16,9 @@ enum class AuthPermission {
  * صلاحيات المستخدم الفردية كما يحددها المشرف.
  */
 data class UserPermissions(
-    val canDownload: Boolean = true,
-    val canUpload: Boolean = true,
-    val canModify: Boolean = true
+    val canDownload: Boolean = false,
+    val canUpload: Boolean = false,
+    val canModify: Boolean = false
 ) {
     fun allows(permission: AuthPermission): Boolean = when (permission) {
         AuthPermission.DOWNLOAD -> canDownload
@@ -27,6 +27,7 @@ data class UserPermissions(
     }
 
     companion object {
+        val NONE = UserPermissions()
         val FULL = UserPermissions(canDownload = true, canUpload = true, canModify = true)
     }
 }
@@ -89,7 +90,7 @@ data class CloudUserAccount(
     val passwordHash: String,
     val isAdmin: Boolean = false,
     val isActive: Boolean = true,
-    val permissions: UserPermissions = UserPermissions.FULL,
+    val permissions: UserPermissions = UserPermissions.NONE,
     val boundDevice: BoundDeviceInfo? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L

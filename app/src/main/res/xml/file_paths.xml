@@ -2,4 +2,6 @@
 <paths>
     <!-- مجلد مكتبة الملفات داخل التخزين الداخلي للتطبيق -->
     <files-path name="library" path="library/" />
+    <!-- Only public receive requests or device-encrypted connection QR images. -->
+    <cache-path name="connection_qr" path="connection_qr/" />
 </paths>

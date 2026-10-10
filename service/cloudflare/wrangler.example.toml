@@ -1,0 +1,27 @@
+# Copy to wrangler.toml (ignored), configure your real D1 ID, then deploy only with explicit approval.
+name = "unihub-connection-provisioning"
+main = "worker.mjs"
+compatibility_date = "2026-10-10"
+workers_dev = true
+
+[vars]
+# Public identifiers, never API secrets. Must match the Android app's trusted cloud identifiers.
+R2_ACCOUNT_ID = "78c962a13843039b1bc4e0ef91bb4235"
+R2_BUCKET_NAME = "class-new"
+
+[[d1_databases]]
+binding = "PROVISIONING_DB"
+database_name = "unihub-provisioning"
+database_id = "FILL_WITH_YOUR_REAL_D1_DATABASE_ID"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+# Choose a namespace ID unique within your Cloudflare account; it is not an API secret.
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[triggers]
+crons = ["0 3 * * *"]
+
+# Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY using Cloudflare's encrypted Secrets UI.
+# Never add them to this file, Gradle properties, source, APK, invitation rows, or chat.
