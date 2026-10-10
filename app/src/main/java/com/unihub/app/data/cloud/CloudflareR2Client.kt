@@ -34,7 +34,7 @@ internal suspend fun <T> cloudAttempt(block: suspend () -> T): Result<T> = try {
 
 class CloudConflictException : IOException("تغيّرت النسخة على الخادم أثناء العملية؛ أعد الفحص والمحاولة")
 data class R2UploadedObject(val etag: String, val size: Long)
-data class R2TextObject(val text: String, val etag: String)
+data class R2TextObject(val text: String, val etag: String, val notModified: Boolean = false)
 
 /** نقل تدفقي ثابت الذاكرة، توقيع SigV4، وقوائم R2 متعددة الصفحات. */
 @Singleton
@@ -110,21 +110,37 @@ class CloudflareR2Client @Inject constructor() {
     suspend fun downloadTextObject(
         credentials: R2Credentials,
         objectKey: String,
-        expectedEtag: String? = null
+        expectedEtag: String? = null,
+        ifNoneMatchEtag: String? = null,
+        maxResponseBytes: Long = MAX_INDEX_BYTES
     ): Result<R2TextObject?> = withContext(Dispatchers.IO) {
         cloudAttempt {
+            require(maxResponseBytes in 1..MAX_INDEX_BYTES)
+            require(expectedEtag.isNullOrBlank() || ifNoneMatchEtag.isNullOrBlank())
             val conn = connection(credentials, objectKey, "GET").apply {
                 if (!expectedEtag.isNullOrBlank()) setRequestProperty("If-Match", quoteEtag(expectedEtag))
+                if (!ifNoneMatchEtag.isNullOrBlank()) setRequestProperty("If-None-Match", quoteEtag(ifNoneMatchEtag))
             }
             withCancellableConnection(conn) {
-                if (conn.responseCode == 404) null else {
+                if (conn.responseCode == 404) null
+                else if (conn.responseCode == 304 && !ifNoneMatchEtag.isNullOrBlank()) {
+                    R2TextObject("", conn.getHeaderField("ETag").orEmpty().trim('"').ifBlank { ifNoneMatchEtag }, true)
+                } else {
                     requireSuccess(conn)
                     R2TextObject(
-                        conn.inputStream.use { readBoundedText(it) },
+                        conn.inputStream.use { readBoundedText(it, maxResponseBytes) },
                         conn.getHeaderField("ETag").orEmpty().trim('"')
                     )
                 }
             }
+        }
+    }
+
+    /** Read-only live validation; never creates or changes a cloud object. */
+    suspend fun testConnection(credentials: R2Credentials): Result<Unit> = withContext(Dispatchers.IO) {
+        cloudAttempt {
+            val conn = connection(credentials, null, "HEAD")
+            withCancellableConnection(conn) { requireSuccess(conn) }
         }
     }
 
@@ -327,8 +343,12 @@ class CloudflareR2Client @Inject constructor() {
         val scope = "$date/${creds.region}/s3/aws4_request"
         val toSign = "AWS4-HMAC-SHA256\n$amzDate\n$scope\n${sha256Hex(request.toByteArray(Charsets.UTF_8))}"
         var key = ("AWS4${creds.secretAccessKey.trim()}").toByteArray(Charsets.UTF_8)
-        for (part in listOf(date, creds.region, "s3", "aws4_request")) key = hmac(key, part)
-        val signature = hex(hmac(key, toSign))
+        for (part in listOf(date, creds.region, "s3", "aws4_request")) {
+            val previous = key
+            key = hmac(previous, part)
+            previous.fill(0)
+        }
+        val signature = try { hex(hmac(key, toSign)) } finally { key.fill(0) }
         conn.setRequestProperty("x-amz-content-sha256", hash)
         conn.setRequestProperty("x-amz-date", amzDate)
         conn.setRequestProperty("Authorization", "AWS4-HMAC-SHA256 Credential=${creds.accessKeyId.trim()}/$scope, SignedHeaders=$signedHeaders, Signature=$signature")
@@ -345,14 +365,14 @@ class CloudflareR2Client @Inject constructor() {
         }
     }
 
-    private suspend fun readBoundedText(input: InputStream): String {
+    private suspend fun readBoundedText(input: InputStream, maxBytes: Long = MAX_INDEX_BYTES): String {
         val out = ByteArrayOutputStream()
         val buffer = ByteArray(BUFFER_BYTES)
         while (true) {
             currentCoroutineContext().ensureActive()
             val n = input.read(buffer)
             if (n < 0) break
-            if (out.size().toLong() + n > MAX_INDEX_BYTES) throw IOException("الفهرس أكبر من حد الأمان (16 م.ب)")
+            if (out.size().toLong() + n > maxBytes) throw IOException("رد السحابة أكبر من حد الأمان المسموح")
             out.write(buffer, 0, n)
         }
         return out.toString("UTF-8")

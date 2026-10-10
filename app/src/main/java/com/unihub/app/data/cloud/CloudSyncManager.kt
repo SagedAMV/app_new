@@ -11,6 +11,7 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.prefs.CloudSyncPreferences
 import com.unihub.app.core.prefs.CloudSyncSettings
 import com.unihub.app.data.auth.AuthPermission
+import com.unihub.app.data.auth.AuthSessionState
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.local.entity.FileEntity
@@ -29,8 +30,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -133,8 +136,8 @@ class CloudSyncManager @Inject constructor(
                 override fun onLost(network: Network) { refreshNetwork() }
                 private fun refreshNetwork() {
                     val wasOnline = _isOnline.value
-                    if (checkIsOnline() && !wasOnline) scope.launch {
-                        val settings = preferences.snapshot()
+                    if (checkIsOnline() && !wasOnline && authManager.isAuthenticatedNow()) scope.launch {
+                        val settings = preferences.settings.first()
                         if (settings.autoSyncEnabled && settings.isConfigured) {
                             if (foreground) syncWithServer() else scheduler.enqueueSyncWhenConnected()
                         }
@@ -147,12 +150,18 @@ class CloudSyncManager @Inject constructor(
             })
         }.onFailure { Log.w(TAG, "تعذّر تسجيل مراقب الشبكة", it) }
         scope.launch {
-            preferences.settings.map { it.credentials to it.autoSyncEnabled }.distinctUntilChanged().collect { (creds, auto) ->
+            combine(
+                preferences.settings.map { it.credentials to it.autoSyncEnabled }.distinctUntilChanged(),
+                authManager.sessionState.map { it is AuthSessionState.Authenticated }.distinctUntilChanged()
+            ) { settings, authenticated -> Triple(settings.first, settings.second, authenticated) }
+                .collect { (creds, auto, authenticated) ->
                 mutex.withLock {
                     val state = ensureConnection(creds)
                     refreshAvailable(state)
                 }
-                if (auto && creds.isConfigured) scheduler.ensurePeriodicSync() else scheduler.cancelAll()
+                if (!creds.isConfigured || !authenticated) scheduler.cancelAll()
+                else if (auto) scheduler.ensurePeriodicSync()
+                else scheduler.cancelSync()
             }
         }
     }
@@ -168,11 +177,19 @@ class CloudSyncManager @Inject constructor(
         if (pulseJob?.isActive == true) return
         pulseJob = scope.launch {
             while (isActive) {
-                val settings = preferences.snapshot()
-                if (settings.isConfigured && checkIsOnline()) {
-                    authManager.verifyActiveSessionWithCloud()
-                    if (settings.autoSyncEnabled && authManager.isAuthenticatedNow()) {
-                        syncWithServer()
+                if (authManager.isAuthenticatedNow()) {
+                    try {
+                        val settings = preferences.snapshot()
+                        if (settings.isConfigured && checkIsOnline()) {
+                            authManager.verifyActiveSessionWithCloud().getOrThrow()
+                            if (settings.autoSyncEnabled && authManager.isAuthenticatedNow()) {
+                                syncWithServer().getOrThrow()
+                            }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        _lastScanError.value = "تعذّر قراءة الاتصال المحمي أو تحديث السحابة؛ أعد التحقق من الاتصال"
                     }
                 }
                 delay(if (scanState.value.phase == CloudScanPhase.EMPTY) EMPTY_PULSE_INTERVAL_MS else LIVE_PULSE_INTERVAL_MS)

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,7 +10,8 @@ plugins {
 }
 
 val signingPropertiesFile = rootProject.file("keystore.properties")
-val signingProperties = java.util.Properties().apply {
+// Import the type explicitly: Gradle's `java` extension shadows the package here.
+val signingProperties = Properties().apply {
     if (signingPropertiesFile.isFile) {
         signingPropertiesFile.inputStream().use { load(it) }
     }
@@ -22,6 +25,13 @@ val releaseSigningReady = releaseStoreFile?.isFile == true && releaseStorePasswo
     releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
 
 
+// Public endpoint only. Never pass R2 keys or provisioning invitation tokens as Gradle properties.
+val provisioningUrl = providers.gradleProperty("unihub.provisioningUrl").orElse("").get()
+require(provisioningUrl.length <= 2048 && provisioningUrl.none { it.isISOControl() }) {
+    "unihub.provisioningUrl must be a bounded public URL without control characters"
+}
+val provisioningUrlLiteral = "\"" + provisioningUrl.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.unihub.app"
     compileSdk = 35
@@ -32,6 +42,8 @@ android {
         targetSdk = 35
         versionCode = 5
         versionName = "1.3.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "PROVISIONING_URL", provisioningUrlLiteral)
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -104,6 +116,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -117,7 +130,8 @@ android {
     }
 
     lint {
-        abortOnError = false
+        // Lint is a quality gate: a broken build must not be reported as successful.
+        abortOnError = true
         checkReleaseBuilds = true
     }
 }
@@ -176,10 +190,22 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    // QR generation/decoding: pure Java; CameraX remains the native camera implementation.
+    implementation("com.google.zxing:core:3.5.3")
+    // Real JSON implementation for portable auth/provisioning tests (not Android's mock jar).
+    testImplementation("org.json:json:20240303")
+
     // اختبارات الوحدة على JVM — بدونها لا تُترجم ملفات test/ أصلاً
     // (إصلاح جلسة التحقق العميق: GalaxyGeometryTest استوردت org.junit بلا تبعية)
     testImplementation(libs.junit)
 
-    // أدوات التطوير
+    // Actual Compose measurement and hit-testing on an Android emulator.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+
+    // أدوات التطوير والاختبار — لا تدخل في حزمة Release.
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
