@@ -64,6 +64,9 @@ jobs:
         uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
         with:
           emulator-boot-timeout: 300
+          # Pin the host emulator independently of the Android 35 system image.
+          # Emulator 36.1.9; compare against the disappearing 37.2.12 process.
+          emulator-build: 13823996
           api-level: 35
           arch: x86_64
           target: default
