@@ -23,6 +23,14 @@ if [[ "$status" == 124 || "$status" == 137 ]]; then
   echo "::error title=Android UI timeout::Device tests exceeded their deadline; Galaxy is NOT device-verified"
 fi
 
+if [[ "$status" != 0 && "${GITHUB_ACTIONS:-false}" == true ]]; then
+  echo "::notice title=Android UI phase::Capturing bounded host and device connection diagnostics"
+  timeout --kill-after=2s 5s adb devices -l > ui-device-status.log 2>&1 || true
+  timeout --kill-after=2s 5s bash -o pipefail -c 'free -m; ps -eo pid,ppid,rss,comm --sort=-rss | head -n 20; cat /sys/fs/cgroup/memory.events 2>/dev/null' > ui-host-memory.log 2>&1 || true
+  # Read-only kernel evidence, without command arguments or environment secrets.
+  timeout --kill-after=2s 5s bash -o pipefail -c 'sudo -n dmesg | grep -Ei "out of memory|oom-kill|killed process|segfault|qemu|emulator" | tail -n 60' > ui-host-kernel.log 2>&1 || true
+fi
+
 echo "::notice title=Android UI phase::Capturing device log (limit ${adb_timeout}s)"
 timeout --kill-after=5s "${adb_timeout}s" adb logcat -d -v threadtime > ui-logcat.log 2>&1 || echo "::warning title=Android UI diagnostics::Could not finish device log capture within its deadline"
 echo "::notice title=Android UI phase::Device diagnostics finished; returning test status ${status}"

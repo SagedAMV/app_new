@@ -121,6 +121,9 @@ jobs:
             lint.log
             ui-tests.log
             ui-logcat.log
+            ui-device-status.log
+            ui-host-memory.log
+            ui-host-kernel.log
             app/build/outputs/androidTest-results/connected/
             app/build/reports/androidTests/connected/
             app/build/test-results/testReleaseFullUnitTest/

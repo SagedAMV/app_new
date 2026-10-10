@@ -142,6 +142,9 @@ def report(root=ROOT, instrumentation=False, minimum_tests=1):
         else:
             summary.append("- No Android lint report was produced; lint is not verified.")
 
+    device_failed = instrumentation and (
+        totals["tests"] < minimum_tests or any(totals[key] for key in ("failures", "errors", "skipped")))
+
     logs = ("ui-tests.log",) if instrumentation else (
         "unit-tests.log", "lint.log", "debug-build.log", "release-build.log", "ui-test-build.log")
     for name in logs:
@@ -149,6 +152,14 @@ def report(root=ROOT, instrumentation=False, minimum_tests=1):
         if not path.is_file():
             continue
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if device_failed:
+            context = []
+            for index, line in enumerate(lines):
+                if re.search(r"FAILED|crash|INSTRUMENTATION|test run failed", line, re.IGNORECASE):
+                    context.extend(lines[index:index + 8])
+            context = list(dict.fromkeys(context))
+            if context:
+                annotation("warning", "Android test runner context", "\n".join(context[:80])[:12000])
         messages = [line for line in lines if line.startswith("e: ")]
         if "* What went wrong:" in lines:
             start = lines.index("* What went wrong:") + 1
@@ -157,11 +168,22 @@ def report(root=ROOT, instrumentation=False, minimum_tests=1):
             if message.strip():
                 annotation("error", name, message)
 
-    device_failed = instrumentation and (
-        totals["tests"] < minimum_tests or any(totals[key] for key in ("failures", "errors", "skipped")))
     if instrumentation:
         summary.append(f"- Required device coverage: **at least {minimum_tests} executed tests**.")
     if device_failed:
+        for name, title in (("ui-device-status.log", "Android device connection"),
+                            ("ui-host-memory.log", "Android host memory"),
+                            ("ui-host-kernel.log", "Android host kernel")):
+            path = root / name
+            if path.is_file():
+                content = path.read_text(encoding="utf-8", errors="replace").strip()
+                if content:
+                    critical = [line for line in content.splitlines()
+                                if re.search(r"out of memory|oom-kill|killed process|segfault", line, re.IGNORECASE)]
+                    if name == "ui-host-kernel.log" and critical:
+                        annotation("error", title, "\n".join(critical[-60:])[:12000])
+                    else:
+                        annotation("warning", title, content[:12000])
         logcat = root / "ui-logcat.log"
         if logcat.is_file():
             runtime = [line for line in logcat.read_text(encoding="utf-8", errors="replace").splitlines()

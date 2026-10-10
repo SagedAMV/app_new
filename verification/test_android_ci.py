@@ -215,7 +215,7 @@ class AndroidCiTest(unittest.TestCase):
         binary.mkdir()
         adb = binary / "adb"
         gradle = self.root / "gradlew"
-        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}")
+        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}", GITHUB_ACTIONS="false")
         for gradle_status in (0, 7):
             for logcat_status in (0, 23):
                 with self.subTest(gradle_status=gradle_status, logcat_status=logcat_status):
@@ -237,7 +237,7 @@ class AndroidCiTest(unittest.TestCase):
         gradle.write_text("#!/usr/bin/env bash\n" + gradle_body + "\n")
         adb.chmod(0o700)
         gradle.chmod(0o700)
-        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}",
+        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}", GITHUB_ACTIONS="false",
                            ANDROID_UI_ADB_TIMEOUT_SECONDS="1", ANDROID_UI_TEST_TIMEOUT_SECONDS=test_timeout)
         return subprocess.run(["bash", str(Path(android_ci.__file__).with_name("run_android_ui_tests.sh"))],
                               cwd=self.root, env=environment, capture_output=True, text=True, timeout=10)
@@ -267,6 +267,31 @@ class AndroidCiTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("Could not clear the device log", result.stdout)
         self.assertIn("test executed fixture", (self.root / "ui-tests.log").read_text())
+
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_device_runner_context_includes_crash_output(self):
+        (self.root / "ui-tests.log").write_text(
+            "Starting 11 tests\nGalaxy.resize FAILED\nInstrumentation run failed: Process crashed fixture\n"
+            "* What went wrong:\nExecution failed for connectedDebugAndroidTest\n")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True)
+        self.assertIn("Android test runner context", output.getvalue())
+        self.assertIn("Process crashed fixture", output.getvalue())
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_device_host_and_connection_evidence_is_reported_on_failure(self):
+        (self.root / "ui-host-kernel.log").write_text("Out of memory: Killed process 442 (qemu-system) fixture\n")
+        (self.root / "ui-host-memory.log").write_text("Mem: 1024 1020 4 fixture\n")
+        (self.root / "ui-device-status.log").write_text("List of devices attached\nemulator-5554 offline\n")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True)
+        self.assertIn("::error title=Android host kernel::", output.getvalue())
+        self.assertIn("qemu-system", output.getvalue())
+        self.assertIn("Android host memory", output.getvalue())
+        self.assertIn("emulator-5554 offline", output.getvalue())
 
 
 if __name__ == "__main__":
