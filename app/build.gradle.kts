@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,7 +10,8 @@ plugins {
 }
 
 val signingPropertiesFile = rootProject.file("keystore.properties")
-val signingProperties = java.util.Properties().apply {
+// Import the type explicitly: Gradle's `java` extension shadows the package here.
+val signingProperties = Properties().apply {
     if (signingPropertiesFile.isFile) {
         signingPropertiesFile.inputStream().use { load(it) }
     }
@@ -32,6 +35,7 @@ android {
         targetSdk = 35
         versionCode = 5
         versionName = "1.3.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -117,7 +121,8 @@ android {
     }
 
     lint {
-        abortOnError = false
+        // Lint is a quality gate: a broken build must not be reported as successful.
+        abortOnError = true
         checkReleaseBuilds = true
     }
 }
@@ -180,6 +185,13 @@ dependencies {
     // (إصلاح جلسة التحقق العميق: GalaxyGeometryTest استوردت org.junit بلا تبعية)
     testImplementation(libs.junit)
 
-    // أدوات التطوير
+    // Actual Compose measurement and hit-testing on an Android emulator.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+
+    // أدوات التطوير والاختبار — لا تدخل في حزمة Release.
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
