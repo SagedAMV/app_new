@@ -172,6 +172,7 @@ def report(root=ROOT, instrumentation=False, minimum_tests=1):
         summary.append(f"- Required device coverage: **at least {minimum_tests} executed tests**.")
     if device_failed:
         for name, title in (("ui-emulator.log", "Android emulator process"),
+                            ("ui-emulator-status.log", "Android emulator exit"),
                             ("ui-device-status.log", "Android device connection"),
                             ("ui-host-memory.log", "Android host memory"),
                             ("ui-host-kernel.log", "Android host kernel")):

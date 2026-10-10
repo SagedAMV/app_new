@@ -67,6 +67,7 @@ jobs:
           # Pin the host emulator independently of the Android 35 system image.
           # Emulator 36.1.9; compare against the disappearing 37.2.12 process.
           emulator-build: 13823996
+          pre-emulator-launch-script: python3 scripts/emulator_monitor.py install
           api-level: 35
           arch: x86_64
           target: default
@@ -124,6 +125,7 @@ jobs:
             lint.log
             ui-tests.log
             ui-emulator.log
+            ui-emulator-status.log
             ui-logcat.log
             ui-device-status.log
             ui-host-memory.log

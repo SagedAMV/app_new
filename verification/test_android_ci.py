@@ -10,7 +10,74 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import android_ci
+from scripts import android_ci, emulator_monitor
+
+
+class EmulatorMonitorTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.sdk = self.root / "sdk with spaces"
+        self.executable = self.sdk / "emulator/emulator"
+        self.executable.parent.mkdir(parents=True)
+        self.log = self.root / "status.log"
+
+    def launcher(self, body):
+        self.executable.write_text("#!/bin/sh\n" + body + "\n")
+        self.executable.chmod(0o755)
+        with contextlib.redirect_stdout(io.StringIO()):
+            emulator_monitor.install(self.sdk, self.log)
+        return self.executable
+
+    def test_installed_monitor_preserves_arguments_and_failure_without_logging_secrets(self):
+        args_file = self.root / "arguments.txt"
+        launcher = self.launcher(f"printf '%s\\n' \"$@\" > '{args_file}'; exit 7")
+        arguments = ["-gpu", "swiftshader_indirect", "test-only-private-marker with spaces"]
+        result = subprocess.run([str(launcher), *arguments], capture_output=True, text=True, timeout=5)
+        self.assertEqual(7, result.returncode)
+        self.assertEqual(arguments, args_file.read_text().splitlines())
+        content = self.log.read_text()
+        self.assertIn("START monitor_pid=", content)
+        self.assertIn("return_code=7 signal=none", content)
+        self.assertNotIn("test-only-private-marker", content)
+        self.assertNotIn("swiftshader_indirect", content)
+
+    def test_native_signal_is_recorded_and_remains_a_failure(self):
+        launcher = self.launcher("kill -TERM $$")
+        result = subprocess.run([str(launcher)], capture_output=True, text=True, timeout=5)
+        self.assertEqual(143, result.returncode)
+        self.assertIn("return_code=-15 signal=SIGTERM", self.log.read_text())
+
+    def test_diagnostic_write_failure_does_not_replace_native_status(self):
+        launcher = self.launcher("exit 9")
+        self.log.mkdir()
+        result = subprocess.run([str(launcher)], capture_output=True, text=True, timeout=5)
+        self.assertEqual(9, result.returncode)
+        self.assertIn("Could not write CI emulator exit diagnostics", result.stderr)
+
+    def test_installing_twice_refuses_recursive_wrapping(self):
+        launcher = self.launcher("exit 0")
+        before = launcher.read_text()
+        with self.assertRaisesRegex(ValueError, "existing emulator monitor"):
+            emulator_monitor.install(self.sdk, self.log)
+        self.assertEqual(before, launcher.read_text())
+
+    @patch("scripts.emulator_monitor.subprocess.Popen")
+    def test_monitor_forwards_termination_to_native_process(self, popen):
+        child = popen.return_value
+        child.pid = 4321
+        signum = emulator_monitor.signal.SIGTERM
+
+        def interrupted_wait():
+            emulator_monitor.signal.getsignal(signum)(signum, None)
+            return -int(signum)
+
+        child.wait.side_effect = interrupted_wait
+        result = emulator_monitor.monitor(self.executable, self.log, [])
+        self.assertEqual(143, result)
+        child.send_signal.assert_called_once_with(signum)
+        self.assertIn("MONITOR_SIGNAL name=SIGTERM", self.log.read_text())
 
 
 class AndroidCiTest(unittest.TestCase):
@@ -303,6 +370,18 @@ class AndroidCiTest(unittest.TestCase):
         self.assertIn("Android emulator process", output.getvalue())
         self.assertIn("FATAL emulator exit fixture", output.getvalue())
         self.assertNotIn("omitted startup line", output.getvalue())
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_emulator_exit_status_is_reported_without_accepting_missing_tests(self):
+        (self.root / "ui-emulator-status.log").write_text(
+            "2026-10-10T00:00:00+00:00 START monitor_pid=1 native_pid=2\n"
+            "2026-10-10T00:00:30+00:00 EXIT native_pid=2 return_code=-11 signal=SIGSEGV\n"
+        )
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            with self.assertRaises(ValueError):
+                android_ci.report(self.root, instrumentation=True, minimum_tests=11)
+        self.assertIn("Android emulator exit", output.getvalue())
+        self.assertIn("return_code=-11 signal=SIGSEGV", output.getvalue())
 
 
 if __name__ == "__main__":
