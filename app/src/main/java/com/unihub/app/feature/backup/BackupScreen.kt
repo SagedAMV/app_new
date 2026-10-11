@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.ConfirmDialog
+import com.unihub.app.core.common.DateFormats
 import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.SectionHeader
 import java.text.SimpleDateFormat
@@ -67,6 +69,9 @@ fun BackupScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val statusIsError by viewModel.statusIsError.collectAsStateWithLifecycle()
+    // إصلاح: الاستيراد يستبدل كل البيانات الحالية — كان يبدأ بلمسة واحدة دون أي تأكيد
+    var confirmImport by remember { mutableStateOf(false) }
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
@@ -316,7 +321,8 @@ fun BackupScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = { exportLauncher.launch("unihub_backup.zip") },
+                        // إصلاح: اسم ثابت يجعل النسخ الجديدة تختلط بالقديمة أو تستبدلها؛ نضيف التاريخ
+                        onClick = { exportLauncher.launch("unihub_backup_${DateFormats.todayIso()}.zip") },
                         enabled = !isWorking
                     ) {
                         Icon(Icons.Outlined.FileDownload, contentDescription = null)
@@ -339,9 +345,7 @@ fun BackupScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
-                        onClick = {
-                            importLauncher.launch(arrayOf("application/zip", "application/json", "*/*"))
-                        },
+                        onClick = { confirmImport = true },
                         enabled = !isWorking
                     ) {
                         Icon(Icons.Outlined.FileUpload, contentDescription = null)
@@ -367,7 +371,22 @@ fun BackupScreen(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (statusIsError) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (confirmImport) {
+                ConfirmDialog(
+                    title = "استبدال كل البيانات؟",
+                    message = "ستُحذف كل المجلدات والملفات والمهام والملاحظات والامتحانات والجدول الحالية " +
+                        "وتُستبدل بمحتوى النسخة المختارة. يُنصح بتصدير نسخة من بياناتك الحالية أولاً.",
+                    confirmLabel = "متابعة واختيار الملف",
+                    onConfirm = {
+                        confirmImport = false
+                        importLauncher.launch(arrayOf("application/zip", "application/json", "*/*"))
+                    },
+                    onDismiss = { confirmImport = false }
                 )
             }
 
@@ -381,3 +400,4 @@ fun BackupScreen(
 
     }
 }
+

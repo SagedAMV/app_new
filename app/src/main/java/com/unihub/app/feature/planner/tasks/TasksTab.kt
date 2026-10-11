@@ -52,6 +52,10 @@ import com.unihub.app.ui.components.DateField
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FormErrorText
+import com.unihub.app.ui.components.FormWarningText
+import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.UiMessagesHost
 import com.unihub.app.ui.theme.SemanticDanger
@@ -164,9 +168,11 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
             TaskSheet(
                 editing = sheetTask,
                 onDismiss = { showSheet = false },
-                onSave = { title, description, priority, dueDate ->
-                    viewModel.save(sheetTask, title, description, priority, dueDate)
-                    showSheet = false
+                onSave = { title, description, priority, dueDate, reportError ->
+                    // اللوح لا يُغلق إلا بعد نجاح الحفظ فعلياً
+                    viewModel.save(sheetTask, title, description, priority, dueDate) { error ->
+                        if (error == null) showSheet = false else reportError(error)
+                    }
                 },
                 onDelete = sheetTask?.let { existing ->
                     {
@@ -270,7 +276,13 @@ private fun PriorityChip(priority: TaskPriority) {
 private fun TaskSheet(
     editing: TaskEntity?,
     onDismiss: () -> Unit,
-    onSave: (title: String, description: String, priority: TaskPriority, dueDate: String?) -> Unit,
+    onSave: (
+        title: String,
+        description: String,
+        priority: TaskPriority,
+        dueDate: String?,
+        reportError: (String) -> Unit
+    ) -> Unit,
     onDelete: (() -> Unit)?
 ) {
     var title by remember { mutableStateOf(editing?.title ?: "") }
@@ -278,10 +290,21 @@ private fun TaskSheet(
     var priority by remember { mutableStateOf(editing?.priority ?: TaskPriority.MEDIUM) }
     var dueDate by remember { mutableStateOf(editing?.dueDate) }
     var titleError by remember { mutableStateOf<String?>(null) }
+    var formError by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    // تاريخ في الماضي: تنبيه أول ثم يُقبل عند الضغط مرة ثانية (قد يكون مقصوداً)
+    var pastDateConfirmed by remember { mutableStateOf(false) }
+    val isPastDate = UserInputRules.isNewPastDate(dueDate, editing?.dueDate)
+
+    val hasChanges = title != (editing?.title ?: "") ||
+        description != (editing?.description ?: "") ||
+        priority != (editing?.priority ?: TaskPriority.MEDIUM) ||
+        dueDate != editing?.dueDate
 
     AppSheet(
         title = if (editing == null) "مهمة جديدة" else "تعديل المهمة",
         onDismiss = onDismiss,
+        hasUnsavedChanges = hasChanges && !saving,
         actions = {
             if (onDelete != null) {
                 TextButton(onClick = onDelete) {
@@ -289,13 +312,20 @@ private fun TaskSheet(
                 }
             }
             TextButton(onClick = onDismiss) { Text("إلغاء") }
-            FilledTonalButton(onClick = {
-                if (title.isBlank()) {
-                    titleError = "عنوان المهمة مطلوب"
-                } else {
-                    onSave(title, description, priority, dueDate)
+            FilledTonalButton(enabled = !saving, onClick = {
+                formError = null
+                when {
+                    title.isBlank() -> titleError = "عنوان المهمة مطلوب"
+                    isPastDate && !pastDateConfirmed -> pastDateConfirmed = true
+                    else -> {
+                        saving = true
+                        onSave(title, description, priority, dueDate) { error ->
+                            saving = false
+                            formError = error
+                        }
+                    }
                 }
-            }) { Text("حفظ") }
+            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ على أي حال" else "حفظ") }
         }
     ) {
         Field(
@@ -305,13 +335,15 @@ private fun TaskSheet(
                 title = it
                 titleError = null
             },
-            errorText = titleError
+            errorText = titleError,
+            maxLength = InputValidator.MAX_TITLE_LENGTH
         )
         Field(
             label = "وصف (اختياري)",
             value = description,
             onValueChange = { description = it },
-            singleLine = false
+            singleLine = false,
+            maxLength = InputValidator.MAX_TEXT_LENGTH
         )
         Text("الأولوية", style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
@@ -322,8 +354,19 @@ private fun TaskSheet(
         DateField(
             label = "موعد الاستحقاق (اختياري)",
             valueIso = dueDate,
-            onPick = { dueDate = it },
+            onPick = {
+                dueDate = it
+                pastDateConfirmed = false
+            },
             onClear = { dueDate = null }
         )
+        if (isPastDate) {
+            FormWarningText(
+                if (pastDateConfirmed) "تنبيه: موعد الاستحقاق في الماضي — اضغط «حفظ على أي حال» للتأكيد"
+                else "موعد الاستحقاق المختار قد مضى"
+            )
+        }
+        FormErrorText(formError)
     }
 }
+

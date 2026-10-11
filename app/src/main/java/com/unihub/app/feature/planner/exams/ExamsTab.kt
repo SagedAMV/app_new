@@ -49,6 +49,10 @@ import com.unihub.app.ui.components.DateField
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FormErrorText
+import com.unihub.app.ui.components.FormWarningText
+import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.TimeField
@@ -147,9 +151,10 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
             ExamSheet(
                 editing = sheetExam,
                 onDismiss = { showSheet = false },
-                onSave = { subject, type, date, time, room, notes ->
-                    viewModel.save(sheetExam, subject, type, date, time, room, notes)
-                    showSheet = false
+                onSave = { subject, type, date, time, room, notes, reportError ->
+                    viewModel.save(sheetExam, subject, type, date, time, room, notes) { error ->
+                        if (error == null) showSheet = false else reportError(error)
+                    }
                 },
                 onDelete = sheetExam?.let { existing ->
                     {
@@ -251,7 +256,15 @@ private fun ExamRow(
 private fun ExamSheet(
     editing: ExamEntity?,
     onDismiss: () -> Unit,
-    onSave: (subject: String, type: ExamType, date: String?, time: String?, room: String, notes: String) -> Unit,
+    onSave: (
+        subject: String,
+        type: ExamType,
+        date: String?,
+        time: String?,
+        room: String,
+        notes: String,
+        reportError: (String) -> Unit
+    ) -> Unit,
     onDelete: (() -> Unit)?
 ) {
     var subject by remember { mutableStateOf(editing?.subject ?: "") }
@@ -262,10 +275,22 @@ private fun ExamSheet(
     var notes by remember { mutableStateOf(editing?.notes ?: "") }
     var subjectError by remember { mutableStateOf<String?>(null) }
     var dateError by remember { mutableStateOf<String?>(null) }
+    var formError by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var pastDateConfirmed by remember { mutableStateOf(false) }
+    val isPastDate = UserInputRules.isNewPastDate(date, editing?.date)
+
+    val hasChanges = subject != (editing?.subject ?: "") ||
+        type != (editing?.type ?: ExamType.FINAL) ||
+        date != editing?.date ||
+        time != editing?.time?.takeIf { it.isNotBlank() } ||
+        room != (editing?.room ?: "") ||
+        notes != (editing?.notes ?: "")
 
     AppSheet(
         title = if (editing == null) "امتحان جديد" else "تعديل الامتحان",
         onDismiss = onDismiss,
+        hasUnsavedChanges = hasChanges && !saving,
         actions = {
             if (onDelete != null) {
                 TextButton(onClick = onDelete) {
@@ -273,13 +298,23 @@ private fun ExamSheet(
                 }
             }
             TextButton(onClick = onDismiss) { Text("إلغاء") }
-            FilledTonalButton(onClick = {
+            FilledTonalButton(enabled = !saving, onClick = {
+                formError = null
                 subjectError = if (subject.isBlank()) "اسم المادة مطلوب" else null
                 dateError = if (date == null) "حدد تاريخ الامتحان" else null
                 if (subjectError == null && dateError == null) {
-                    onSave(subject, type, date, time, room, notes)
+                    if (isPastDate && !pastDateConfirmed) {
+                        // تنبيه أول: غالباً اختار المستخدم سنة/شهراً خاطئاً بالخطأ
+                        pastDateConfirmed = true
+                    } else {
+                        saving = true
+                        onSave(subject, type, date, time, room, notes) { error ->
+                            saving = false
+                            formError = error
+                        }
+                    }
                 }
-            }) { Text("حفظ") }
+            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ على أي حال" else "حفظ") }
         }
     ) {
         Field(
@@ -289,7 +324,8 @@ private fun ExamSheet(
                 subject = it
                 subjectError = null
             },
-            errorText = subjectError
+            errorText = subjectError,
+            maxLength = InputValidator.MAX_TITLE_LENGTH
         )
         Text("نوع الامتحان", style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
@@ -303,11 +339,15 @@ private fun ExamSheet(
             onPick = {
                 date = it
                 dateError = null
-            }
+                pastDateConfirmed = false
+            },
+            errorText = dateError
         )
-        // عرض خطأ التاريخ بلا أي !! — النمط الآمن يمتص أي تغيير حالة أثناء إعادة التركيب
-        dateError?.let { error ->
-            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+        if (isPastDate) {
+            FormWarningText(
+                if (pastDateConfirmed) "تاريخ الامتحان في الماضي ولن تصلك تذكيرات — اضغط «حفظ على أي حال» للتأكيد"
+                else "تاريخ الامتحان المختار قد مضى — تأكد من اليوم والشهر والسنة"
+            )
         }
         TimeField(
             label = "الوقت (اختياري — يُفترض 9:00)",
@@ -315,12 +355,20 @@ private fun ExamSheet(
             onPick = { time = it },
             onClear = { time = null }
         )
-        Field(label = "القاعة (اختياري)", value = room, onValueChange = { room = it })
+        Field(
+            label = "القاعة (اختياري)",
+            value = room,
+            onValueChange = { room = it },
+            maxLength = InputValidator.MAX_NAME_LENGTH
+        )
         Field(
             label = "ملاحظات (اختياري)",
             value = notes,
             onValueChange = { notes = it },
-            singleLine = false
+            singleLine = false,
+            maxLength = InputValidator.MAX_TEXT_LENGTH
         )
+        FormErrorText(formError)
     }
 }
+

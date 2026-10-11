@@ -124,6 +124,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.core.common.Formatters
+import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.data.local.entity.FolderEntity
@@ -648,9 +649,10 @@ fun FilesScreen(
         if (showAddFolderSheet) {
             AddFolderSheet(
                 onDismiss = { showAddFolderSheet = false },
-                onCreate = { name, description, color ->
-                    viewModel.createFolder(name, description, color)
-                    showAddFolderSheet = false
+                onCreate = { name, description, color, reportError ->
+                    viewModel.createFolder(name, description, color) { error ->
+                        if (error == null) showAddFolderSheet = false else reportError(error)
+                    }
                 }
             )
         }
@@ -673,14 +675,17 @@ fun FilesScreen(
                     is RenameTarget.FileRename -> target.file.name
                 },
                 onDismiss = { renameTarget = null },
-                onSave = { newName ->
+                onSave = { newName, reportError ->
+                    // اللوح يبقى مفتوحاً حتى ينجح الحفظ، والخطأ يظهر داخله
+                    val onResult: (String?) -> Unit = { error ->
+                        if (error == null) renameTarget = null else reportError(error)
+                    }
                     when (target) {
                         is RenameTarget.FolderRename ->
-                            viewModel.renameFolder(target.folder, newName)
+                            viewModel.renameFolder(target.folder, newName, onResult)
                         is RenameTarget.FileRename ->
-                            viewModel.renameFile(target.file, newName)
+                            viewModel.renameFile(target.file, newName, onResult)
                     }
-                    renameTarget = null
                 }
             )
         }
@@ -1659,29 +1664,50 @@ private fun FolderPickerRow(
 @Composable
 private fun AddFolderSheet(
     onDismiss: () -> Unit,
-    onCreate: (name: String, description: String, color: String) -> Unit
+    onCreate: (name: String, description: String, color: String, reportError: (String) -> Unit) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var color by remember { mutableStateOf(FolderPalette.first()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val liveError = if (name.isBlank()) null
+    else InputValidator.validateName(name).exceptionOrNull()?.message
 
     AppSheet(
         title = "إنشاء مجلد",
         onDismiss = onDismiss,
+        hasUnsavedChanges = (name.isNotBlank() || description.isNotBlank()) && !saving,
         actions = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
             FilledTonalButton(
-                onClick = { onCreate(name, description, color) },
-                enabled = name.isNotBlank()
+                onClick = {
+                    saving = true
+                    onCreate(name, description, color) { message ->
+                        saving = false
+                        error = message
+                    }
+                },
+                enabled = name.isNotBlank() && liveError == null && !saving
             ) { Text("إنشاء") }
         }
     ) {
-        Field(label = "اسم المجلد", value = name, onValueChange = { name = it })
+        Field(
+            label = "اسم المجلد",
+            value = name,
+            onValueChange = {
+                name = it
+                error = null
+            },
+            errorText = liveError ?: error,
+            maxLength = InputValidator.MAX_NAME_LENGTH
+        )
         Field(
             label = "وصف (اختياري)",
             value = description,
             onValueChange = { description = it },
-            singleLine = false
+            singleLine = false,
+            maxLength = InputValidator.MAX_TEXT_LENGTH
         )
         Text("اللون", style = MaterialTheme.typography.labelLarge)
         FolderColorPicker(selected = color, onSelect = { color = it })
@@ -1736,20 +1762,44 @@ private fun Modifier.combinedClickableSafely(onClick: () -> Unit): Modifier =
 private fun RenameSheet(
     initialName: String,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (name: String, reportError: (String) -> Unit) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    // فحص فوري للرموز الممنوعة أثناء الكتابة بدل اكتشافها بعد الإغلاق
+    val liveError = if (name.isBlank()) null
+    else InputValidator.validateName(name).exceptionOrNull()?.message
     AppSheet(
         title = "إعادة التسمية",
         onDismiss = onDismiss,
+        hasUnsavedChanges = name != initialName && !saving,
         actions = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
-            FilledTonalButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) {
+            FilledTonalButton(
+                onClick = {
+                    saving = true
+                    onSave(name) { message ->
+                        saving = false
+                        error = message
+                    }
+                },
+                enabled = name.isNotBlank() && liveError == null && !saving
+            ) {
                 Text("حفظ")
             }
         }
     ) {
-        Field(label = "الاسم الجديد", value = name, onValueChange = { name = it })
+        Field(
+            label = "الاسم الجديد",
+            value = name,
+            onValueChange = {
+                name = it
+                error = null
+            },
+            errorText = liveError ?: error,
+            maxLength = InputValidator.MAX_NAME_LENGTH
+        )
     }
 }
 
@@ -1778,3 +1828,4 @@ private fun fileColor(kind: FileKind): Color = when (kind) {
     FileKind.TEXT -> Color(0xFF6E7A4E)
     FileKind.OTHER -> Color(0xFF8A8F8A)
 }
+

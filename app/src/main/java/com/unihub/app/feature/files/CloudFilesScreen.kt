@@ -319,7 +319,12 @@ fun CloudFilesScreen(
             title = if (newFolderParent == null) "مجلد جديد في السحابة" else "مجلد فرعي جديد",
             initialName = "",
             fieldLabel = "اسم المجلد",
-            onSave = { name -> newFolderOpen = false; viewModel.createFolder(name, newFolderParent) },
+            // إصلاح: اللوح كان يُغلق قبل رد الخادم؛ عند الفشل (انقطاع/اسم مكرر) يضيع الإدخال
+            onSave = { name, reportError ->
+                viewModel.createFolder(name, newFolderParent) { error ->
+                    if (error == null) newFolderOpen = false else reportError(error)
+                }
+            },
             onDismiss = { newFolderOpen = false }
         )
     }
@@ -328,7 +333,11 @@ fun CloudFilesScreen(
             title = "إعادة تسمية الملف",
             initialName = file.fullDisplayName,
             fieldLabel = "الاسم الجديد (مع الامتداد)",
-            onSave = { newName -> viewModel.renameFile(file.remoteKey, newName); renameFileTarget = null },
+            onSave = { newName, reportError ->
+                viewModel.renameFile(file.remoteKey, newName) { error ->
+                    if (error == null) renameFileTarget = null else reportError(error)
+                }
+            },
             onDismiss = { renameFileTarget = null }
         )
     }
@@ -337,7 +346,11 @@ fun CloudFilesScreen(
             title = "إعادة تسمية المجلد",
             initialName = folder.name,
             fieldLabel = "الاسم الجديد",
-            onSave = { newName -> viewModel.renameFolder(folder.key, newName); renameFolderTarget = null },
+            onSave = { newName, reportError ->
+                viewModel.renameFolder(folder.key, newName) { error ->
+                    if (error == null) renameFolderTarget = null else reportError(error)
+                }
+            },
             onDismiss = { renameFolderTarget = null }
         )
     }
@@ -737,19 +750,43 @@ private fun CloudRenameSheet(
     title: String,
     initialName: String,
     fieldLabel: String,
-    onSave: (String) -> Unit,
+    onSave: (name: String, reportError: (String) -> Unit) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val unchanged = name.trim() == initialName.trim()
     AppSheet(
         title = title,
         onDismiss = onDismiss,
+        hasUnsavedChanges = !unchanged && !saving,
         actions = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }
-            FilledTonalButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("حفظ") }
+            FilledTonalButton(
+                onClick = {
+                    saving = true
+                    error = null
+                    onSave(name.trim()) { message ->
+                        saving = false
+                        error = message
+                    }
+                },
+                // لا معنى لطلب شبكة إن لم يتغير الاسم، ولا ضغط مزدوج أثناء الانتظار
+                enabled = name.isNotBlank() && !unchanged && !saving
+            ) { Text(if (saving) "جارٍ الحفظ…" else "حفظ") }
         }
     ) {
-        Field(label = fieldLabel, value = name, onValueChange = { name = it })
+        Field(
+            label = fieldLabel,
+            value = name,
+            onValueChange = {
+                name = it
+                error = null
+            },
+            errorText = error,
+            maxLength = 255
+        )
     }
 }
 
@@ -941,3 +978,4 @@ private fun FileKind.icon(): ImageVector = when (this) {
     FileKind.ARCHIVE -> Icons.Filled.FolderZip
     FileKind.OTHER -> Icons.AutoMirrored.Filled.InsertDriveFile
 }
+

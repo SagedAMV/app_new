@@ -11,6 +11,7 @@ import com.unihub.app.core.common.Formatters
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidationException
 import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.data.auth.AuthPermission
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.cloud.CloudSyncManager
@@ -405,11 +406,27 @@ class FilesViewModel @Inject constructor(
 
     // ─── المجلدات ───────────────────────────────────────────────────────
 
-    fun createFolder(name: String, description: String, color: String) {
+    fun createFolder(
+        name: String,
+        description: String,
+        color: String,
+        onResult: (error: String?) -> Unit = {}
+    ) {
         viewModelScope.launch {
+            // إصلاح: الخطأ (مثل اسم فيه «/») يعود للوح المفتوح بدل إغلاقه وإظهار
+            // رسالة خلفه، فلا يضطر المستخدم لإعادة كتابة الاسم والوصف واختيار اللون.
             val validName = InputValidator.validateName(name)
-                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
-                .getOrNull() ?: return@launch
+                .getOrElse {
+                    onResult(CloudFailureMessages.or(it, "اسم غير صالح"))
+                    return@launch
+                }
+            // إصلاح: كان يُسمح بمجلدين بنفس الاسم في نفس المكان
+            val siblings = runCatching { folderRepository.allOnce() }.getOrDefault(emptyList())
+                .filter { it.parentId == folderId }
+            if (UserInputRules.hasDuplicateName(validName, siblings, { it.name }, { it.id })) {
+                onResult("يوجد مجلد باسم «$validName» هنا بالفعل")
+                return@launch
+            }
             runCatching {
                 folderRepository.create(
                     FolderEntity(
@@ -419,26 +436,38 @@ class FilesViewModel @Inject constructor(
                         parentId = folderId
                     )
                 )
-            }.onSuccess { messenger.notify("تم إنشاء المجلد") }
-                .onFailure { messenger.notifyError("فشل إنشاء المجلد") }
+            }.onSuccess {
+                messenger.notify("تم إنشاء المجلد")
+                onResult(null)
+            }.onFailure { onResult("فشل إنشاء المجلد، حاول مجدداً") }
         }
     }
 
-    fun renameFolder(folder: FolderEntity, newName: String) {
+    fun renameFolder(folder: FolderEntity, newName: String, onResult: (error: String?) -> Unit = {}) {
         viewModelScope.launch {
             val validName = InputValidator.validateName(newName)
-                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
-                .getOrNull() ?: return@launch
+                .getOrElse {
+                    onResult(CloudFailureMessages.or(it, "اسم غير صالح"))
+                    return@launch
+                }
             if (validName == folder.name) {
                 messenger.notify("الاسم لم يتغير")
+                onResult(null)
+                return@launch
+            }
+            val siblings = runCatching { folderRepository.allOnce() }.getOrDefault(emptyList())
+                .filter { it.parentId == folder.parentId }
+            if (UserInputRules.hasDuplicateName(validName, siblings, { it.name }, { it.id }, ignoreId = folder.id)) {
+                onResult("يوجد مجلد آخر باسم «$validName» في نفس المكان")
                 return@launch
             }
             runCatching { folderRepository.update(folder.copy(name = validName)) }
                 .onSuccess {
                     messenger.notify("تم إعادة التسمية")
                     if (folder.id == folderId) folderVersion.value++
+                    onResult(null)
                 }
-                .onFailure { messenger.notifyError("فشلت إعادة التسمية") }
+                .onFailure { onResult("فشلت إعادة التسمية، حاول مجدداً") }
         }
     }
 
@@ -487,11 +516,13 @@ class FilesViewModel @Inject constructor(
         viewModelScope.launch {
             importing.value = true
             var ok = 0
+            var failed = 0
             var failedMsg: String? = null
             uris.forEach { uri ->
                 runCatching { fileRepository.import(uri, "*/*", folderId) }
                     .onSuccess { ok++ }
                     .onFailure { e ->
+                        failed++
                         failedMsg = when (e) {
                             is InputValidationException -> e.error.message
                             is SecurityException -> "انتهى إذن الوصول لأحد الملفات — اختره مجدداً"
@@ -502,11 +533,10 @@ class FilesViewModel @Inject constructor(
                     }
             }
             importing.value = false
-            when {
-                ok > 0 && failedMsg == null -> messenger.notify("تم استيراد $ok ملف بنجاح")
-                ok > 0 -> messenger.notify("استُورد $ok ملف، فشل $failedMsg")
-                else -> messenger.notifyError(failedMsg ?: "فشل الاستيراد")
-            }
+            // إصلاح: الرسالة القديمة «استُورد 2 ملف، فشل <سبب>» لم تذكر عدد الفاشل
+            // وكانت تُعرض كرسالة نجاح عادية تختفي وحدها رغم وجود ملفات لم تُستورد.
+            val summary = UserInputRules.importSummary(ok, failed, failedMsg)
+            if (failed == 0) messenger.notify(summary) else messenger.notifyError(summary)
         }
     }
 
@@ -592,18 +622,26 @@ class FilesViewModel @Inject constructor(
         }
     }
 
-    fun renameFile(file: FileEntity, newName: String) {
+    fun renameFile(file: FileEntity, newName: String, onResult: (error: String?) -> Unit = {}) {
         viewModelScope.launch {
-            val validName = InputValidator.validateName(newName)
-                .onFailure { messenger.notifyError(CloudFailureMessages.or(it, "اسم غير صالح")) }
-                .getOrNull() ?: return@launch
+            // إصلاح: كتابة «تقرير.pdf» كانت تنتج «تقرير.pdf.pdf» لأن الامتداد يُضاف تلقائياً
+            val withoutExt = UserInputRules.stripOwnExtension(newName, file.extension)
+            val validName = InputValidator.validateName(withoutExt)
+                .getOrElse {
+                    onResult(CloudFailureMessages.or(it, "اسم غير صالح"))
+                    return@launch
+                }
             if (validName == file.name) {
                 messenger.notify("الاسم لم يتغير")
+                onResult(null)
                 return@launch
             }
             runCatching { fileRepository.rename(file, validName) }
-                .onSuccess { messenger.notify("تم إعادة التسمية") }
-                .onFailure { messenger.notifyError("فشلت إعادة التسمية") }
+                .onSuccess {
+                    messenger.notify("تم إعادة التسمية")
+                    onResult(null)
+                }
+                .onFailure { onResult("فشلت إعادة التسمية، حاول مجدداً") }
         }
     }
 
@@ -614,3 +652,4 @@ class FilesViewModel @Inject constructor(
         }
     }
 }
+

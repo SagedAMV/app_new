@@ -2,8 +2,10 @@ package com.unihub.app.feature.planner.exams
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.data.local.entity.ExamEntity
 import com.unihub.app.data.local.entity.ExamType
 import com.unihub.app.data.repository.ExamRepository
@@ -32,16 +34,43 @@ class ExamsViewModel @Inject constructor(
         date: String?,
         time: String?,
         room: String,
-        notes: String
+        notes: String,
+        onResult: (error: String?) -> Unit = {}
     ) {
         viewModelScope.launch {
+            // إصلاح: الأخطاء تعود للنموذج المفتوح بدل Snackbar خلف لوح مغلق
             val validSubject = InputValidator.validateTitle(subject)
-                .onFailure { messenger.notifyError(it.message ?: "اسم المادة مطلوب") }
-                .getOrNull() ?: return@launch
+                .getOrElse {
+                    onResult(it.message ?: "اسم المادة مطلوب")
+                    return@launch
+                }
 
             val validDate = InputValidator.validateDate(date.orEmpty())
-                .onFailure { messenger.notifyError("حدد تاريخ الامتحان") }
-                .getOrNull() ?: return@launch
+                .getOrElse {
+                    onResult("حدد تاريخ الامتحان")
+                    return@launch
+                }
+
+            val validRoom = InputValidator.sanitizeName(room)
+            if (validRoom.length > InputValidator.MAX_NAME_LENGTH) {
+                onResult("اسم القاعة أطول من المسموح")
+                return@launch
+            }
+
+            // إصلاح: الضغط مرتين على «حفظ» أو إدخال نفس الامتحان مرتين كان يُنشئ
+            // نسخاً مكررة وتذكيرات مضاعفة لنفس الموعد.
+            val duplicate = runCatching { examRepository.allOnce() }.getOrDefault(emptyList())
+                .firstOrNull { other ->
+                    other.id != (editing?.id ?: -1L) &&
+                        UserInputRules.isDuplicateExam(
+                            validSubject, type.name, validDate, time.orEmpty(),
+                            other.subject, other.type.name, other.date, other.time
+                        )
+                }
+            if (duplicate != null) {
+                onResult("يوجد امتحان «${duplicate.subject}» من نفس النوع في نفس التاريخ مسبقاً")
+                return@launch
+            }
 
             runCatching {
                 if (editing == null) {
@@ -51,7 +80,7 @@ class ExamsViewModel @Inject constructor(
                             type = type,
                             date = validDate,
                             time = time.orEmpty(),
-                            room = InputValidator.sanitizeName(room),
+                            room = validRoom,
                             notes = InputValidator.sanitizeText(notes)
                         )
                     )
@@ -62,16 +91,22 @@ class ExamsViewModel @Inject constructor(
                             type = type,
                             date = validDate,
                             time = time.orEmpty(),
-                            room = InputValidator.sanitizeName(room),
+                            room = validRoom,
                             notes = InputValidator.sanitizeText(notes)
                         )
                     )
                 }
             }.onSuccess {
+                val past = DateFormats.daysUntil(validDate)?.let { it < 0 } == true
                 messenger.notify(
-                    if (editing == null) "أُضيف الامتحان وستصلك تذكيرات به" else "تم التحديث"
+                    when {
+                        editing != null -> "تم التحديث"
+                        past -> "أُضيف الامتحان (تاريخه مضى فلن تصلك تذكيرات)"
+                        else -> "أُضيف الامتحان وستصلك تذكيرات به"
+                    }
                 )
-            }.onFailure { messenger.notifyError("تعذّر حفظ الامتحان") }
+                onResult(null)
+            }.onFailure { onResult("تعذّر حفظ الامتحان، حاول مجدداً") }
         }
     }
 
@@ -83,3 +118,4 @@ class ExamsViewModel @Inject constructor(
         }
     }
 }
+

@@ -1,6 +1,9 @@
 package com.unihub.app.ui.components
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,8 +28,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,13 +52,41 @@ fun AppSheet(
     title: String,
     onDismiss: () -> Unit,
     actions: @Composable () -> Unit,
+    hasUnsavedChanges: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    // إصلاح: السحب للأسفل أو زر الرجوع أو اللمس خارج اللوح كان يُغلق النموذج
+    // ويُضيّع كل ما كتبه المستخدم بصمت. الآن نطلب تأكيداً إن وُجدت تغييرات.
+    var askDiscard by remember { mutableStateOf(false) }
+    val unsaved by rememberUpdatedState(hasUnsavedChanges)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == SheetValue.Hidden && unsaved) {
+                askDiscard = true
+                false
+            } else {
+                true
+            }
+        }
+    )
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface
     ) {
+        if (askDiscard) {
+            ConfirmDialog(
+                title = "تجاهل التغييرات؟",
+                message = "لم تُحفظ البيانات التي أدخلتها بعد. هل تريد الخروج دون حفظ؟",
+                confirmLabel = "تجاهل",
+                onConfirm = {
+                    askDiscard = false
+                    onDismiss()
+                },
+                onDismiss = { askDiscard = false }
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -86,17 +120,25 @@ fun Field(
     singleLine: Boolean = true,
     errorText: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    trailingIcon: @Composable (() -> Unit)? = null
+    trailingIcon: @Composable (() -> Unit)? = null,
+    maxLength: Int? = null
 ) {
+    // إصلاح: لم يكن هناك حد للطول أثناء الكتابة، فيكتب المستخدم (أو يلصق) نصاً
+    // طويلاً ثم يُرفض أو يُقص بصمت عند الحفظ. الآن يُمنع تجاوز الحد ويظهر عدّاد قربه.
+    val counter = maxLength?.takeIf { value.length >= (it * 0.8).toInt() }
+        ?.let { "${value.length} / $it" }
+    val supporting = errorText ?: counter
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { incoming ->
+            onValueChange(if (maxLength != null && incoming.length > maxLength) incoming.take(maxLength) else incoming)
+        },
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
         singleLine = singleLine,
         maxLines = if (singleLine) 1 else 8,
         isError = errorText != null,
-        supportingText = errorText?.let { { Text(it) } },
+        supportingText = supporting?.let { { Text(it) } },
         keyboardOptions = keyboardOptions,
         trailingIcon = trailingIcon,
         shape = MaterialTheme.shapes.small
@@ -135,9 +177,19 @@ fun DateField(
     valueIso: String?,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onClear: (() -> Unit)? = null
+    onClear: (() -> Unit)? = null,
+    errorText: String? = null,
+    supportingText: String? = null
 ) {
     var showPicker by remember { mutableStateOf(false) }
+    // إصلاح: الحقل للقراءة فقط ولم يكن لمسه يفتح المنتقي — كان على المستخدم أن
+    // يكتشف الأيقونة الصغيرة. وبعد اختيار تاريخ تختفي أيقونة التقويم ويبقى زر
+    // المسح فقط، فلا يمكن «تغيير» التاريخ إلا بمسحه أولاً.
+    val interactionSource = remember { MutableInteractionSource() }
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { if (it is PressInteraction.Release) showPicker = true }
+    }
+    val helper = errorText ?: supportingText
 
     OutlinedTextField(
         value = valueIso?.let { DateFormats.format(it) } ?: "",
@@ -145,13 +197,18 @@ fun DateField(
         readOnly = true,
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
+        placeholder = { Text("اضغط لاختيار التاريخ") },
         shape = MaterialTheme.shapes.small,
+        interactionSource = interactionSource,
+        isError = errorText != null,
+        supportingText = helper?.let { { Text(it) } },
         trailingIcon = {
-            if (valueIso != null && onClear != null) {
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Filled.Close, contentDescription = "مسح التاريخ")
+            Row {
+                if (valueIso != null && onClear != null) {
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Filled.Close, contentDescription = "مسح التاريخ")
+                    }
                 }
-            } else {
                 IconButton(onClick = { showPicker = true }) {
                     Icon(Icons.Filled.CalendarMonth, contentDescription = "اختيار التاريخ")
                 }
@@ -198,9 +255,16 @@ fun TimeField(
     value: String?,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onClear: (() -> Unit)? = null
+    onClear: (() -> Unit)? = null,
+    errorText: String? = null
 ) {
     var showPicker by remember { mutableStateOf(false) }
+    // إصلاح: لمس الحقل نفسه يفتح المنتقي، وأيقونة الاختيار تبقى ظاهرة بجانب
+    // زر المسح حتى يمكن تغيير الوقت مباشرة دون مسحه أولاً.
+    val interactionSource = remember { MutableInteractionSource() }
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { if (it is PressInteraction.Release) showPicker = true }
+    }
 
     OutlinedTextField(
         value = if (value.isNullOrBlank()) "" else DateFormats.formatTime12(value),
@@ -209,12 +273,16 @@ fun TimeField(
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
         shape = MaterialTheme.shapes.small,
+        interactionSource = interactionSource,
+        isError = errorText != null,
+        supportingText = errorText?.let { { Text(it) } },
         trailingIcon = {
-            if (value != null && onClear != null) {
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Filled.Close, contentDescription = "مسح الوقت")
+            Row {
+                if (!value.isNullOrBlank() && onClear != null) {
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Filled.Close, contentDescription = "مسح الوقت")
+                    }
                 }
-            } else {
                 IconButton(onClick = { showPicker = true }) {
                     Icon(Icons.Filled.Schedule, contentDescription = "اختيار الوقت")
                 }
@@ -247,4 +315,30 @@ fun TimeField(
             text = { TimePicker(state = state) }
         )
     }
+}
+
+
+/**
+ * رسالة خطأ عامة داخل النموذج نفسه — بديل الـ Snackbar الذي كان يظهر خلف اللوح
+ * السفلي (ModalBottomSheet نافذة مستقلة فوق الشاشة) فلا يراه المستخدم.
+ */
+@Composable
+fun FormErrorText(message: String?) {
+    if (message.isNullOrBlank()) return
+    Text(
+        text = message,
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyMedium
+    )
+}
+
+/** تنبيه غير مانع داخل النموذج (مثل تاريخ في الماضي) */
+@Composable
+fun FormWarningText(message: String?) {
+    if (message.isNullOrBlank()) return
+    Text(
+        text = message,
+        color = MaterialTheme.colorScheme.tertiary,
+        style = MaterialTheme.typography.bodyMedium
+    )
 }

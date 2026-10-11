@@ -50,6 +50,9 @@ import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
 import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.Field
+import com.unihub.app.ui.components.FormErrorText
+import com.unihub.app.core.validation.InputValidator
+import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.TimeField
@@ -172,9 +175,10 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
             LectureSheet(
                 editing = sheetLecture,
                 onDismiss = { showSheet = false },
-                onSave = { subject, doctor, day, from, to, room ->
-                    viewModel.save(sheetLecture, subject, doctor, day, from, to, room)
-                    showSheet = false
+                onSave = { subject, doctor, day, from, to, room, reportError ->
+                    viewModel.save(sheetLecture, subject, doctor, day, from, to, room) { error ->
+                        if (error == null) showSheet = false else reportError(error)
+                    }
                 },
                 onDelete = sheetLecture?.let { existing ->
                     {
@@ -263,7 +267,15 @@ private fun LectureRow(
 private fun LectureSheet(
     editing: LectureEntity?,
     onDismiss: () -> Unit,
-    onSave: (subject: String, doctor: String, day: Weekday, from: String?, to: String?, room: String) -> Unit,
+    onSave: (
+        subject: String,
+        doctor: String,
+        day: Weekday,
+        from: String?,
+        to: String?,
+        room: String,
+        reportError: (String) -> Unit
+    ) -> Unit,
     onDelete: (() -> Unit)?
 ) {
     var subject by remember { mutableStateOf(editing?.subject ?: "") }
@@ -273,10 +285,22 @@ private fun LectureSheet(
     var to by remember { mutableStateOf(editing?.timeTo?.takeIf { it.isNotBlank() }) }
     var room by remember { mutableStateOf(editing?.room ?: "") }
     var subjectError by remember { mutableStateOf<String?>(null) }
+    var fromError by remember { mutableStateOf<String?>(null) }
+    var toError by remember { mutableStateOf<String?>(null) }
+    var formError by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+
+    val hasChanges = subject != (editing?.subject ?: "") ||
+        doctor != (editing?.doctor ?: "") ||
+        (editing != null && day != editing.day) ||
+        from != editing?.timeFrom ||
+        to != editing?.timeTo?.takeIf { it.isNotBlank() } ||
+        room != (editing?.room ?: "")
 
     AppSheet(
         title = if (editing == null) "محاضرة جديدة" else "تعديل المحاضرة",
         onDismiss = onDismiss,
+        hasUnsavedChanges = hasChanges && !saving,
         actions = {
             if (onDelete != null) {
                 TextButton(onClick = onDelete) {
@@ -284,9 +308,20 @@ private fun LectureSheet(
                 }
             }
             TextButton(onClick = onDismiss) { Text("إلغاء") }
-            FilledTonalButton(onClick = {
-                if (subject.isBlank()) subjectError = "اسم المادة مطلوب"
-                else onSave(subject, doctor, day, from, to, room)
+            FilledTonalButton(enabled = !saving, onClick = {
+                formError = null
+                // إصلاح: فحص وقت البداية ونطاق الوقت هنا قبل الإرسال، مع إبراز الحقل المخطئ
+                subjectError = if (subject.isBlank()) "اسم المادة مطلوب" else null
+                fromError = if (from.isNullOrBlank()) "حدد وقت البداية" else null
+                val rangeError = UserInputRules.lectureFormError(subject, from, to)
+                toError = if (subjectError == null && fromError == null) rangeError else null
+                if (subjectError == null && fromError == null && toError == null) {
+                    saving = true
+                    onSave(subject, doctor, day, from, to, room) { error ->
+                        saving = false
+                        formError = error
+                    }
+                }
             }) { Text("حفظ") }
         }
     ) {
@@ -297,31 +332,59 @@ private fun LectureSheet(
                 subject = it
                 subjectError = null
             },
-            errorText = subjectError
+            errorText = subjectError,
+            maxLength = InputValidator.MAX_TITLE_LENGTH
         )
-        Field(label = "اسم الدكتور (اختياري)", value = doctor, onValueChange = { doctor = it })
+        Field(
+            label = "اسم الدكتور (اختياري)",
+            value = doctor,
+            onValueChange = { doctor = it },
+            maxLength = InputValidator.MAX_NAME_LENGTH
+        )
         Text("اليوم", style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
             labels = Weekday.entries.map { it.shortLabel },
             selectedIndex = Weekday.entries.indexOf(day),
-            onSelect = { day = Weekday.entries[it] }
+            onSelect = {
+                day = Weekday.entries[it]
+                formError = null
+            }
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             TimeField(
                 label = "من",
                 value = from,
-                onPick = { from = it },
+                onPick = {
+                    from = it
+                    fromError = null
+                    toError = null
+                },
                 onClear = { from = null },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                errorText = fromError
             )
             TimeField(
                 label = "إلى (اختياري)",
                 value = to,
-                onPick = { to = it },
-                onClear = { to = null },
-                modifier = Modifier.weight(1f)
+                onPick = {
+                    to = it
+                    toError = null
+                },
+                onClear = {
+                    to = null
+                    toError = null
+                },
+                modifier = Modifier.weight(1f),
+                errorText = toError
             )
         }
-        Field(label = "القاعة (اختياري)", value = room, onValueChange = { room = it })
+        Field(
+            label = "القاعة (اختياري)",
+            value = room,
+            onValueChange = { room = it },
+            maxLength = InputValidator.MAX_NAME_LENGTH
+        )
+        FormErrorText(formError)
     }
 }
+

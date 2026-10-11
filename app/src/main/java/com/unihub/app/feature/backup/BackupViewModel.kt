@@ -26,6 +26,14 @@ class BackupViewModel @Inject constructor(
 ) : ViewModel() {
     private val _status = MutableStateFlow<String?>(null)
     val status = _status.asStateFlow()
+    // إصلاح: رسائل الفشل كانت تُعرض بلون النجاح نفسه (primary) فلا ينتبه المستخدم أنها فشلت
+    private val _statusIsError = MutableStateFlow(false)
+    val statusIsError = _statusIsError.asStateFlow()
+
+    private fun showStatus(message: String?, isError: Boolean = false) {
+        _statusIsError.value = isError
+        _status.value = message
+    }
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
     val isOnline = cloudSyncManager.isOnline
@@ -47,16 +55,16 @@ class BackupViewModel @Inject constructor(
     }
 
     fun syncWithCloud() = runBusy {
-        _status.value = null
+        showStatus(null)
         cloudSyncManager.syncWithServer(true)
-            .onSuccess { _status.value = it }
-            .onFailure { _status.value = CloudFailureMessages.userMessage(it) }
+            .onSuccess { showStatus(it) }
+            .onFailure { showStatus(CloudFailureMessages.userMessage(it), isError = true) }
     }
 
     fun pushToCloud() = runBusy {
         cloudSyncManager.pushToServer()
-            .onSuccess { _status.value = "تم تحديث بيانات الخادم ($it عنصر) دون حذف الملفات غير المنزّلة" }
-            .onFailure { _status.value = CloudFailureMessages.userMessage(it) }
+            .onSuccess { showStatus("تم تحديث بيانات الخادم ($it عنصر) دون حذف الملفات غير المنزّلة") }
+            .onFailure { showStatus(CloudFailureMessages.userMessage(it), isError = true) }
     }
 
     fun setAutoSyncEnabled(enabled: Boolean) {
@@ -69,7 +77,7 @@ class BackupViewModel @Inject constructor(
     fun saveCloudCredentials(accountId: String, endpointUrl: String, bucketName: String, accessKeyId: String, secretAccessKey: String) {
         viewModelScope.launch {
             authManager.requireAdmin().getOrElse {
-                _status.value = CloudFailureMessages.or(it, "تعديل إعدادات الخادم السحابي متاح للمشرف فقط")
+                showStatus(CloudFailureMessages.or(it, "تعديل إعدادات الخادم السحابي متاح للمشرف فقط"), isError = true)
                 return@launch
             }
             runCatching {
@@ -86,22 +94,23 @@ class BackupViewModel @Inject constructor(
                 }
                 cloudSyncPreferences.saveCredentials(creds)
             }.onSuccess {
-                _status.value = "تم حفظ إعدادات R2 مشفّرة محلياً"
+                showStatus("تم حفظ إعدادات R2 مشفّرة محلياً")
             }.onFailure {
-                _status.value = CloudFailureMessages.userMessage(it)
+                showStatus(CloudFailureMessages.userMessage(it), isError = true)
             }
         }
     }
 
     fun exportTo(uri: Uri) = runBusy {
         backupRepository.export(uri)
-            .onSuccess { _status.value = "تم تصدير النسخة المحلية ($it عنصر)" }
-            .onFailure { _status.value = "فشل التصدير: ${it.message}" }
+            .onSuccess { showStatus("تم تصدير النسخة المحلية ($it عنصر)") }
+            .onFailure { showStatus("فشل التصدير: " + CloudFailureMessages.or(it, "تعذّرت كتابة الملف"), isError = true) }
     }
 
     fun importFrom(uri: Uri) = runBusy {
         backupRepository.import(uri)
-            .onSuccess { _status.value = "تم استيراد $it عنصر وأُعيدت جدولة التذكيرات" }
-            .onFailure { _status.value = "فشل الاستيراد: ${it.message}" }
+            .onSuccess { showStatus("تم استيراد $it عنصر وأُعيدت جدولة التذكيرات") }
+            .onFailure { showStatus("فشل الاستيراد: " + CloudFailureMessages.or(it, "الملف ليس نسخة احتياطية صالحة"), isError = true) }
     }
 }
+

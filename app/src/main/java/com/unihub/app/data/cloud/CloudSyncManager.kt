@@ -593,9 +593,11 @@ class CloudSyncManager @Inject constructor(
             ?: throw IOException("الملف لم يعد في قائمة السحابة؛ اضغط فحص ثم أعد المحاولة")
         val cleaned = newNameWithExtension.trim().trim('.')
         if (cleaned.isBlank() || cleaned.contains('/')) throw IOException("اسم غير صالح: لا يمكن أن يكون فارغاً أو يحوي /")
-        val dot = cleaned.lastIndexOf('.')
-        val name = if (dot > 0) cleaned.substring(0, dot) else cleaned
-        val extension = (if (dot > 0) cleaned.substring(dot + 1) else current.extension)
+        // إصلاح: نقطة داخل الاسم («ملخص د. أحمد») كانت تُغيّر امتداد الملف ونوعه
+        val (splitName, splitExt) = com.unihub.app.core.validation.UserInputRules
+            .splitRenamedFileName(cleaned, current.extension)
+        val name = splitName.ifBlank { throw IOException("اسم غير صالح: لا يمكن أن يكون فارغاً") }
+        val extension = splitExt
             .lowercase(Locale.US).filter { it.isLetterOrDigit() }
             .ifBlank { current.extension.ifBlank { "bin" } }
         val updated = current.copy(
@@ -1236,3 +1238,4 @@ class CloudSyncManager @Inject constructor(
         private const val RESERVE_BYTES = 16L * 1024 * 1024
     }
 }
+

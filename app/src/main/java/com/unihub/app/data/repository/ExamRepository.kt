@@ -23,6 +23,9 @@ class ExamRepository @Inject constructor(
     fun observeUpcomingCount(): Flow<Int> =
         examDao.observeUpcomingCount(DateFormats.todayIso())
 
+    /** لقطة كل الامتحانات — لكشف التكرار قبل الحفظ */
+    suspend fun allOnce(): List<ExamEntity> = examDao.getAllOnce()
+
     suspend fun create(exam: ExamEntity): Long {
         val id = examDao.insert(exam)
         reminderScheduler.scheduleExamReminders(exam.copy(id = id))
@@ -40,3 +43,4 @@ class ExamRepository @Inject constructor(
         examDao.delete(exam)
     }
 }
+

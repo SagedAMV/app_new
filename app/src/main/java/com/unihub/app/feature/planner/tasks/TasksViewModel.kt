@@ -77,12 +77,21 @@ class TasksViewModel @Inject constructor(
         title: String,
         description: String,
         priority: TaskPriority,
-        dueDate: String?
+        dueDate: String?,
+        onResult: (error: String?) -> Unit = {}
     ) {
         viewModelScope.launch {
+            // إصلاح: الخطأ يعود للنموذج المفتوح عبر [onResult] بدل Snackbar يظهر
+            // خلف اللوح بعد إغلاقه وضياع ما كتبه المستخدم.
             val validTitle = InputValidator.validateTitle(title)
-                .onFailure { messenger.notifyError(it.message ?: "عنوان غير صالح") }
-                .getOrNull() ?: return@launch
+                .getOrElse {
+                    onResult(it.message ?: "عنوان غير صالح")
+                    return@launch
+                }
+            if (dueDate != null && InputValidator.validateDate(dueDate).isFailure) {
+                onResult("تاريخ الاستحقاق غير صالح")
+                return@launch
+            }
 
             runCatching {
                 if (editing == null) {
@@ -104,8 +113,10 @@ class TasksViewModel @Inject constructor(
                         )
                     )
                 }
-            }.onSuccess { messenger.notify(if (editing == null) "أُضيفت المهمة" else "تم التحديث") }
-                .onFailure { messenger.notifyError("تعذّر حفظ المهمة") }
+            }.onSuccess {
+                messenger.notify(if (editing == null) "أُضيفت المهمة" else "تم التحديث")
+                onResult(null)
+            }.onFailure { onResult("تعذّر حفظ المهمة، حاول مجدداً") }
         }
     }
 
@@ -117,3 +128,4 @@ class TasksViewModel @Inject constructor(
         }
     }
 }
+

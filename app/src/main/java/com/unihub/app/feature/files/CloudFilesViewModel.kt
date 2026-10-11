@@ -73,11 +73,14 @@ class CloudFilesViewModel @Inject constructor(
     }
 
     /** إنشاء مجلد داخل السحابة: parentKey = null يعني المستوى الرئيسي للشاشة. */
-    fun createFolder(name: String, parentKey: String?) {
+    fun createFolder(name: String, parentKey: String?, onResult: (error: String?) -> Unit = {}) {
         viewModelScope.launch {
             manager.createRemoteFolder(name, parentKey).fold(
-                onSuccess = { messenger.notify("أُنشئ المجلد «$name» في السحابة") },
-                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّر إنشاء المجلد")) }
+                onSuccess = {
+                    messenger.notify("أُنشئ المجلد «${name.trim()}» في السحابة")
+                    onResult(null)
+                },
+                onFailure = { onResult(CloudFailureMessages.or(it, "تعذّر إنشاء المجلد")) }
             )
         }
     }
@@ -220,11 +223,14 @@ class CloudFilesViewModel @Inject constructor(
     }
 
     /** إعادة تسمية ملف داخل السحابة (الاسم والامتداد في البيان؛ المحتوى والمفتاح ثابتان). */
-    fun renameFile(remoteKey: String, newName: String) {
+    fun renameFile(remoteKey: String, newName: String, onResult: (error: String?) -> Unit = {}) {
         viewModelScope.launch {
             manager.renameRemoteFile(remoteKey, newName).fold(
-                onSuccess = { messenger.notify("أُعيدت تسمية الملف في السحابة") },
-                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّرت إعادة التسمية")) }
+                onSuccess = {
+                    messenger.notify("أُعيدت تسمية الملف في السحابة")
+                    onResult(null)
+                },
+                onFailure = { onResult(CloudFailureMessages.or(it, "تعذّرت إعادة التسمية")) }
             )
         }
     }
@@ -243,11 +249,14 @@ class CloudFilesViewModel @Inject constructor(
     }
 
     /** إعادة تسمية مجلد سحابي أنشأه التطبيق؛ مجلدات المسار المادي لا تُعاد تسميتها هنا. */
-    fun renameFolder(folderKey: String, newName: String) {
+    fun renameFolder(folderKey: String, newName: String, onResult: (error: String?) -> Unit = {}) {
         viewModelScope.launch {
             manager.renameRemoteFolder(folderKey, newName).fold(
-                onSuccess = { messenger.notify("أُعيدت تسمية المجلد في السحابة") },
-                onFailure = { messenger.notifyError(CloudFailureMessages.or(it, "تعذّرت إعادة تسمية المجلد")) }
+                onSuccess = {
+                    messenger.notify("أُعيدت تسمية المجلد في السحابة")
+                    onResult(null)
+                },
+                onFailure = { onResult(CloudFailureMessages.or(it, "تعذّرت إعادة تسمية المجلد")) }
             )
         }
     }
@@ -275,3 +284,4 @@ class CloudFilesViewModel @Inject constructor(
         }
     }
 }
+
