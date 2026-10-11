@@ -1737,19 +1737,35 @@ private fun FolderColorPicker(selected: String, onSelect: (String) -> Unit) {
                     .combinedClickableSafely(onClick = { onSelect(hex) }),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedVisibility(
-                    visible = isSelected,
-                    enter = scaleIn(initialScale = 0.2f, animationSpec = spring(dampingRatio = 0.4f, stiffness = 520f)) + fadeIn(tween(120)),
-                    exit = scaleOut(targetScale = 0.2f, animationSpec = tween(100)) + fadeOut(tween(100))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(Color.White, CircleShape)
-                    )
-                }
+                SelectedSwatchIndicator(visible = isSelected)
             }
         }
+    }
+}
+
+/**
+ * مؤشر منفصل عن FlowRowScope حتى يختار Compose overload العام لـ
+ * AnimatedVisibility، لا overload الخاص بـ RowScope الذي لا ينطبق على
+ * محتوى FlowRow.
+ */
+@Composable
+private fun SelectedSwatchIndicator(visible: Boolean) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = scaleIn(
+            initialScale = 0.2f,
+            animationSpec = spring(dampingRatio = 0.4f, stiffness = 520f)
+        ) + fadeIn(tween(120)),
+        exit = scaleOut(
+            targetScale = 0.2f,
+            animationSpec = tween(100)
+        ) + fadeOut(tween(100))
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(Color.White, CircleShape)
+        )
     }
 }
 
