@@ -17,3 +17,12 @@ giud.md
 /keystore.properties
 *.jks
 *.keystore
+
+# Cloud provisioning secrets and local deployment state (never ship in an APK or Git).
+**/.dev.vars
+**/.dev.vars.*
+**/.env
+**/.env.*
+**/.wrangler/
+/service/cloudflare/wrangler.toml
+/service/cloudflare/private/

@@ -155,6 +155,80 @@ class GalaxyLayoutEngineTest {
         assertTrue(result.placements.last().radiusDp > result.placements.first().radiusDp)
     }
 
+    @Test
+    fun repeatedBranchingKeepsSafeSpacingWithoutExponentialBoardGrowth() {
+        val folders = buildList {
+            add(folder(1L))
+            var parent = 1L
+            repeat(80) { level ->
+                val continuingChild = 2L + level * 2L
+                add(folder(continuingChild, parent))
+                add(folder(continuingChild + 1L, parent))
+                parent = continuingChild
+            }
+        }
+        val result = layout(folders, width = 360f, height = 780f, density = 1f)
+        assertEquals(161, result.placements.size)
+        assertSafeSpacing(result)
+        assertTrue("A 161-folder tree should not need a millions-of-dp board", result.contentSizeDp < 25_000f)
+    }
+
+    @Test
+    fun veryUnevenFamiliesKeepDistinctSafePositionsAtEveryLevel() {
+        val folders = buildList {
+            add(folder(1L))
+            add(folder(2L))
+            repeat(600) { index ->
+                val child = 10L + index * 3L
+                add(folder(child, 1L))
+                add(folder(child + 1L, child))
+                add(folder(child + 2L, child))
+            }
+            add(folder(5_000L, 2L))
+        }
+        val result = layout(folders)
+        assertEquals(folders.size, result.placements.size)
+        assertSafeSpacing(result)
+        assertTrue(result.contentSizeDp.isFinite())
+    }
+
+    @Test
+    fun duplicateIdsDoNotCreateDuplicatePlanetsOrConnections() {
+        val result = layout(listOf(folder(1L), folder(2L, 1L), folder(2L, 1L)))
+        assertEquals(2, result.placements.size)
+        assertEquals(1, result.connections.size)
+    }
+
+    @Test
+    fun nonFiniteViewportAndDensityAreRejected() {
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, 0f, -1f).forEach { invalid ->
+            try {
+                layout(listOf(folder(1L)), width = invalid)
+                throw AssertionError("Invalid viewport width was accepted: $invalid")
+            } catch (_: IllegalArgumentException) {
+                // Invalid dimensions must never reach the rendering layer.
+            }
+            try {
+                layout(listOf(folder(1L)), density = invalid)
+                throw AssertionError("Invalid density was accepted: $invalid")
+            } catch (_: IllegalArgumentException) {
+                // Invalid density must never produce infinite world coordinates.
+            }
+        }
+    }
+
+    private fun assertSafeSpacing(result: GalaxyOrbitLayout) {
+        result.placements.groupBy { it.ringIndex }.values.forEach { level ->
+            if (level.size < 2) return@forEach
+            val angles = level.map { normalize(it.startAngleRadians) }.sorted()
+            angles.indices.forEach { index ->
+                val next = if (index == angles.lastIndex) angles.first() + 2.0 * PI else angles[index + 1]
+                val chord = 2.0 * level.first().radiusDp * sin((next - angles[index]) / 2.0)
+                assertTrue("Actual neighboring planets are only $chord dp apart", chord + 0.05 >= GALAXY_MIN_ORBITER_SPACING_DP)
+            }
+        }
+    }
+
     private fun layout(
         folders: List<FolderWithFileCount>,
         width: Float = 1080f,

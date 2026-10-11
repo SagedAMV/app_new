@@ -1,102 +1,64 @@
 package com.unihub.app.feature.galaxy
 
+import com.unihub.app.data.local.model.FolderWithFileCount
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.PI
+import kotlin.math.hypot
 
-/**
- * اختبارات وحدة محلية للدوال الهندسية المجردة في [GalaxyGeometry].
- * هذه الدوال نقية (Pure Functions) ولا تعتمد على Android، لذا يمكن اختبارها على JVM مباشرة.
- * 
- * التركيز هنا على الدوال الجديدة التي تدعم دوران المدارات (Orbit Rotation).
- */
+/** Tests the geometry actually used by the screen, not the removed cluster renderer. */
 class GalaxyGeometryTest {
-
-    /**
-     * اختبار 1: عند زاوية دوران = 0، يجب أن تكون الإحداثيات المطابقة للدوال القديمة (قبل الحذف).
-     * هذا يضمن أن الدوران لا يكسر التموضع الأساسي عندما لا يكون هناك حركة.
-     */
     @Test
-    fun orbitRotation_zeroAngle_matchesOriginalLogic() {
-        val index = 0
-        val childCount = 6
-        val orbitAngle = 0.0
-        
-        val dx = GalaxyGeometry.childCenterDxDpWithOrbit(index, childCount, orbitAngle)
-        val dy = GalaxyGeometry.childCenterDyDpWithOrbit(index, childCount, orbitAngle)
-        
-        // الحساب المتوقع: نصف قطر الحلقة * cos(الزاوية الأصلية)
-        val radius = GalaxyGeometry.childRingRadiusDp(index)
-        // الزاوية الأصلية للحلقة الأولى (index 0) هي -PI/2 (أعلى الدائرة)
-        val originalAngle = -PI / 2.0
-        
-        val expectedDx = radius * kotlin.math.cos(originalAngle).toFloat()
-        val expectedDy = radius * kotlin.math.sin(originalAngle).toFloat()
-        
-        // السماح بهامش خطأ صغير جداً بسبب الفاصلة العائمة
-        assertEquals(expectedDx, dx, 0.001f)
-        assertEquals(expectedDy, dy, 0.001f)
+    fun planetDiameterIsFiniteBoundedAndMonotonicEvenForBadCounts() {
+        val counts = listOf(Int.MIN_VALUE, -1, 0, 1, 4, 500, Int.MAX_VALUE)
+        val diameters = counts.map(::folderPlanetSizeDp)
+        assertTrue(diameters.all { it.isFinite() && it in 28f..40f })
+        assertTrue(diameters.zipWithNext().all { (first, second) -> second >= first })
+        assertEquals(28f, folderPlanetSizeDp(0), .001f)
+        assertEquals(40f, folderPlanetSizeDp(Int.MAX_VALUE), .001f)
     }
 
-    /**
-     * اختبار 2: عند زاوية دوران = PI (180 درجة)، يجب أن تنعكس الإحداثيات.
-     * الكوكب الذي كان في الأعلى (-PI/2) سيصبح في الأسفل (PI/2).
-     */
     @Test
-    fun orbitRotation_180Degrees_invertsPosition() {
-        val index = 0
-        val childCount = 6
-        val orbitAngle = PI // 180 degrees
-        
-        val dx = GalaxyGeometry.childCenterDxDpWithOrbit(index, childCount, orbitAngle)
-        val dy = GalaxyGeometry.childCenterDyDpWithOrbit(index, childCount, orbitAngle)
-        
-        val radius = GalaxyGeometry.childRingRadiusDp(index)
-        // الزاوية الأصلية -PI/2 + PI = PI/2 (أسفل الدائرة)
-        // cos(PI/2) = 0, sin(PI/2) = 1
-        val expectedDx = radius * kotlin.math.cos(PI / 2.0).toFloat()
-        val expectedDy = radius * kotlin.math.sin(PI / 2.0).toFloat()
-        
-        assertEquals(expectedDx, dx, 0.001f)
-        assertEquals(expectedDy, dy, 0.001f)
+    fun rotatingTheActiveScenePreservesOrbitRadiusAndInvertsAtHalfATurn() {
+        val scene = scene()
+        val viewport = GalaxyViewport(360f, 780f, 1f, scene.layout.contentSizeDp, GalaxyCamera())
+        scene.nodes.forEach { node ->
+            val initial = viewport.projection(0.0).project(node.position)
+            val opposite = viewport.projection(PI).project(node.position)
+            assertEquals(360.0, initial.x + opposite.x, .001)
+            assertEquals(780.0, initial.y + opposite.y, .001)
+            assertEquals(node.placement.radiusDp.toDouble(), hypot(initial.x - 180.0, initial.y - 390.0), .001)
+        }
     }
 
-    /**
-     * اختبار 3: التأكد من أن سرعة الدوران لا تؤثر على المسافة من المركز (نصف القطر).
-     * الكوكب يجب أن يبقى على نفس المدار بغض النظر عن زاوية الدوران.
-     */
     @Test
-    fun orbitRotation_anyAngle_maintainsOrbitRadius() {
-        val index = 2
-        val childCount = 12
-        val orbitAngle = 1.234 // زاوية عشوائية
-        
-        val dx = GalaxyGeometry.childCenterDxDpWithOrbit(index, childCount, orbitAngle)
-        val dy = GalaxyGeometry.childCenterDyDpWithOrbit(index, childCount, orbitAngle)
-        
-        // حساب المسافة من المركز: sqrt(dx^2 + dy^2)
-        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
-        val expectedRadius = GalaxyGeometry.childRingRadiusDp(index)
-        
-        assertEquals(expectedRadius, distance, 0.001f)
+    fun evenlyDistributedRootsRotateAroundTheActualUniversityDiskCenter() {
+        val scene = scene()
+        val viewport = GalaxyViewport(360f, 780f, 1f, scene.layout.contentSizeDp, GalaxyCamera(.72f))
+        listOf(0.0, .8, 2.4, PI).forEach { rotation ->
+            val points = scene.nodes.map { viewport.projection(rotation).project(it.position) }
+            val sun = viewport.projection(rotation).project(GalaxyPoint.ZERO)
+            assertEquals(sun.x, points.sumOf { it.x } / points.size, .001)
+            assertEquals(sun.y, points.sumOf { it.y } / points.size, .001)
+        }
     }
 
-    /**
-     * اختبار 4: التأكد من أن الزاوية تُحسب بشكل صحيح للحلقات المختلفة.
-     * الحلقات الفردية لها إزاحة (ringOffset = PI/6) لمنع التكدس البصري.
-     */
     @Test
-    fun orbitRotation_oddRing_hasOffset() {
-        val index = 6 // ابن في الحلقة الثانية (index 6 = الحلقة 1, مقعد 0)
-        val childCount = 12
-        val orbitAngle = 0.0
-        
-        val angle = GalaxyGeometry.childAngleRadWithOrbit(index, childCount, orbitAngle)
-        
-        // الحلقة 1 (childRing(6) = 1) يجب أن تحتوي على إزاحة PI/6
-        // الزاوية المتوقعة: -PI/2 + PI/6 + 0 * (2*PI/6) = -PI/2 + PI/6
-        val expectedAngle = -PI / 2.0 + PI / 6.0
-        
-        assertEquals(expectedAngle, angle, 0.001)
+    fun worldPaddingContainsPlanetDisksAndNormalFontLabelsAtEveryAngle() {
+        val scene = scene()
+        val size = scene.layout.contentSizeDp
+        val viewport = GalaxyViewport(size, size, 1f, size, GalaxyCamera())
+        listOf(0.0, .4, 1.2, 2.8).forEach { rotation ->
+            val projection = viewport.projection(rotation)
+            scene.nodes.forEach { node ->
+                val bounds = projection.nodeBounds(node.position, folderPlanetSizeDp(node.placement.folder.fileCount), 29f)
+                assertTrue(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= size && bounds.bottom <= size)
+            }
+        }
     }
+
+    private fun scene() = GalaxyScene(computeGalaxyOrbitLayout((1L..6L).map { id ->
+        FolderWithFileCount(id, "مجلد $id", "#4E7D6E", (id * 3).toInt())
+    }, 360f, 780f, 1f))
 }

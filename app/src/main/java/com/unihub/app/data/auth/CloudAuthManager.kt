@@ -23,6 +23,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,6 +43,9 @@ class CloudAuthManager @Inject constructor(
     private val initMutex = Mutex()
     private val mutex = Mutex()
     private val initialized = AtomicBoolean(false)
+    private val generation = AtomicLong(0L)
+    private var lastRemoteEtag: String? = null
+    private val maxAuthBytes = 1024L * 1024L
 
     private val _sessionState = MutableStateFlow<AuthSessionState>(AuthSessionState.Initializing)
     val sessionState: StateFlow<AuthSessionState> = _sessionState.asStateFlow()
@@ -64,57 +68,68 @@ class CloudAuthManager @Inject constructor(
      */
     suspend fun initializeIfNeeded() = withContext(Dispatchers.IO) {
         if (initialized.get()) return@withContext
+        var verifyAfterInitialization = false
         initMutex.withLock {
             if (initialized.get()) return@withLock
-            val device = deviceFingerprintProvider.getDeviceInfo()
-            val snap = authPreferences.snapshot()
-            val cachedRegistry = CloudAuthRules.fromJson(snap.cachedRegistryJson)
-            _registryState.value = cachedRegistry
-
-            if (snap.hasAuthenticatedSession) {
-                if (snap.boundDeviceFingerprint != device.fingerprint) {
-                    authPreferences.clearSession()
+            mutex.withLock initialization@ {
+                try {
+                    val epoch = generation.get()
+                    val device = deviceFingerprintProvider.getDeviceInfo()
+                    val snap = authPreferences.snapshot()
+                    snap.storageError?.let { throw IOException(it) }
+                    var registry = CloudAuthRules.fromJson(snap.cachedRegistryJson)
+                    if (snap.hasAuthenticatedSession) {
+                        if (snap.boundDeviceFingerprint != device.fingerprint) {
+                            authPreferences.clearSession()
+                            _sessionState.value = AuthSessionState.Unauthenticated("الجهاز غير مطابق للجلسة المحفوظة؛ سجّل الدخول مجددًا")
+                            initialized.set(true)
+                            return@initialization
+                        }
+                        val fresh = CloudAuthRules.isCachedSessionFresh(snap.lastVerifiedAt)
+                        if (!fresh) {
+                            if (!isOnline()) throw IOException("انتهت صلاحية الجلسة دون اتصال؛ اتصل بالإنترنت ثم أعد المحاولة")
+                            val creds = syncPreferences.snapshot().credentials
+                            val remote = r2Client.downloadTextObject(creds, CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
+                                maxResponseBytes = maxAuthBytes).getOrThrow()
+                                ?: throw IOException("سجل الحسابات غير موجود؛ يلزم تدخل المالك")
+                            registry = CloudAuthRules.fromJson(remote.text)
+                        }
+                        val account = CloudAuthRules.validateExistingSession(registry, snap.loggedInUsername, device).getOrThrow()
+                        ensureGeneration(epoch)
+                        if (!fresh) authPreferences.saveAuthenticatedSession(account.username, device.fingerprint, CloudAuthRules.toJson(registry))
+                        ensureGeneration(epoch)
+                        val visible = publishRegistry(registry, account.username)
+                        publishSession(epoch, AuthSessionState.Authenticated(account.copy(passwordHash = ""), device,
+                            if (account.isAdmin) visible.pendingDeviceRequests else emptyList()))
+                        initialized.set(true)
+                        verifyAfterInitialization = fresh && isOnline()
+                    } else if (snap.pendingUsername.isNotBlank()) {
+                        publishRegistry(registry, snap.pendingUsername)
+                        publishSession(epoch, AuthSessionState.WaitingAdminApproval(snap.pendingUsername, device))
+                        initialized.set(true)
+                        // The lifecycle-aware waiting screen owns polling; do not launch a competing job here.
+                    } else {
+                        _registryState.value = CloudAuthRegistry()
+                        _sessionState.value = AuthSessionState.Unauthenticated()
+                        initialized.set(true)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    _registryState.value = CloudAuthRegistry()
                     _sessionState.value = AuthSessionState.Unauthenticated(
-                        "تم اكتشاف جهاز غير معرف لهذا الحساب؛ يرجى تسجيل الدخول عبر السحابة"
+                        "تعذّر استعادة الجلسة المحمية؛ اتصل بالإنترنت وأعد المحاولة أو سجّل الدخول مجددًا"
                     )
                     initialized.set(true)
-                    return@withLock
                 }
-                val validation = CloudAuthRules.validateExistingSession(
-                    registry = cachedRegistry,
-                    username = snap.loggedInUsername,
-                    currentDevice = device
-                )
-                validation.fold(
-                    onSuccess = { account ->
-                        _sessionState.value = AuthSessionState.Authenticated(
-                            user = account,
-                            currentDevice = device,
-                            pendingAdminRequests = if (account.isAdmin) cachedRegistry.pendingDeviceRequests else emptyList()
-                        )
-                        if (isOnline()) {
-                            scope.launch { verifyActiveSessionWithCloud() }
-                        }
-                    },
-                    onFailure = { error ->
-                        authPreferences.clearSession()
-                        _sessionState.value = AuthSessionState.Unauthenticated(error.message)
-                    }
-                )
-            } else if (snap.pendingUsername.isNotBlank()) {
-                _sessionState.value = AuthSessionState.WaitingAdminApproval(
-                    username = snap.pendingUsername,
-                    requestedDevice = device,
-                    message = CloudAuthRules.PENDING_APPROVAL_MESSAGE
-                )
-                if (isOnline()) {
-                    scope.launch { checkPendingApprovalStatus() }
-                }
-            } else {
-                _sessionState.value = AuthSessionState.Unauthenticated()
             }
-            initialized.set(true)
         }
+        if (verifyAfterInitialization) scope.launch { verifyActiveSessionWithCloud() }
+    }
+
+    suspend fun retryInitialization() {
+        initMutex.withLock { initialized.set(false) }
+        initializeIfNeeded()
     }
 
     /** هل توجد جلسة مستخدم مصادق عليها حالياً على هذا الجهاز؟ */
@@ -140,16 +155,27 @@ class CloudAuthManager @Inject constructor(
      */
     suspend fun requirePermission(permission: AuthPermission): Result<CloudUserAccount> {
         initializeIfNeeded()
+        val epoch = generation.get()
+        if (_sessionState.value is AuthSessionState.Authenticated) {
+            val snapshot = authPreferences.snapshot()
+            if (!CloudAuthRules.isCachedSessionFresh(snapshot.lastVerifiedAt)) {
+                if (!isOnline()) {
+                    logout("انتهت صلاحية الجلسة دون اتصال؛ أعد التحقق عبر الإنترنت")
+                    return Result.failure(IOException("يلزم تجديد التحقق من الحساب"))
+                }
+                verifyActiveSessionWithCloud().getOrElse { return Result.failure(it) }
+            }
+        }
+        val device = deviceFingerprintProvider.getDeviceInfo()
+        if (generation.get() != epoch) return Result.failure(IOException("انتهت الجلسة أثناء فحص الصلاحية"))
         val currentState = _sessionState.value
         if (currentState !is AuthSessionState.Authenticated) {
             return Result.failure(IOException("يجب تسجيل الدخول أولاً للوصول إلى السحابة"))
         }
-        val device = deviceFingerprintProvider.getDeviceInfo()
         if (!currentState.user.isAdmin &&
             currentState.user.boundDevice?.fingerprint != device.fingerprint
         ) {
-            authPreferences.clearSession()
-            _sessionState.value = AuthSessionState.Unauthenticated("جهاز غير معتمد لهذا الحساب")
+            logout("جهاز غير معتمد لهذا الحساب")
             return Result.failure(IOException("هذا الجهاز غير معتمد لحسابك؛ يرجى تسجيل الدخول"))
         }
         return CloudAuthRules.checkPermission(currentState.user, permission)
@@ -159,8 +185,9 @@ class CloudAuthManager @Inject constructor(
     /**
      * تسجيل الدخول عبر الإنترنت (السحابة هي التي تقرر في التسجيل وربط بصمة الجهاز).
      */
-    suspend fun login(usernameInput: String, passwordInput: String): Result<AuthLoginOutcome> =
+    suspend fun login(usernameInput: String, passwordInput: String, allowBootstrap: Boolean = false): Result<AuthLoginOutcome> =
         withBusyLock {
+            val epoch = generation.get()
             val online = isOnline()
             if (!online) {
                 val msg = "يجب توفر اتصال بالإنترنت لتسجيل الدخول؛ السحابة هي التي تقرر في التسجيل"
@@ -174,10 +201,12 @@ class CloudAuthManager @Inject constructor(
 
             var attempt = 0
             while (true) {
+                ensureGeneration(epoch)
                 attempt++
                 val remoteObj = r2Client.downloadTextObject(
                     creds,
-                    CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+                    CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
+                    maxResponseBytes = maxAuthBytes
                 ).getOrElse { error ->
                     return@withBusyLock Result.failure(
                         IOException("تعذّر الاتصال بالسحابة للتحقق من الحساب: ${error.message}")
@@ -190,9 +219,11 @@ class CloudAuthManager @Inject constructor(
                     usernameInput = usernameInput,
                     passwordInput = passwordInput,
                     currentDevice = device,
-                    isOnline = true
+                    isOnline = true,
+                    allowBootstrap = allowBootstrap
                 )
 
+                ensureGeneration(epoch)
                 when (outcome) {
                     is AuthLoginOutcome.Rejected -> {
                         return@withBusyLock Result.failure(IOException(outcome.reason))
@@ -201,6 +232,7 @@ class CloudAuthManager @Inject constructor(
                     is AuthLoginOutcome.Authenticated -> {
                         val json = CloudAuthRules.toJson(outcome.registry)
                         if (outcome.registryChanged || remoteObj == null) {
+                            ensureGeneration(epoch)
                             val uploadRes = r2Client.uploadText(
                                 credentials = creds,
                                 objectKey = CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
@@ -216,23 +248,27 @@ class CloudAuthManager @Inject constructor(
                                 )
                             }
                         }
-                        _registryState.value = outcome.registry
+                        ensureGeneration(epoch)
+                        val visible = publishRegistry(outcome.registry, outcome.user.username)
+                        lastRemoteEtag = null
                         authPreferences.saveAuthenticatedSession(
                             username = outcome.user.username,
                             deviceFingerprint = device.fingerprint,
                             registryJson = json
                         )
-                        _sessionState.value = AuthSessionState.Authenticated(
-                            user = outcome.user,
+                        ensureGeneration(epoch)
+                        publishSession(epoch, AuthSessionState.Authenticated(
+                            user = outcome.user.copy(passwordHash = ""),
                             currentDevice = device,
                             pendingAdminRequests = if (outcome.user.isAdmin) {
-                                outcome.registry.pendingDeviceRequests
+                                visible.pendingDeviceRequests
                             } else emptyList()
-                        )
-                        return@withBusyLock Result.success(outcome)
+                        ))
+                        return@withBusyLock Result.success(outcome.copy(user = outcome.user.copy(passwordHash = ""), registry = visible))
                     }
 
                     is AuthLoginOutcome.PendingAdminApproval -> {
+                        ensureGeneration(epoch)
                         val json = CloudAuthRules.toJson(outcome.registry)
                         val uploadRes = r2Client.uploadText(
                             credentials = creds,
@@ -248,17 +284,20 @@ class CloudAuthManager @Inject constructor(
                                 IOException("تعذّر إرسال طلب موافقة الجهاز للمشرف: ${err?.message}")
                             )
                         }
-                        _registryState.value = outcome.registry
+                        ensureGeneration(epoch)
+                        val visible = publishRegistry(outcome.registry, outcome.username)
+                        lastRemoteEtag = null
                         authPreferences.savePendingApprovalState(
                             username = outcome.username,
                             registryJson = json
                         )
-                        _sessionState.value = AuthSessionState.WaitingAdminApproval(
+                        ensureGeneration(epoch)
+                        publishSession(epoch, AuthSessionState.WaitingAdminApproval(
                             username = outcome.username,
                             requestedDevice = device,
                             message = outcome.message
-                        )
-                        return@withBusyLock Result.success(outcome)
+                        ))
+                        return@withBusyLock Result.success(outcome.copy(registry = visible))
                     }
                 }
             }
@@ -271,6 +310,7 @@ class CloudAuthManager @Inject constructor(
      */
     suspend fun checkPendingApprovalStatus(): Result<PendingApprovalCheckOutcome> =
         withBusyLock {
+            val epoch = generation.get()
             val waiting = _sessionState.value as? AuthSessionState.WaitingAdminApproval
                 ?: return@withBusyLock Result.failure(IOException("لا يوجد طلب جهاز معلق حالياً"))
 
@@ -280,17 +320,23 @@ class CloudAuthManager @Inject constructor(
             val creds = syncPreferences.snapshot().credentials
             val remoteObj = r2Client.downloadTextObject(
                 creds,
-                CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+                CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
+                ifNoneMatchEtag = lastRemoteEtag,
+                maxResponseBytes = maxAuthBytes
             ).getOrElse { error ->
                 return@withBusyLock Result.failure(IOException("تعذّر الاتصال بالسحابة: ${error.message}"))
             }
 
-            val registry = CloudAuthRules.fromJson(remoteObj?.text)
-            val json = CloudAuthRules.toJson(registry)
-            _registryState.value = registry
-            authPreferences.updateCachedRegistry(json)
+            ensureGeneration(epoch)
+            val registry = if (remoteObj?.notModified == true) _registryState.value else CloudAuthRules.fromJson(remoteObj?.text)
+            val previous = _registryState.value
+            val visible = publishRegistry(registry, waiting.username)
+            lastRemoteEtag = remoteObj?.etag?.takeIf { it.isNotBlank() }
+            val json = CloudAuthRules.toJson(visible)
+            if (visible != previous) authPreferences.updateCachedRegistry(json)
 
             val device = deviceFingerprintProvider.getDeviceInfo()
+            ensureGeneration(epoch)
             val check = CloudAuthRules.checkPendingApproval(
                 registry = registry,
                 username = waiting.username,
@@ -303,18 +349,19 @@ class CloudAuthManager @Inject constructor(
                         deviceFingerprint = device.fingerprint,
                         registryJson = json
                     )
-                    _sessionState.value = AuthSessionState.Authenticated(
-                        user = check.user,
+                    ensureGeneration(epoch)
+                    publishSession(epoch, AuthSessionState.Authenticated(
+                        user = check.user.copy(passwordHash = ""),
                         currentDevice = device,
                         pendingAdminRequests = if (check.user.isAdmin) registry.pendingDeviceRequests else emptyList()
-                    )
+                    ))
                 }
 
                 is PendingApprovalCheckOutcome.StillPending -> {
-                    _sessionState.value = waiting.copy(
+                    publishSession(epoch, waiting.copy(
                         message = check.message,
                         statusNote = "لا يزال الطلب قيد المراجعة — سيرد لك مشرف"
-                    )
+                    ))
                 }
 
                 is PendingApprovalCheckOutcome.Rejected -> {
@@ -331,96 +378,91 @@ class CloudAuthManager @Inject constructor(
      */
     suspend fun verifyActiveSessionWithCloud(): Result<CloudAuthRegistry> = withContext(Dispatchers.IO) {
         initializeIfNeeded()
+        val state = _sessionState.value
+        if (state !is AuthSessionState.Authenticated && state !is AuthSessionState.WaitingAdminApproval) {
+            return@withContext Result.failure(IOException("لا توجد جلسة للتحقق منها"))
+        }
         if (!isOnline()) return@withContext Result.failure(IOException("غير متصل بالإنترنت"))
-        mutex.withLock {
-            runCatching {
-                val creds = syncPreferences.snapshot().credentials
-                if (!creds.isConfigured) throw IOException("بيانات السحابة غير مضبوطة")
-                val remoteObj = r2Client.downloadTextObject(
-                    creds,
-                    CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
-                ).getOrThrow()
-
-                val registry = remoteObj?.let { CloudAuthRules.fromJson(it.text) }
-                    ?: run {
+        if (!mutex.tryLock()) return@withContext Result.failure(IOException("جارٍ تنفيذ عملية مصادقة أخرى"))
+        try {
+            val epoch = generation.get()
+            val creds = syncPreferences.snapshot().credentials
+            val remote = r2Client.downloadTextObject(creds, CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
+                ifNoneMatchEtag = lastRemoteEtag, maxResponseBytes = maxAuthBytes).getOrThrow()
+            ensureGeneration(epoch)
+            if (remote == null) {
+                authPreferences.clearSession()
+                lastRemoteEtag = null
+                _registryState.value = CloudAuthRegistry()
+                _sessionState.value = AuthSessionState.Unauthenticated("سجل المصادقة مفقود؛ استعد نسخة موثوقة بواسطة المالك")
+                throw IOException("سجل المصادقة غير موجود؛ لم يُنشأ مالك افتراضي")
+            }
+            val registry = if (remote.notModified) _registryState.value else CloudAuthRules.fromJson(remote.text)
+            if (!remote.notModified && registry.users.none { it.username == CloudAuthRules.ADMIN_USERNAME }) {
+                authPreferences.clearSession()
+                _registryState.value = CloudAuthRegistry()
+                _sessionState.value = AuthSessionState.Unauthenticated("سجل المصادقة لا يحتوي حساب المالك؛ استعد نسخة موثوقة")
+                throw IOException("سجل المصادقة غير صالح")
+            }
+            val device = deviceFingerprintProvider.getDeviceInfo()
+            when (val current = _sessionState.value) {
+                is AuthSessionState.Authenticated -> {
+                    val result = CloudAuthRules.validateExistingSession(registry, current.user.username, device)
+                    val refreshed = result.getOrElse { error ->
                         authPreferences.clearSession()
-                        _sessionState.value = AuthSessionState.Unauthenticated(
-                            "سجل المصادقة غير موجود على السحابة؛ سجّل الدخول بعد استعادة السجل أو تهيئته من جديد"
-                        )
-                        throw IOException("سجل المصادقة غير موجود على السحابة؛ لم يُنشأ حساب مشرف افتراضي")
+                        _registryState.value = CloudAuthRegistry()
+                        _sessionState.value = AuthSessionState.Unauthenticated(error.message)
+                        throw error
                     }
-                if (registry.users.none { CloudAuthRules.normalizeUsername(it.username) == CloudAuthRules.ADMIN_USERNAME }) {
-                    authPreferences.clearSession()
-                    _sessionState.value = AuthSessionState.Unauthenticated(
-                        "سجل المصادقة لا يحتوي على حساب المشرف؛ يلزم استعادته من نسخة موثوقة"
-                    )
-                    throw IOException("سجل المصادقة الموجود لا يحتوي على حساب المشرف")
+                    val visible = publishRegistry(registry, refreshed.username)
+                    if (remote.notModified) authPreferences.markVerified()
+                    else authPreferences.updateCachedRegistry(CloudAuthRules.toJson(visible))
+                    ensureGeneration(epoch)
+                    publishSession(epoch, AuthSessionState.Authenticated(refreshed.copy(passwordHash = ""), device,
+                        if (refreshed.isAdmin) visible.pendingDeviceRequests else emptyList()))
                 }
-
-                val json = CloudAuthRules.toJson(registry)
-                _registryState.value = registry
-                authPreferences.updateCachedRegistry(json)
-
-                val device = deviceFingerprintProvider.getDeviceInfo()
-                when (val current = _sessionState.value) {
-                    is AuthSessionState.Authenticated -> {
-                        CloudAuthRules.validateExistingSession(
-                            registry = registry,
-                            username = current.user.username,
-                            currentDevice = device
-                        ).fold(
-                            onSuccess = { refreshedUser ->
-                                _sessionState.value = AuthSessionState.Authenticated(
-                                    user = refreshedUser,
-                                    currentDevice = device,
-                                    pendingAdminRequests = if (refreshedUser.isAdmin) {
-                                        registry.pendingDeviceRequests
-                                    } else emptyList()
-                                )
-                            },
-                            onFailure = { error ->
-                                authPreferences.clearSession()
-                                _sessionState.value = AuthSessionState.Unauthenticated(error.message)
-                            }
-                        )
-                    }
-
-                    is AuthSessionState.WaitingAdminApproval -> {
-                        val check = CloudAuthRules.checkPendingApproval(
-                            registry = registry,
-                            username = current.username,
-                            currentDevice = device
-                        )
-                        if (check is PendingApprovalCheckOutcome.Approved) {
-                            authPreferences.saveAuthenticatedSession(
-                                username = check.user.username,
-                                deviceFingerprint = device.fingerprint,
-                                registryJson = json
-                            )
-                            _sessionState.value = AuthSessionState.Authenticated(
-                                user = check.user,
-                                currentDevice = device,
-                                pendingAdminRequests = if (check.user.isAdmin) {
-                                    registry.pendingDeviceRequests
-                                } else emptyList()
-                            )
-                        } else if (check is PendingApprovalCheckOutcome.Rejected) {
+                is AuthSessionState.WaitingAdminApproval -> {
+                    when (val check = CloudAuthRules.checkPendingApproval(registry, current.username, device)) {
+                        is PendingApprovalCheckOutcome.Approved -> {
+                            val visible = publishRegistry(registry, check.user.username)
+                            authPreferences.saveAuthenticatedSession(check.user.username, device.fingerprint, CloudAuthRules.toJson(visible))
+                            ensureGeneration(epoch)
+                            publishSession(epoch, AuthSessionState.Authenticated(check.user.copy(passwordHash = ""), device,
+                                if (check.user.isAdmin) visible.pendingDeviceRequests else emptyList()))
+                        }
+                        is PendingApprovalCheckOutcome.Rejected -> {
                             authPreferences.clearSession()
+                            _registryState.value = CloudAuthRegistry()
                             _sessionState.value = AuthSessionState.Unauthenticated(check.reason)
                         }
+                        is PendingApprovalCheckOutcome.StillPending -> Unit
                     }
-
-                    else -> Unit
                 }
-                registry
+                else -> throw IOException("انتهت الجلسة أثناء التحقق")
             }
+            lastRemoteEtag = remote.etag.takeIf { it.isNotBlank() }
+            Result.success(_registryState.value)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        } finally {
+            mutex.unlock()
         }
     }
 
-    /** تسجيل الخروج أو العودة لشاشة تسجيل الدخول لتبديل الحساب. */
-    suspend fun logout(reason: String? = null) {
-        authPreferences.clearSession()
-        _sessionState.value = AuthSessionState.Unauthenticated(reason)
+    /** Invalidate in-flight results before waiting for the serialized persistent cleanup. */
+    suspend fun logout(reason: String? = null) = withContext(Dispatchers.IO) {
+        synchronized(generation) {
+            generation.incrementAndGet()
+            _sessionState.value = AuthSessionState.Unauthenticated(reason)
+        }
+        mutex.withLock {
+            lastRemoteEtag = null
+            authPreferences.clearSession()
+            _registryState.value = CloudAuthRegistry()
+            _sessionState.value = AuthSessionState.Unauthenticated(reason)
+        }
     }
 
     // ─── عمليات إدارة المستخدمين والصلاحيات وكلمات المرور والأجهزة ───────────
@@ -482,6 +524,7 @@ class CloudAuthManager @Inject constructor(
     private suspend fun mutateCloudRegistry(
         mutation: (CloudAuthRegistry, CloudUserAccount) -> Result<CloudAuthRegistry>
     ): Result<Unit> = withBusyLock {
+        val epoch = generation.get()
         val currentAuth = _sessionState.value as? AuthSessionState.Authenticated
             ?: return@withBusyLock Result.failure(IOException("يجب تسجيل الدخول أولاً"))
 
@@ -497,10 +540,12 @@ class CloudAuthManager @Inject constructor(
 
         var attempt = 0
         while (true) {
+            ensureGeneration(epoch)
             attempt++
             val remoteObj = r2Client.downloadTextObject(
                 creds,
-                CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+                CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY,
+                maxResponseBytes = maxAuthBytes
             ).getOrElse { error ->
                 return@withBusyLock Result.failure(
                     IOException("تعذّر قراءة سجل المستخدمين من السحابة: ${error.message}")
@@ -515,10 +560,12 @@ class CloudAuthManager @Inject constructor(
                 return@withBusyLock Result.failure(IOException("سجل المصادقة لا يحتوي على حساب المشرف؛ استعد نسخة موثوقة أولًا"))
             }
 
+            ensureGeneration(epoch)
             val updatedRegistry = mutation(baseRegistry, currentAuth.user).getOrElse { error ->
                 return@withBusyLock Result.failure(error)
             }
 
+            ensureGeneration(epoch)
             val json = CloudAuthRules.toJson(updatedRegistry)
             val uploaded = r2Client.uploadText(
                 credentials = creds,
@@ -535,8 +582,10 @@ class CloudAuthManager @Inject constructor(
                 )
             }
 
-            _registryState.value = updatedRegistry
-            authPreferences.updateCachedRegistry(json)
+            ensureGeneration(epoch)
+            val visible = publishRegistry(updatedRegistry, currentAuth.user.username)
+            lastRemoteEtag = null
+            authPreferences.updateCachedRegistry(CloudAuthRules.toJson(visible))
 
             val device = deviceFingerprintProvider.getDeviceInfo()
             val refreshedCurrentUser = updatedRegistry.users.firstOrNull {
@@ -544,34 +593,48 @@ class CloudAuthManager @Inject constructor(
                     CloudAuthRules.normalizeUsername(currentAuth.user.username)
             } ?: currentAuth.user
 
-            _sessionState.value = AuthSessionState.Authenticated(
-                user = refreshedCurrentUser,
+            ensureGeneration(epoch)
+            publishSession(epoch, AuthSessionState.Authenticated(
+                user = refreshedCurrentUser.copy(passwordHash = ""),
                 currentDevice = device,
                 pendingAdminRequests = if (refreshedCurrentUser.isAdmin) {
-                    updatedRegistry.pendingDeviceRequests
+                    visible.pendingDeviceRequests
                 } else emptyList()
-            )
+            ))
             return@withBusyLock Result.success(Unit)
         }
         @Suppress("UNREACHABLE_CODE")
         Result.failure(IOException("تعذّر تحديث السجل السحابي"))
     }
 
-    private suspend fun <T> withBusyLock(block: suspend () -> Result<T>): Result<T> =
-        withContext(Dispatchers.IO) {
-            mutex.withLock {
-                _isBusy.value = true
-                try {
-                    block()
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    Result.failure(error)
-                } finally {
-                    _isBusy.value = false
-                }
-            }
+    private fun publishSession(expected: Long, state: AuthSessionState) = synchronized(generation) {
+        ensureGeneration(expected)
+        _sessionState.value = state
+    }
+
+    private fun ensureGeneration(expected: Long) {
+        if (generation.get() != expected) throw IOException("أُلغيت الجلسة أثناء العملية؛ أعد المحاولة")
+    }
+
+    private fun publishRegistry(registry: CloudAuthRegistry, username: String): CloudAuthRegistry {
+        val user = registry.users.firstOrNull { CloudAuthRules.normalizeUsername(it.username) == CloudAuthRules.normalizeUsername(username) }
+        val visible = CloudAuthRules.redactedRegistry(registry, username, includeAllUsers = user?.isAdmin == true)
+        _registryState.value = visible
+        return visible
+    }
+
+    private suspend fun <T> withBusyLock(block: suspend () -> Result<T>): Result<T> = withContext(Dispatchers.IO) {
+        initializeIfNeeded()
+        if (!mutex.tryLock()) return@withContext Result.failure(IOException("جارٍ تنفيذ عملية أخرى؛ انتظر اكتمالها"))
+        _isBusy.value = true
+        try { block() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { Result.failure(error) }
+        finally {
+            _isBusy.value = false
+            mutex.unlock()
         }
+    }
 
     fun isOnline(): Boolean = runCatching {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return@runCatching false

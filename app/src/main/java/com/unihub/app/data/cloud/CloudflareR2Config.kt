@@ -164,4 +164,6 @@ data class R2Credentials(
 
     val useS3Protocol: Boolean
         get() = isConfigured
+
+    override fun toString(): String = "R2Credentials(account=$accountId, bucket=$bucketName, secrets=<redacted>)"
 }

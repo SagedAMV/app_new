@@ -533,6 +533,9 @@ private fun SettingsCategoryDetailScreen(
                     authBusy = authBusy,
                     viewModel = viewModel
                 )
+                if ((authSession as? AuthSessionState.Authenticated)?.user?.isAdmin == true) {
+                    com.unihub.app.feature.auth.OwnerCloudDistributionSection()
+                }
             }
 
             SettingsCategory.APPEARANCE -> {

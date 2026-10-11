@@ -25,9 +25,10 @@ object CloudAuthRules {
     const val MAX_PASSWORD_LENGTH: Int = 256
     const val MAX_USERNAME_LENGTH: Int = 64
 
-    private const val SCHEMA_VERSION: Int = 2
-    private const val PASSWORD_HASH_PREFIX: String = "pbkdf2-sha256"
-    private const val PASSWORD_HASH_ITERATIONS: Int = 210_000
+    private const val SCHEMA_VERSION: Int = 3
+    private const val PASSWORD_HASH_PREFIX: String = "pbkdf2-sha256-v2"
+    private const val LEGACY_PBKDF2_PREFIX: String = "pbkdf2-sha256"
+    private const val PASSWORD_HASH_ITERATIONS: Int = 600_000
     private const val PASSWORD_SALT_BYTES: Int = 16
     private const val PASSWORD_HASH_BYTES: Int = 32
     // Compatibility only: used to validate old SHA-256 hashes during one-time password migration.
@@ -58,8 +59,8 @@ object CloudAuthRules {
     /** Store salted PBKDF2-HMAC-SHA256 verifiers; no code path can recover the original password. */
     fun hashPassword(username: String, plainPassword: String): String {
         val normalized = normalizeUsername(username)
-        val password = plainPassword.trim()
-        require(password.isNotEmpty() && password.length <= MAX_PASSWORD_LENGTH) {
+        val password = plainPassword
+        require(password.isNotBlank() && password.length <= MAX_PASSWORD_LENGTH) {
             "كلمة المرور يجب ألا تتجاوز $MAX_PASSWORD_LENGTH حرفًا"
         }
         val salt = ByteArray(PASSWORD_SALT_BYTES).also { SecureRandom().nextBytes(it) }
@@ -76,14 +77,17 @@ object CloudAuthRules {
 
     /** Legacy SHA-256 hashes are accepted only to upgrade a user's verifier at the next successful login. */
     fun verifyPassword(plainPassword: String, account: CloudUserAccount): Boolean {
-        val candidate = plainPassword.trim()
+        // Old verifiers were created from trimmed passwords. Preserve that compatibility only
+        // for old encodings; v2 preserves every character in newly created passwords.
+        val candidate = if (isCurrentPasswordHash(account.passwordHash)) plainPassword else plainPassword.trim()
         if (candidate.isEmpty() || candidate.length > MAX_PASSWORD_LENGTH || account.passwordHash.isBlank()) return false
-        if (isCurrentPasswordHash(account.passwordHash)) {
+        if (isCurrentPasswordHash(account.passwordHash) || account.passwordHash.startsWith("$LEGACY_PBKDF2_PREFIX\$")) {
             val parts = account.passwordHash.split('$')
-            if (parts.size != 4 || parts[0] != PASSWORD_HASH_PREFIX) return false
+            if (parts.size != 4 || parts[0] !in setOf(PASSWORD_HASH_PREFIX, LEGACY_PBKDF2_PREFIX)) return false
             val iterations = parts[1].toIntOrNull() ?: return false
             // Bound encoded work factors to prevent a corrupt registry from forcing unbounded CPU work.
-            if (iterations !in MIN_PASSWORD_HASH_ITERATIONS..MAX_PASSWORD_HASH_ITERATIONS) return false
+            if (iterations !in MIN_PASSWORD_HASH_ITERATIONS..MAX_PASSWORD_HASH_ITERATIONS ||
+                (parts[0] == PASSWORD_HASH_PREFIX && iterations < PASSWORD_HASH_ITERATIONS)) return false
             val salt = runCatching { Base64.getDecoder().decode(parts[2]) }.getOrNull() ?: return false
             val expected = runCatching { Base64.getDecoder().decode(parts[3]) }.getOrNull() ?: return false
             if (salt.size !in 12..32 || expected.size != PASSWORD_HASH_BYTES) return false
@@ -101,21 +105,23 @@ object CloudAuthRules {
     }
 
     private fun derivePasswordHash(username: String, password: String, salt: ByteArray, iterations: Int): ByteArray {
-        val spec = javax.crypto.spec.PBEKeySpec("$username\u0000$password".toCharArray(), salt, iterations, PASSWORD_HASH_BYTES * 8)
+        val characters = "$username\u0000$password".toCharArray()
+        val spec = javax.crypto.spec.PBEKeySpec(characters, salt, iterations, PASSWORD_HASH_BYTES * 8)
         return try {
             javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
         } finally {
             spec.clearPassword()
+            characters.fill('\u0000')
         }
     }
 
     private const val MIN_PASSWORD_HASH_ITERATIONS = 100_000
-    private const val MAX_PASSWORD_HASH_ITERATIONS = 500_000
+    private const val MAX_PASSWORD_HASH_ITERATIONS = 1_200_000
 
     /** إنشاء حساب مشرف بكلمة مرور اختارها مالك التطبيق، وليس بكلمة افتراضية مضمنة. */
     fun createDefaultAdminAccount(password: String, now: Long = System.currentTimeMillis()): CloudUserAccount {
-        val cleanPassword = password.trim()
-        require(cleanPassword.length >= MIN_ADMIN_BOOTSTRAP_PASSWORD_LENGTH) {
+        val cleanPassword = password
+        require(cleanPassword.isNotBlank() && cleanPassword.length >= MIN_ADMIN_BOOTSTRAP_PASSWORD_LENGTH) {
             "كلمة مرور المشرف يجب أن تتكون من 12 خانة على الأقل"
         }
         require(cleanPassword.length <= MAX_PASSWORD_LENGTH) {
@@ -172,7 +178,7 @@ object CloudAuthRules {
             .groupBy { normalizeUsername(it.username) }
             .mapNotNull { (normName, accounts) ->
                 if (normName.isBlank()) null
-                else accounts.maxByOrNull { it.updatedAt }?.copy(username = normName)
+                else accounts.maxByOrNull { it.updatedAt }?.copy(username = normName, isAdmin = false)
             }
             .sortedByDescending { it.updatedAt }
             .take(MAX_USER_ACCOUNTS - 1)
@@ -214,13 +220,14 @@ object CloudAuthRules {
         passwordInput: String,
         currentDevice: BoundDeviceInfo,
         isOnline: Boolean,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        allowBootstrap: Boolean = false
     ): AuthLoginOutcome {
         if (!isOnline) {
             return AuthLoginOutcome.Rejected("يجب توفر اتصال بالإنترنت لتسجيل الدخول؛ السحابة هي التي تقرر في التسجيل")
         }
         val normalizedUser = normalizeUsername(usernameInput)
-        val cleanPass = passwordInput.trim()
+        val cleanPass = passwordInput
         if (normalizedUser.isBlank() || cleanPass.isBlank()) {
             return AuthLoginOutcome.Rejected("أدخل اسم المستخدم وكلمة المرور")
         }
@@ -234,6 +241,9 @@ object CloudAuthRules {
         // First-run bootstrap is allowed only when the auth object is genuinely absent.
         // A malformed/present registry must not silently reset ownership.
         if (registry == null) {
+            if (!allowBootstrap) {
+                return AuthLoginOutcome.Rejected("سجل الحسابات غير مهيأ؛ يحتاج المالك إلى اختيار تهيئة حساب المالك صراحةً")
+            }
             if (normalizedUser != ADMIN_USERNAME) {
                 return AuthLoginOutcome.Rejected("إعداد السحابة الأولي يتطلب اسم المشرف saged")
             }
@@ -271,7 +281,8 @@ object CloudAuthRules {
         val passwordHashUpgraded = !isCurrentPasswordHash(account.passwordHash)
         if (passwordHashUpgraded) {
             account = account.copy(
-                passwordHash = hashPassword(account.username, cleanPass),
+                // The legacy encoding canonicalized surrounding spaces; keep that old password.
+                passwordHash = hashPassword(account.username, cleanPass.trim()),
                 updatedAt = now
             )
             baseRegistry = baseRegistry.copy(
@@ -465,12 +476,12 @@ object CloudAuthRules {
         actorUsername: String,
         newUsername: String,
         password: String,
-        permissions: UserPermissions = UserPermissions.FULL,
+        permissions: UserPermissions = UserPermissions.NONE,
         now: Long = System.currentTimeMillis()
     ): Result<CloudAuthRegistry> {
         requireAdminActor(registry, actorUsername).getOrElse { return Result.failure(it) }
         val cleanName = normalizeUsername(newUsername)
-        val cleanPass = password.trim()
+        val cleanPass = password
         if (cleanName.length < 2) {
             return Result.failure(IOException("اسم المستخدم يجب أن يتكون من حرفين على الأقل"))
         }
@@ -480,7 +491,7 @@ object CloudAuthRules {
         if (cleanName.any { it.isWhitespace() || it == '/' || it == '\\' }) {
             return Result.failure(IOException("اسم المستخدم لا يجب أن يحتوي على مسافات أو شرطات مائلة"))
         }
-        if (cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
+        if (cleanPass.isBlank() || cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
             return Result.failure(IOException("كلمة المرور يجب أن تتكون من 10 خانات على الأقل"))
         }
         if (cleanPass.length > MAX_PASSWORD_LENGTH) {
@@ -612,8 +623,8 @@ object CloudAuthRules {
     ): Result<CloudAuthRegistry> {
         requireAdminActor(registry, actorUsername).getOrElse { return Result.failure(it) }
         val target = normalizeUsername(targetUsername)
-        val cleanPass = newPassword.trim()
-        if (cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
+        val cleanPass = newPassword
+        if (cleanPass.isBlank() || cleanPass.length < MIN_USER_PASSWORD_LENGTH) {
             return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 10 خانات على الأقل"))
         }
         if (cleanPass.length > MAX_PASSWORD_LENGTH) {
@@ -647,8 +658,8 @@ object CloudAuthRules {
         now: Long = System.currentTimeMillis()
     ): Result<CloudAuthRegistry> {
         val target = normalizeUsername(username)
-        val cleanNew = newPassword.trim()
-        if (cleanNew.length < MIN_USER_PASSWORD_LENGTH) {
+        val cleanNew = newPassword
+        if (cleanNew.isBlank() || cleanNew.length < MIN_USER_PASSWORD_LENGTH) {
             return Result.failure(IOException("كلمة المرور الجديدة يجب أن تتكون من 10 خانات على الأقل"))
         }
         if (cleanNew.length > MAX_PASSWORD_LENGTH) {
@@ -774,6 +785,28 @@ object CloudAuthRules {
         )
     }
 
+    /** A local usability policy, not a signed server authorization token. Clock rollback fails closed. */
+    const val MAX_OFFLINE_SESSION_AGE_MS: Long = 24L * 60 * 60 * 1_000
+
+    fun isCachedSessionFresh(verifiedAt: Long, now: Long = System.currentTimeMillis()): Boolean =
+        verifiedAt > 0L && now >= verifiedAt && now - verifiedAt <= MAX_OFFLINE_SESSION_AGE_MS
+
+    /** Never persist password verifiers or another user's profile on an ordinary client. */
+    fun redactedRegistry(
+        registry: CloudAuthRegistry,
+        username: String,
+        includeAllUsers: Boolean = false
+    ): CloudAuthRegistry {
+        val normalized = normalizeUsername(username)
+        return registry.copy(
+            users = registry.users.filter { includeAllUsers || normalizeUsername(it.username) == normalized }
+                .map { it.copy(passwordHash = "") },
+            deviceRequests = registry.deviceRequests.filter {
+                includeAllUsers || normalizeUsername(it.username) == normalized
+            }
+        )
+    }
+
     // ─── التحويل من وإلى JSON (متوافق مع R8 و JVM) ─────────────────────────
 
     fun toJson(registry: CloudAuthRegistry): String {
@@ -824,7 +857,13 @@ object CloudAuthRules {
         val root = runCatching { JSONObject(jsonText) }.getOrElse {
             return emptyRegistry(now)
         }
-        val schemaVersion = root.optInt("schemaVersion", SCHEMA_VERSION)
+        val schemaValue = root.opt("schemaVersion")
+        val schemaVersion = if (schemaValue == null) SCHEMA_VERSION else {
+            val number = schemaValue as? Number ?: return emptyRegistry(now)
+            val value = number.toInt()
+            if (value !in 1..SCHEMA_VERSION || number.toDouble() != value.toDouble()) return emptyRegistry(now)
+            value
+        }
         val updatedAt = root.optLong("updatedAt", now)
 
         val usersArray = root.optJSONArray("users") ?: JSONArray()
@@ -834,14 +873,14 @@ object CloudAuthRules {
             val username = normalizeUsername(u.optString("username"))
             if (username.isBlank() || username.length > MAX_USERNAME_LENGTH) continue
             val permsObj = u.optJSONObject("permissions")
-            val isAdmin = u.optBoolean("isAdmin", username == ADMIN_USERNAME)
+            val isAdmin = username == ADMIN_USERNAME
             val perms = if (isAdmin) {
                 UserPermissions.FULL
             } else {
                 UserPermissions(
-                    canDownload = permsObj?.optBoolean("canDownload", true) ?: true,
-                    canUpload = permsObj?.optBoolean("canUpload", true) ?: true,
-                    canModify = permsObj?.optBoolean("canModify", true) ?: true
+                    canDownload = permsObj?.opt("canDownload") == true,
+                    canUpload = permsObj?.opt("canUpload") == true,
+                    canModify = permsObj?.opt("canModify") == true
                 )
             }
             val boundObj = u.optJSONObject("boundDevice")
@@ -850,7 +889,7 @@ object CloudAuthRules {
                 displayName = u.optString("displayName", username).ifBlank { username },
                 passwordHash = u.optString("passwordHash"),
                 isAdmin = isAdmin,
-                isActive = if (isAdmin) true else u.optBoolean("isActive", true),
+                isActive = if (isAdmin) true else u.opt("isActive") == true,
                 permissions = perms,
                 boundDevice = boundObj?.let(::deviceFromJson),
                 createdAt = u.optLong("createdAt", now),

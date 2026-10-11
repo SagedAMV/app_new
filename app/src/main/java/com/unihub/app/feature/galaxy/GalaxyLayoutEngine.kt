@@ -3,12 +3,10 @@ package com.unihub.app.feature.galaxy
 import com.unihub.app.data.local.model.FolderWithFileCount
 import java.util.ArrayDeque
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** أقرب مسافة مقبولة بين مركزي مجلدين على الحلقة نفسها. */
 internal const val GALAXY_FIRST_ORBIT_RADIUS_DP = 160f
 internal const val GALAXY_ORBIT_RADIAL_STEP_DP = 132f
 internal const val GALAXY_ORBITER_WIDTH_DP = 100f
@@ -19,7 +17,6 @@ internal const val GALAXY_MAX_ZOOM = 12f
 internal const val GALAXY_INITIAL_COMFORT_SCALE = 0.72f
 internal const val GALAXY_SHARED_ORBIT_DURATION_MILLIS = 90_000
 
-/** موضع مجلد على حلقة تمثل مستوى عمقه داخل شجرة المجلدات. */
 internal data class OrbitingFolder(
     val folder: FolderWithFileCount,
     val ringIndex: Int,
@@ -27,17 +24,13 @@ internal data class OrbitingFolder(
     val ringSize: Int,
     val radiusDp: Float,
     val startAngleRadians: Double,
-    /** المعرّف الفعلي للأب في شجرة العرض؛ null للمجلد الجذري. */
+    /** الأب في شجرة العرض بعد معالجة الدورات والمراجع المفقودة. */
     val parentFolderId: Long? = null
 )
 
-/** وصلة مرئية بين مجلد وأبيه المباشر. تُرسم خلف الكواكب كخيط رفيع. */
-internal data class GalaxyFolderConnection(
-    val parentFolderId: Long,
-    val childFolderId: Long
-)
+internal data class GalaxyFolderConnection(val parentFolderId: Long, val childFolderId: Long)
 
-/** نتيجة التخطيط كاملة، وتشمل علاقات الأبوة التي لا تظهر في تخطيط مداري مسطّح. */
+/** أبعاد عالم افتراضي فقط؛ لا يجوز استخدامها لقياس عنصر Compose بحجم العالم. */
 internal data class GalaxyOrbitLayout(
     val placements: List<OrbitingFolder>,
     val ringRadiiDp: List<Float>,
@@ -47,26 +40,12 @@ internal data class GalaxyOrbitLayout(
     val fitAllScale: Float
 )
 
-private data class PendingFolder(
-    val folder: FolderWithFileCount,
-    val parentFolderId: Long?,
-    val depth: Int,
-    val sectorStart: Double,
-    val sectorWidth: Double,
-    val angle: Double
-)
+private data class TreeFolder(val folder: FolderWithFileCount, val parentId: Long?, val depth: Int)
 
 /**
- * تخطيط هرمي شعاعي:
- * - الجذور قريبة من شمس «جامعتي».
- * - كل مستوى من الأبناء أبعد من المستوى الذي يحتوي آباءه.
- * - يتقاسم الأبناء القطاع الزاوي لأبيهم كي تبقى كل عائلة متجاورة بصريًا.
- * - لكل ابن وصلة مرئية مباشرة إلى أبيه.
- * - جميع المستويات تستخدم زاوية دوران مشتركة في الشاشة، لذلك لا تنقلب
- *   اتجاهات المدارات ولا تنفصل الوصلات عن العلاقات الصحيحة أثناء الحركة.
- *
- * تُعالَج المراجع اليتيمة والدورات غير المتوقعة في parentId بتكوين جذور عرض
- * احتياطية؛ فلا تضيع مجلدات ولا يدخل التخطيط في حلقة لا نهائية إذا تلفت البيانات.
+ * كل نهاية في الشجرة تحصل على مقعد زاوي واحد. يشغل كل أب مجموع مقاعد عائلته،
+ * لذلك تبقى العائلات متجاورة دون تقسيم القطاع بالتساوي مراراً وتضييقه أُسياً.
+ * العبور وحساب الأوزان تكراريان: حتى الأشجار العميقة لا تستهلك مكدس الاستدعاء.
  */
 internal fun computeGalaxyOrbitLayout(
     folders: List<FolderWithFileCount>,
@@ -74,31 +53,27 @@ internal fun computeGalaxyOrbitLayout(
     viewportHeightPx: Float,
     density: Float
 ): GalaxyOrbitLayout {
-    require(viewportWidthPx > 0f && viewportHeightPx > 0f) {
-        "Galaxy viewport dimensions must be positive"
-    }
-    require(density > 0f) { "Galaxy density must be positive" }
+    require(viewportWidthPx.isFinite() && viewportHeightPx.isFinite() &&
+        viewportWidthPx > 0f && viewportHeightPx > 0f) { "Galaxy viewport dimensions must be finite and positive" }
+    require(density.isFinite() && density > 0f) { "Galaxy density must be finite and positive" }
 
-    // المفترض أن folderId فريد في قاعدة البيانات. إزالة التكرار هنا دفاع إضافي
-    // يمنع كوكبين متراكبين في حال وصلت قائمة غير سليمة من مصدر آخر.
     val uniqueFolders = folders.distinctBy { it.folderId }
-    val byId = uniqueFolders.associateBy { it.folderId }
-    val childrenByParent = uniqueFolders
-        .asSequence()
-        .filter { folder ->
-            val parentId = folder.parentId
-            parentId != null && parentId != folder.folderId && parentId in byId
-        }
-        .groupBy { it.parentId }
-        .mapValues { (_, children) -> children }
+    if (uniqueFolders.isEmpty()) {
+        val sizeDp = (GALAXY_FIRST_ORBIT_RADIUS_DP + GALAXY_ORBIT_CONTENT_PADDING_DP) * 2f
+        val sizePx = sizeDp * density
+        return GalaxyOrbitLayout(emptyList(), emptyList(), emptyList(), sizeDp, sizePx,
+            minOf(viewportWidthPx / sizePx, viewportHeightPx / sizePx, 1f))
+    }
 
-    // نبدأ بالجذور الطبيعية، ثم نضيف جذرًا احتياطيًا لكل مكوّن لا يمكن الوصول
-    // إليه بسبب دورة في علاقات الأبوة. الحفاظ على ترتيب الإدخال مهم لاستقرار العرض.
+    val byId = uniqueFolders.associateBy { it.folderId }
+    val childrenByParent = uniqueFolders.filter { folder ->
+        val parentId = folder.parentId
+        parentId != null && parentId != folder.folderId && parentId in byId
+    }.groupBy { it.parentId }
     val roots = uniqueFolders.filter { folder ->
         folder.parentId == null || folder.parentId !in byId || folder.parentId == folder.folderId
     }.toMutableList()
     val discovered = HashSet<Long>(uniqueFolders.size)
-
     fun markReachable(start: FolderWithFileCount) {
         val stack = ArrayDeque<FolderWithFileCount>()
         stack.addLast(start)
@@ -108,7 +83,6 @@ internal fun computeGalaxyOrbitLayout(
             childrenByParent[current.folderId].orEmpty().forEach(stack::addLast)
         }
     }
-
     roots.forEach(::markReachable)
     uniqueFolders.forEach { folder ->
         if (folder.folderId !in discovered) {
@@ -117,149 +91,101 @@ internal fun computeGalaxyOrbitLayout(
         }
     }
 
-    if (uniqueFolders.isEmpty()) {
-        val emptySizeDp = (GALAXY_FIRST_ORBIT_RADIUS_DP + GALAXY_ORBIT_CONTENT_PADDING_DP) * 2f
-        val emptySizePx = emptySizeDp * density
-        return GalaxyOrbitLayout(
-            placements = emptyList(),
-            ringRadiiDp = emptyList(),
-            connections = emptyList(),
-            contentSizeDp = emptySizeDp,
-            contentSizePx = emptySizePx,
-            fitAllScale = minOf(viewportWidthPx / emptySizePx, viewportHeightPx / emptySizePx, 1f)
-        )
-    }
-
-    val rootSectorWidth = 2.0 * PI / roots.size
-    val pending = ArrayDeque<PendingFolder>()
-    roots.asReversed().forEachIndexed { reversedIndex, folder ->
-        val index = roots.lastIndex - reversedIndex
-        val sectorStart = -PI / 2.0 - rootSectorWidth / 2.0 + index * rootSectorWidth
-        pending.addLast(
-            PendingFolder(
-                folder = folder,
-                parentFolderId = null,
-                depth = 0,
-                sectorStart = sectorStart,
-                sectorWidth = rootSectorWidth,
-                angle = sectorStart + rootSectorWidth / 2.0
-            )
-        )
-    }
-
-    val treePlacements = ArrayList<PendingFolder>(uniqueFolders.size)
+    // نبني أولاً غابة صحيحة ونقطع روابط الدورات قبل حساب أوزان العائلات.
+    val pending = ArrayDeque<TreeFolder>()
+    roots.asReversed().forEach { pending.addLast(TreeFolder(it, null, 0)) }
+    val tree = ArrayList<TreeFolder>(uniqueFolders.size)
     val assigned = HashSet<Long>(uniqueFolders.size)
     while (pending.isNotEmpty()) {
         val current = pending.removeLast()
         if (!assigned.add(current.folder.folderId)) continue
-        treePlacements += current
-
-        val children = childrenByParent[current.folder.folderId].orEmpty()
-            .filter { it.folderId !in assigned }
-        if (children.isEmpty()) continue
-
-        val childSectorWidth = current.sectorWidth / children.size
-        // الإضافة بالعكس مع إزالة آخر عنصر تضمن بقاء ترتيب المجلدات الأصلي عند السحب.
-        children.asReversed().forEachIndexed { reversedChildIndex, child ->
-            val childIndex = children.lastIndex - reversedChildIndex
-            val sectorStart = current.sectorStart + childIndex * childSectorWidth
-            pending.addLast(
-                PendingFolder(
-                    folder = child,
-                    parentFolderId = current.folder.folderId,
-                    depth = current.depth + 1,
-                    sectorStart = sectorStart,
-                    sectorWidth = childSectorWidth,
-                    angle = sectorStart + childSectorWidth / 2.0
-                )
-            )
+        tree += current
+        childrenByParent[current.folder.folderId].orEmpty().asReversed().forEach { child ->
+            if (child.folderId !in assigned) pending.addLast(TreeFolder(child, current.folder.folderId, current.depth + 1))
         }
     }
-
-    // تحديد نصف قطر كل مستوى حسب أصغر فجوة زاوية فعلية بين عناصره؛ هذا يحافظ
-    // على مسافة لمس آمنة حتى عندما تكون فروع الشجرة متفاوتة الاتساع.
-    val maxDepth = treePlacements.maxOfOrNull { it.depth } ?: 0
-    val placementsByDepth = treePlacements.groupBy { it.depth }
+    val canonicalChildren = tree.filter { it.parentId != null }.groupBy { it.parentId }
+    val canonicalRoots = tree.filter { it.parentId == null }
+    val leafCounts = HashMap<Long, Int>(tree.size)
+    tree.asReversed().forEach { item ->
+        val count = leafCounts[item.folder.folderId] ?: 1
+        leafCounts[item.folder.folderId] = count
+        item.parentId?.let { parent -> leafCounts[parent] = (leafCounts[parent] ?: 0) + count }
+    }
+    val totalLeaves = canonicalRoots.sumOf { leafCounts.getValue(it.folder.folderId) }
+    val leafStarts = HashMap<Long, Int>(tree.size)
+    var cursor = 0
+    canonicalRoots.forEach { root ->
+        leafStarts[root.folder.folderId] = cursor
+        cursor += leafCounts.getValue(root.folder.folderId)
+    }
+    tree.forEach { item ->
+        var childCursor = leafStarts.getValue(item.folder.folderId)
+        canonicalChildren[item.folder.folderId].orEmpty().forEach { child ->
+            leafStarts[child.folder.folderId] = childCursor
+            childCursor += leafCounts.getValue(child.folder.folderId)
+        }
+    }
+    // الحساب من المقعد الصحيح مباشرةً يمنع تراكم أخطاء القسمة في آلاف المستويات.
+    val anglePerLeaf = 2.0 * PI / totalLeaves
+    val origin = -PI / 2.0 - leafCounts.getValue(canonicalRoots.first().folder.folderId) * anglePerLeaf / 2.0
+    val angles = tree.associate { item ->
+        val id = item.folder.folderId
+        id to (origin + (leafStarts.getValue(id) + leafCounts.getValue(id) / 2.0) * anglePerLeaf)
+    }
+    val byDepth = tree.groupBy { it.depth }
+    val maxDepth = tree.maxOf { it.depth }
     val ringRadii = ArrayList<Float>(maxDepth + 1)
     var previousRadius = 0f
     for (depth in 0..maxDepth) {
-        val level = placementsByDepth[depth].orEmpty()
-        if (level.isEmpty()) continue
-        val neededRadius = minimumRadiusForAngularSpacing(level.map { it.angle })
-        val standardRadius = GALAXY_FIRST_ORBIT_RADIUS_DP + depth * GALAXY_ORBIT_RADIAL_STEP_DP
-        val separatedRadius = if (depth == 0) standardRadius else previousRadius + GALAXY_ORBIT_RADIAL_STEP_DP
-        val radius = max(max(standardRadius, separatedRadius), neededRadius)
+        val level = byDepth.getValue(depth)
+        val needed = minimumRadiusForAngularSpacing(level.map { angles.getValue(it.folder.folderId) })
+        val standard = GALAXY_FIRST_ORBIT_RADIUS_DP + depth * GALAXY_ORBIT_RADIAL_STEP_DP
+        val separated = if (depth == 0) standard else previousRadius + GALAXY_ORBIT_RADIAL_STEP_DP
+        val radius = max(max(standard, separated), needed)
         ringRadii += radius
         previousRadius = radius
     }
-
-    val radiusByDepth = ringRadii
-    val indexByFolderId = placementsByDepth.mapValues { (_, levelItems) ->
-        levelItems.mapIndexed { index, item -> item.folder.folderId to index }.toMap()
-    }
-    val placements = treePlacements.map { item ->
-        OrbitingFolder(
-            folder = item.folder,
-            ringIndex = item.depth,
-            indexInRing = indexByFolderId[item.depth]?.get(item.folder.folderId) ?: 0,
-            ringSize = placementsByDepth[item.depth].orEmpty().size,
-            radiusDp = radiusByDepth[item.depth],
-            startAngleRadians = item.angle,
-            parentFolderId = item.parentFolderId
-        )
+    val ringIndices = HashMap<Long, Int>(tree.size)
+    byDepth.values.forEach { level -> level.forEachIndexed { index, item -> ringIndices[item.folder.folderId] = index } }
+    val placements = tree.map { item ->
+        OrbitingFolder(item.folder, item.depth, ringIndices.getValue(item.folder.folderId),
+            byDepth.getValue(item.depth).size, ringRadii[item.depth], angles.getValue(item.folder.folderId), item.parentId)
     }
     val connections = placements.mapNotNull { item ->
-        item.parentFolderId?.let { parentId ->
-            GalaxyFolderConnection(parentFolderId = parentId, childFolderId = item.folder.folderId)
-        }
+        item.parentFolderId?.let { GalaxyFolderConnection(it, item.folder.folderId) }
     }
-
-    val outerRadius = ringRadii.lastOrNull() ?: GALAXY_FIRST_ORBIT_RADIUS_DP
-    val contentSizeDp = (outerRadius + max(GALAXY_ORBITER_WIDTH_DP, GALAXY_ORBITER_HEIGHT_DP) / 2f +
+    val contentSizeDp = (ringRadii.last() + max(GALAXY_ORBITER_WIDTH_DP, GALAXY_ORBITER_HEIGHT_DP) / 2f +
         GALAXY_ORBIT_CONTENT_PADDING_DP) * 2f
     val contentSizePx = contentSizeDp * density
-    val fitAllScale = minOf(viewportWidthPx / contentSizePx, viewportHeightPx / contentSizePx, 1f)
-
-    return GalaxyOrbitLayout(
-        placements = placements,
-        ringRadiiDp = ringRadii,
-        connections = connections,
-        contentSizeDp = contentSizeDp,
-        contentSizePx = contentSizePx,
-        fitAllScale = fitAllScale
-    )
+    return GalaxyOrbitLayout(placements, ringRadii, connections, contentSizeDp, contentSizePx,
+        minOf(viewportWidthPx / contentSizePx, viewportHeightPx / contentSizePx, 1f))
 }
 
-/** نصف القطر الذي يحفظ حدّ المسافة بين أقرب عنصرين على الحلقة. */
 private fun minimumRadiusForAngularSpacing(angles: List<Double>): Float {
     if (angles.size <= 1) return GALAXY_FIRST_ORBIT_RADIUS_DP
     val fullTurn = 2.0 * PI
-    val normalized = angles.map { angle -> ((angle % fullTurn) + fullTurn) % fullTurn }.sorted()
-    var smallestGap = fullTurn
-    for (index in normalized.indices) {
-        val current = normalized[index]
-        val next = if (index == normalized.lastIndex) normalized[0] + fullTurn else normalized[index + 1]
-        smallestGap = minOf(smallestGap, abs(next - current))
+    val normalized = angles.map { ((it % fullTurn) + fullTurn) % fullTurn }.sorted()
+    val smallestGap = normalized.indices.minOf { index ->
+        val next = if (index == normalized.lastIndex) normalized.first() + fullTurn else normalized[index + 1]
+        next - normalized[index]
     }
-    // الحماية من قسمة هائلة إذا وصلت شجرة تالفة ذات عمق/تفرع اصطناعي ضخم.
-    val safeGap = smallestGap.coerceAtLeast(1e-6)
-    val denominator = 2.0 * sin(safeGap / 2.0)
-    val radius = GALAXY_MIN_ORBITER_SPACING_DP / denominator
-    return radius.coerceIn(GALAXY_FIRST_ORBIT_RADIUS_DP.toDouble(), 20_000_000.0).toFloat()
+    check(smallestGap > 0.0) { "Distinct leaf seats must have distinct angles" }
+    val radius = max(GALAXY_FIRST_ORBIT_RADIUS_DP.toDouble(),
+        GALAXY_MIN_ORBITER_SPACING_DP / (2.0 * sin(smallestGap / 2.0)))
+    // التقريب للأعلى يحافظ على المسافة المطلوبة؛ لا سقف يُخفي التداخل بصمت.
+    return Math.nextUp(radius.toFloat())
 }
 
-/** كل المستويات تدور في الاتجاه والسرعة الزاوية نفسيهما كي تبقى العائلات متماسكة. */
 internal fun orbitDurationMillis(ringIndex: Int): Int {
     require(ringIndex >= 0) { "Orbit ring index cannot be negative" }
     return GALAXY_SHARED_ORBIT_DURATION_MILLIS
 }
 
-/** إشارة واحدة موجبة لكل المدارات؛ لا توجد حلقات تعكس اتجاهها بعد الآن. */
 internal fun orbitDirectionDegrees(ringIndex: Int): Float {
     require(ringIndex >= 0) { "Orbit ring index cannot be negative" }
     return 360f
 }
 
-/** حجم الكوكب يتدرج بلطف بحسب عدد الملفات دون أن يصبح ضخماً. */
 internal fun folderPlanetSizeDp(fileCount: Int): Float =
     (28f + sqrt(fileCount.coerceAtLeast(0).toFloat()) * 1.2f).coerceIn(28f, 40f)

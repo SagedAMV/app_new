@@ -1,40 +1,56 @@
 package com.unihub.app.feature.galaxy
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.ZoomOutMap
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,632 +60,364 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.unihub.app.data.local.model.FolderWithFileCount
 import com.unihub.app.ui.theme.toComposeColor
+import kotlinx.coroutines.isActive
 import kotlin.math.PI
-import kotlin.math.cos
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlin.random.Random
 
 private val SUN_GOLD = Color(0xFFFFD54F)
-private const val GALAXY_KEEP_VISIBLE_DP = 56f
+private const val GALAXY_LABEL_SCALE = .6f
 
-/**
- * مجرة UniHub: الجذور تدور قرب شمس «جامعتي»، ثم يظهر كل مستوى من الأبناء
- * على حلقات أبعد ومتصلًا بأبيه بخيط مرئي. الحركة الزاوية مشتركة لكل المستويات
- * كي تظل علاقات المجلدات واضحة أثناء الدوران. الضغط على أي كوكب يفتح مجلده.
- */
 @Composable
-fun GalaxyScreen(
+fun GalaxyScreen(onOpenFolder: (Long) -> Unit, viewModel: GalaxyViewModel = hiltViewModel()) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    GalaxyContent(state, onOpenFolder, viewModel::retry)
+}
+
+/** Kept independent of Hilt so loading, empty and failure states can be tested on-device. */
+@Composable
+internal fun GalaxyContent(
+    state: GalaxyUiState,
     onOpenFolder: (Long) -> Unit,
-    viewModel: GalaxyViewModel = hiltViewModel()
+    onRetry: () -> Unit,
+    motionEnabled: Boolean = true
 ) {
-    val folders by viewModel.folders.collectAsStateWithLifecycle()
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFF05070C), Color(0xFF0B101A), Color(0xFF05070C))
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        GoldenStardustBackground(Modifier.matchParentSize())
-
-        if (folders.isEmpty()) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                SolarCore()
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = "لا توجد مجلدات بعد",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFE0E5E1),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "أنشئ مجلدات لموادك من شاشة الملفات، وستظهر جميعها ككواكب تدور حول جامعتي.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFA9B4AD),
-                    textAlign = TextAlign.Center
-                )
-                Icon(
-                    imageVector = Icons.Outlined.Public,
-                    contentDescription = null,
-                    tint = Color(0xFFA9B4AD),
-                    modifier = Modifier.padding(top = 16.dp).size(24.dp)
-                )
+    val backgroundClock = rememberGalaxyClock(motionEnabled)
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+        listOf(Color(0xFF05070C), Color(0xFF0B101A), Color(0xFF05070C)))), contentAlignment = Alignment.Center) {
+        GoldenStardustBackground(backgroundClock, Modifier.matchParentSize())
+        when (state) {
+            GalaxyUiState.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = SUN_GOLD, modifier = Modifier.testTag("galaxy-loading"))
+                Spacer(Modifier.height(12.dp))
+                Text("جارٍ تحميل المجلدات…", color = Color(0xFFE0E5E1))
             }
-        } else {
-            GalaxyUniverse(folders = folders, onOpenFolder = onOpenFolder)
-            Text(
-                text = "المجلدات الرئيسية قرب «جامعتي»، والفرعية متصلة بأصولها بخيط · اسحب للتنقل وقرّب بإصبعين",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFFA9B4AD),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
-            )
+            GalaxyUiState.Error -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("تعذّر تحميل مجلدات المجرة", color = Color(0xFFE0E5E1), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onRetry) { Text("إعادة المحاولة") }
+            }
+            is GalaxyUiState.Ready -> if (state.folders.isEmpty()) {
+                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    SolarCore(pulse = { sunPulse(backgroundClock.value) })
+                    Spacer(Modifier.height(20.dp))
+                    Text("لا توجد مجلدات بعد", color = Color(0xFFE0E5E1), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Text("أنشئ مجلدات لموادك من شاشة الملفات، وستظهر ككواكب حول جامعتي.",
+                        color = Color(0xFFA9B4AD), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                    Icon(Icons.Outlined.Public, contentDescription = null, tint = Color(0xFFA9B4AD),
+                        modifier = Modifier.padding(top = 16.dp).size(24.dp))
+                }
+            } else GalaxyUniverse(state.folders, onOpenFolder, motionEnabled = motionEnabled)
         }
     }
 }
 
-/** حدود حركة المحتوى محسوبة بالبكسل؛ تسمح باستكشاف اللوحة مع إبقاء جزء منها مرئياً. */
-private fun clampGalaxyTranslation(
-    translation: Offset,
-    scaledWidthPx: Float,
-    scaledHeightPx: Float,
-    viewportWidthPx: Float,
-    viewportHeightPx: Float,
-    keepVisiblePx: Float
-): Offset {
-    val minX = keepVisiblePx - scaledWidthPx
-    val maxX = viewportWidthPx - keepVisiblePx
-    val minY = keepVisiblePx - scaledHeightPx
-    val maxY = viewportHeightPx - keepVisiblePx
-    return Offset(
-        x = translation.x.coerceIn(minOf(minX, maxX), maxOf(minX, maxX)),
-        y = translation.y.coerceIn(minOf(minY, maxY), maxOf(minY, maxY))
-    )
-}
-
+/** The viewport stays screen-sized; no native layout/layer is ever sized to the virtual world. */
 @Composable
-private fun GalaxyUniverse(
+internal fun GalaxyUniverse(
     folders: List<FolderWithFileCount>,
-    onOpenFolder: (Long) -> Unit
+    onOpenFolder: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    motionEnabled: Boolean = true
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val viewportWidthPx = with(density) { maxWidth.toPx() }
-        val viewportHeightPx = with(density) { maxHeight.toPx() }
-        val layout = remember(folders, viewportWidthPx, viewportHeightPx, density.density) {
-            computeGalaxyOrbitLayout(folders, viewportWidthPx, viewportHeightPx, density.density)
+        val widthPx = with(density) { maxWidth.toPx() }
+        val heightPx = with(density) { maxHeight.toPx() }
+        if (widthPx <= 0f || heightPx <= 0f || !widthPx.isFinite() || !heightPx.isFinite()) return@BoxWithConstraints
+        val scene = remember(folders, widthPx, heightPx, density.density) {
+            GalaxyScene(computeGalaxyOrbitLayout(folders, widthPx, heightPx, density.density))
         }
-        val contentSizePx = layout.contentSizePx
-        val contentSizeDp = layout.contentSizeDp.dp
-        val fitAllScale = layout.fitAllScale
-
-        var scale by remember { mutableFloatStateOf(1f) }
-        var translation by remember { mutableStateOf(Offset.Zero) }
+        var camera by remember { mutableStateOf(GalaxyCamera(scene.layout.fitAllScale)) }
+        var viewportSize by remember { mutableStateOf(IntSize.Zero) }
         var userAdjusted by remember { mutableStateOf(false) }
-        val keepVisiblePx = GALAXY_KEEP_VISIBLE_DP * density.density
-
-        // عرض ابتدائي قابل للقراءة: لا نصغّر آلاف أهداف اللمس إلى نقاط غير قابلة للنقر.
-        // يمكن للمستخدم استكشاف بقية المدارات بالسحب، أو عرض المجرة كاملة بالنقر المزدوج.
-        LaunchedEffect(folders, contentSizePx, viewportWidthPx, viewportHeightPx, fitAllScale) {
-            if (!userAdjusted) {
-                scale = min(1f, max(fitAllScale, GALAXY_INITIAL_COMFORT_SCALE))
-                translation = Offset(
-                    x = (viewportWidthPx - contentSizePx * scale) / 2f,
-                    y = (viewportHeightPx - contentSizePx * scale) / 2f
-                )
-            } else {
-                // عندما تُحذف مجلدات ويصغر المدار، لا نترك عامل تكبير أقل من الحد الجديد.
-                scale = scale.coerceIn(fitAllScale, GALAXY_MAX_ZOOM)
-                translation = clampGalaxyTranslation(
-                    translation = translation,
-                    scaledWidthPx = contentSizePx * scale,
-                    scaledHeightPx = contentSizePx * scale,
-                    viewportWidthPx = viewportWidthPx,
-                    viewportHeightPx = viewportHeightPx,
-                    keepVisiblePx = keepVisiblePx
-                )
+        var paused by remember { mutableStateOf(false) }
+        var showFolderList by remember { mutableStateOf(false) }
+        val clock = rememberGalaxyClock(motionEnabled && !paused)
+        val viewport = GalaxyViewport(
+            viewportSize.width.takeIf { it > 0 }?.toFloat() ?: widthPx,
+            viewportSize.height.takeIf { it > 0 }?.toFloat() ?: heightPx,
+            density.density, scene.layout.contentSizeDp, camera
+        )
+        val currentViewport by rememberUpdatedState(viewport)
+        val labelHeightDp = with(density) { (12.sp.toPx() + 11.sp.toPx()) / density.density + 6f }
+        val showLabels = camera.scale >= GALAXY_LABEL_SCALE
+        val colors = remember(scene) { scene.nodes.associate { node ->
+            node.placement.folder.folderId to node.placement.folder.color.toComposeColor(Color(0xFF4E7D6E))
+        } }
+        val visibleFolders by remember(scene, viewport, showLabels, labelHeightDp, clock) {
+            derivedStateOf(policy = structuralEqualityPolicy()) {
+                if (showLabels) scene.visibleFolders(viewport.projection(orbitRadians(clock.value)), labelHeightDp)
+                else emptyList()
             }
         }
+        LaunchedEffect(scene, viewportSize, widthPx, heightPx, density.density) {
+            val current = currentViewport
+            camera = if (!userAdjusted) current.overviewCamera() else current.clampedCamera(
+                camera.copy(scale = camera.scale.coerceIn(current.overviewCamera().scale, GALAXY_MAX_ZOOM)))
+        }
+        fun overview() {
+            userAdjusted = false
+            camera = currentViewport.overviewCamera()
+        }
+        fun zoom(factor: Float) {
+            userAdjusted = true
+            val current = currentViewport
+            camera = current.transformed(GalaxyPoint(current.widthPx / 2.0, current.heightPx / 2.0),
+                GalaxyPoint.ZERO, factor, current.overviewCamera().scale)
+        }
 
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clipToBounds()
-                .pointerInput(contentSizePx, viewportWidthPx, viewportHeightPx) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { viewportSize = it }.clipToBounds()
+                .pointerInput(scene, density.density) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         userAdjusted = true
-                        val newScale = (scale * zoom).coerceIn(fitAllScale, GALAXY_MAX_ZOOM)
-                        val appliedScale = newScale / scale
-                        translation = centroid - (centroid - translation) * appliedScale + pan
-                        scale = newScale
-                        translation = clampGalaxyTranslation(
-                            translation = translation,
-                            scaledWidthPx = contentSizePx * scale,
-                            scaledHeightPx = contentSizePx * scale,
-                            viewportWidthPx = viewportWidthPx,
-                            viewportHeightPx = viewportHeightPx,
-                            keepVisiblePx = keepVisiblePx
-                        )
+                        val current = currentViewport
+                        camera = current.transformed(centroid.point(), pan.point(), zoom, current.overviewCamera().scale)
                     }
                 }
-                .pointerInput(contentSizePx, fitAllScale) {
+                .pointerInput(scene, density.density) {
                     detectTapGestures(
-                        onDoubleTap = {
-                            userAdjusted = true
-                            scale = fitAllScale
-                            translation = Offset(
-                                x = (viewportWidthPx - contentSizePx * scale) / 2f,
-                                y = (viewportHeightPx - contentSizePx * scale) / 2f
-                            )
+                        onDoubleTap = { overview() },
+                        onTap = { tap ->
+                            val current = currentViewport
+                            if (current.camera.scale < GALAXY_LABEL_SCALE) {
+                                val projection = current.projection(orbitRadians(clock.value))
+                                scene.nearestFolder(projection, tap.point(), 20.0 * density.density)?.let { node ->
+                                    userAdjusted = true
+                                    camera = current.focusedCamera(projection.rotated(node.position))
+                                    // A focused folder stays still until the user resumes rotation.
+                                    paused = true
+                                }
+                            }
                         }
                     )
-                },
-            contentAlignment = AbsoluteAlignment.TopLeft
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(contentSizeDp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = translation.x
-                        translationY = translation.y
-                        transformOrigin = TransformOrigin(0f, 0f)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                // دوران واحد لجميع المستويات؛ تساوي السرعة الزاوية يحافظ على
-                // ثبات المسافة والاتجاه بين كل أب وابنه أثناء الحركة.
-                val orbitTransition = rememberInfiniteTransition(label = "UnifiedFolderHierarchyOrbit")
-                val rotationDegrees by orbitTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = orbitDirectionDegrees(0),
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(
-                            durationMillis = orbitDurationMillis(0),
-                            easing = LinearEasing
-                        )
-                    ),
-                    label = "AllFolderOrbitRotation"
+                }, contentAlignment = AbsoluteAlignment.TopLeft) {
+                Canvas(Modifier.matchParentSize().testTag("galaxy-canvas").semantics {
+                    contentDescription = "خريطة المجلدات، ${scene.nodes.size} مجلد"
+                }) {
+                    val projection = viewport.projection(orbitRadians(clock.value))
+                    val sun = projection.project(GalaxyPoint.ZERO).offset()
+                    val rings = scene.visibleRingIndices(projection)
+                    var lastDrawnRadius = Double.NEGATIVE_INFINITY
+                    rings.forEach { index ->
+                        val radius = scene.layout.ringRadiiDp[index] * projection.factor
+                        // Sub-pixel concentric rings add work and obscure the overview.
+                        if (radius - lastDrawnRadius >= 6.0 * density.density || index == rings.last) {
+                            drawCircle(SUN_GOLD.copy(alpha = if (index % 3 == 0) .28f else .16f),
+                                radius.toFloat(), sun, style = Stroke(max(.5f, projection.factor.toFloat())))
+                            lastDrawnRadius = radius
+                        }
+                    }
+                    scene.visibleEdges(projection).forEach { edge ->
+                        val start = projection.project(edge.start)
+                        val end = projection.project(edge.end)
+                        if (hypot(end.x - start.x, end.y - start.y) >= 1.0) {
+                            drawLine(Color(0xFFB7C7D4).copy(alpha = .62f), start.offset(), end.offset(),
+                                max(.5f, (1.15 * projection.factor).toFloat()))
+                        }
+                    }
+                    if (!showLabels) {
+                        scene.visibleFolders(projection, labelHeightDp).forEach { node ->
+                            val radius = max(1.25f * density.density,
+                                (folderPlanetSizeDp(node.placement.folder.fileCount) / 2.0 * projection.factor).toFloat())
+                            drawCircle(colors.getValue(node.placement.folder.folderId), radius, projection.project(node.position).offset())
+                        }
+                    }
+                }
+                visibleFolders.forEach { node ->
+                    key(node.placement.folder.folderId) {
+                        val diameter = folderPlanetSizeDp(node.placement.folder.fileCount)
+                        OrbitingFolderNode(node.placement.folder, onOpenFolder,
+                            Modifier.width(GALAXY_ORBITER_WIDTH_DP.dp).diskAnchor(
+                                center = { viewport.projection(orbitRadians(clock.value)).project(node.position) },
+                                diameterPx = with(density) { diameter.dp.roundToPx().toFloat() }, scale = camera.scale))
+                    }
+                }
+                SolarCore(
+                    modifier = Modifier.width(132.dp).diskAnchor(
+                        center = { viewport.projection(0.0).project(GalaxyPoint.ZERO) },
+                        diameterPx = with(density) { 76.dp.roundToPx().toFloat() },
+                        scale = max(camera.scale, GALAXY_INITIAL_COMFORT_SCALE)),
+                    pulse = { sunPulse(clock.value) }
                 )
-                val rotationRadians = rotationDegrees * (PI / 180.0)
-                val placementsById = remember(layout) {
-                    layout.placements.associateBy { it.folder.folderId }
-                }
-                val placementsByRing = remember(layout) { layout.placements.groupBy { it.ringIndex } }
-                val visibleRings = remember(
-                    layout, scale, translation, viewportWidthPx, viewportHeightPx, density.density
-                ) {
-                    visibleOrbitRingIndices(
-                        layout = layout,
-                        contentSizePx = contentSizePx,
-                        scale = scale,
-                        translation = translation,
-                        viewportWidthPx = viewportWidthPx,
-                        viewportHeightPx = viewportHeightPx,
-                        density = density.density
-                    )
-                }
-
-                Canvas(Modifier.matchParentSize()) {
-                    layout.ringRadiiDp.forEachIndexed { ringIndex, radiusDp ->
-                        val alpha = if (ringIndex % 3 == 0) 0.28f else 0.16f
-                        drawCircle(
-                            color = SUN_GOLD.copy(alpha = alpha),
-                            radius = radiusDp.dp.toPx(),
-                            center = center,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                width = 1.dp.toPx(),
-                                pathEffect = if (ringIndex % 3 == 0) {
-                                    PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 9.dp.toPx()))
-                                } else null
-                            )
-                        )
-                    }
-
-                    // ترسم الوصلات خلف الكواكب كي تختفي أطرافها تحت قرص كل مجلد،
-                    // فلا تبدو الخيوط وكأنها تمر فوق أسماء المجلدات أو داخل الأقراص.
-                    layout.connections.forEach { connection ->
-                        val parent = placementsById[connection.parentFolderId]
-                        val child = placementsById[connection.childFolderId]
-                        if (parent != null && child != null) {
-                            val parentAngle = parent.startAngleRadians + rotationRadians
-                            val childAngle = child.startAngleRadians + rotationRadians
-                            val start = Offset(
-                                x = center.x + parent.radiusDp.dp.toPx() * kotlin.math.cos(parentAngle).toFloat(),
-                                y = center.y + parent.radiusDp.dp.toPx() * kotlin.math.sin(parentAngle).toFloat()
-                            )
-                            val end = Offset(
-                                x = center.x + child.radiusDp.dp.toPx() * kotlin.math.cos(childAngle).toFloat(),
-                                y = center.y + child.radiusDp.dp.toPx() * kotlin.math.sin(childAngle).toFloat()
-                            )
-                            drawLine(
-                                color = Color(0xFFB7C7D4).copy(alpha = 0.62f),
-                                start = start,
-                                end = end,
-                                strokeWidth = 1.15.dp.toPx()
-                            )
-                        }
-                    }
-
-                    drawCircle(
-                        color = SUN_GOLD.copy(alpha = 0.45f),
-                        radius = 2.dp.toPx(),
-                        center = center
-                    )
-                }
-
-                layout.ringRadiiDp.indices.forEach { ringIndex ->
-                    GalaxyOrbitRingLayer(
-                        rotationDegrees = rotationDegrees,
-                        placements = placementsByRing[ringIndex].orEmpty(),
-                        visible = ringIndex in visibleRings,
-                        onOpenFolder = onOpenFolder
-                    )
-                }
-                SolarCore()
             }
+            Row(Modifier.fillMaxWidth().background(Color(0xFF080C14).copy(alpha = .9f)).padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { zoom(1.5f) }, modifier = Modifier.testTag("galaxy-zoom-in")) {
+                    Icon(Icons.Outlined.ZoomIn, "تكبير", tint = SUN_GOLD)
+                }
+                IconButton(onClick = { zoom(1f / 1.5f) }) { Icon(Icons.Outlined.ZoomOut, "تصغير", tint = SUN_GOLD) }
+                IconButton(onClick = ::overview, modifier = Modifier.testTag("galaxy-overview")) {
+                    Icon(Icons.Outlined.ZoomOutMap, "عرض المجرة كاملة", tint = SUN_GOLD)
+                }
+                IconButton(onClick = { paused = !paused }, enabled = motionEnabled) {
+                    Icon(if (paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                        if (paused) "تشغيل الدوران" else "إيقاف الدوران", tint = SUN_GOLD)
+                }
+                IconButton(onClick = { showFolderList = true }, modifier = Modifier.testTag("galaxy-folder-list")) {
+                    Icon(Icons.Outlined.FormatListBulleted, "قائمة المجلدات والبحث", tint = SUN_GOLD)
+                }
+            }
+            Text(if (showLabels) "اسحب للتنقل · اضغط المجلد لفتحه · زر العرض الشامل يعيد التمركز"
+                else "عرض شامل · اضغط كوكبًا لتقريبه أو اختر مجلدًا من القائمة",
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), color = Color(0xFFA9B4AD),
+                style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
         }
+        if (showFolderList) GalaxyFolderPicker(scene.nodes, onDismiss = { showFolderList = false }, onOpen = { id ->
+            showFolderList = false
+            onOpenFolder(id)
+        })
     }
 }
 
-/**
- * لا ننشئ عناصر Compose للمدارات البعيدة خارج مساحة الرؤية الحالية.
- * لأن عناصر الحلقة تدور على محيط ثابت، يكفي اختبار تقاطع دائرة المدار مع
- * مستطيل الرؤية؛ تبقى جميع كواكب الحلقة قابلة للظهور أثناء دورانها، من دون
- * بناء آلاف النصوص والعناصر غير المرئية في كل إطار.
- */
-private fun visibleOrbitRingIndices(
-    layout: GalaxyOrbitLayout,
-    contentSizePx: Float,
-    scale: Float,
-    translation: Offset,
-    viewportWidthPx: Float,
-    viewportHeightPx: Float,
-    density: Float
-): Set<Int> {
-    if (scale <= 0f) return layout.ringRadiiDp.indices.toSet()
-
-    val left = -translation.x / scale
-    val top = -translation.y / scale
-    val right = (viewportWidthPx - translation.x) / scale
-    val bottom = (viewportHeightPx - translation.y) / scale
-    val center = contentSizePx / 2f
-
-    val dx = when {
-        center < left -> left - center
-        center > right -> center - right
-        else -> 0f
-    }
-    val dy = when {
-        center < top -> top - center
-        center > bottom -> center - bottom
-        else -> 0f
-    }
-    val nearestDistance = sqrt(dx * dx + dy * dy)
-    val farthestDistance = listOf(
-        Offset(left, top), Offset(right, top),
-        Offset(left, bottom), Offset(right, bottom)
-    ).maxOf { corner ->
-        val x = corner.x - center
-        val y = corner.y - center
-        sqrt(x * x + y * y)
-    }
-    val nodeHalfDiagonal = sqrt(
-        (GALAXY_ORBITER_WIDTH_DP * density / 2f).let { it * it } +
-            (GALAXY_ORBITER_HEIGHT_DP * density / 2f).let { it * it }
-    ) + 4f * density
-
-    return layout.ringRadiiDp.indices.filterTo(mutableSetOf()) { ringIndex ->
-        val radiusPx = layout.ringRadiiDp[ringIndex] * density
-        radiusPx + nodeHalfDiagonal >= nearestDistance &&
-            radiusPx - nodeHalfDiagonal <= farthestDistance
-    }
-}
-
-/** تُحدّث زوايا الكواكب داخل الحلقة مع إبقاء الأسماء أفقية دائماً. */
-@Composable
-private fun GalaxyOrbitRingLayer(
-    rotationDegrees: Float,
-    placements: List<OrbitingFolder>,
-    visible: Boolean,
-    onOpenFolder: (Long) -> Unit
-) {
-    // الحساب الإحداثي يستخدم دورانًا مشتركًا حتى تظل وصلات الأبوة ملتصقة بالعائلة.
-    // ولا ننشئ طبقة بحجم المجرة كاملة لكل حلقة مهما كبر عدد المجلدات.
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (visible) {
-            val rotationRadians = rotationDegrees * (PI / 180.0)
-            placements.forEach { placement ->
-                val angle = placement.startAngleRadians + rotationRadians
-                val x = placement.radiusDp * cos(angle).toFloat()
-                val y = placement.radiusDp * sin(angle).toFloat()
-                OrbitingFolderNode(
-                    folder = placement.folder,
-                    onOpenFolder = onOpenFolder,
-                    modifier = Modifier
-                        .absoluteOffset(x = x.dp, y = y.dp)
-                        .size(GALAXY_ORBITER_WIDTH_DP.dp, GALAXY_ORBITER_HEIGHT_DP.dp)
-                )
-            }
-        }
+private fun Modifier.diskAnchor(center: () -> GalaxyPoint, diameterPx: Float, scale: Float): Modifier = graphicsLayer {
+    if (size.width > 0f && size.height > 0f) {
+        val anchor = galaxyDiskAnchor(center(), size.width, size.height, diameterPx, scale)
+        translationX = anchor.translation.x.toFloat()
+        translationY = anchor.translation.y.toFloat()
+        scaleX = scale
+        scaleY = scale
+        transformOrigin = TransformOrigin(anchor.pivotFractionX, anchor.pivotFractionY)
     }
 }
 
 @Composable
-private fun OrbitingFolderNode(
-    folder: FolderWithFileCount,
-    onOpenFolder: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val folderColor = folder.color.toComposeColor(fallback = Color(0xFF4E7D6E))
-    Column(
-        modifier = modifier.clickable { onOpenFolder(folder.folderId) },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(folderPlanetSizeDp(folder.fileCount).dp)
-                .drawBehind {
-                    drawCircle(
-                        color = folderColor.copy(alpha = 0.27f),
-                        radius = size.minDimension / 2f + 6.dp.toPx()
-                    )
-                }
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(folderColor.copy(alpha = 0.98f), folderColor.copy(alpha = 0.62f))
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
+private fun OrbitingFolderNode(folder: FolderWithFileCount, onOpenFolder: (Long) -> Unit, modifier: Modifier) {
+    val color = folder.color.toComposeColor(Color(0xFF4E7D6E))
+    Column(modifier.testTag("galaxy-folder-${folder.folderId}").clickable { onOpenFolder(folder.folderId) },
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(folderPlanetSizeDp(folder.fileCount).dp).testTag("galaxy-disk-${folder.folderId}")
+            .drawBehind { drawCircle(color.copy(alpha = .27f), size.minDimension / 2f + 6.dp.toPx()) }
+            .clip(CircleShape).background(Brush.radialGradient(listOf(color.copy(alpha = .98f), color.copy(alpha = .62f))))) {
             Canvas(Modifier.fillMaxSize()) {
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.25f),
-                    radius = size.minDimension * 0.12f,
-                    center = Offset(size.width * 0.32f, size.height * 0.28f)
-                )
+                drawCircle(Color.White.copy(alpha = .25f), size.minDimension * .12f, Offset(size.width * .32f, size.height * .28f))
             }
         }
         Spacer(Modifier.height(2.dp))
-        Text(
-            text = folder.name,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 10.sp,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            lineHeight = 12.sp,
-            color = Color(0xFFE9EEE9),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            text = "${folder.fileCount} ملف",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            lineHeight = 11.sp,
-            color = Color(0xFFAFBBB3),
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text(folder.name, Modifier.fillMaxWidth(), color = Color(0xFFE9EEE9), maxLines = 1,
+            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, lineHeight = 12.sp,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, platformStyle = PlatformTextStyle(includeFontPadding = false)))
+        Text("${folder.fileCount} ملف", Modifier.fillMaxWidth(), color = Color(0xFFAFBBB3), maxLines = 1,
+            overflow = TextOverflow.Clip, textAlign = TextAlign.Center, lineHeight = 11.sp,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, platformStyle = PlatformTextStyle(includeFontPadding = false)))
     }
 }
 
-/** شمس الجامعة ثابتة في المركز؛ ليست مجلداً ولا تستبدل أي مجلد في البيانات. */
 @Composable
-private fun SolarCore() {
-    val pulseTransition = rememberInfiniteTransition(label = "UniversitySunPulse")
-    val pulse by pulseTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4_500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sunPulse"
-    )
-    Column(
-        modifier = Modifier.width(132.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(76.dp)
-                .graphicsLayer { scaleX = pulse; scaleY = pulse }
-                .drawBehind {
-                    drawCircle(
-                        color = SUN_GOLD.copy(alpha = 0.13f),
-                        radius = size.minDimension * 0.92f
-                    )
-                    drawCircle(
-                        color = SUN_GOLD.copy(alpha = 0.25f),
-                        radius = size.minDimension * 0.68f
-                    )
-                }
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFFFF8C9),
-                            Color(0xFFFFD54F),
-                            Color(0xFFEF8F24),
-                            Color(0xFF9F4E11)
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
+private fun SolarCore(modifier: Modifier = Modifier.width(132.dp), pulse: () -> Float = { 1f }) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(76.dp).testTag("galaxy-sun").graphicsLayer { scaleX = pulse(); scaleY = scaleX }
+            .drawBehind {
+                drawCircle(SUN_GOLD.copy(alpha = .13f), size.minDimension * .92f)
+                drawCircle(SUN_GOLD.copy(alpha = .25f), size.minDimension * .68f)
+            }.clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFFFFF8C9), SUN_GOLD,
+                Color(0xFFEF8F24), Color(0xFF9F4E11))))) {
             Canvas(Modifier.fillMaxSize()) {
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.50f),
-                    radius = size.minDimension * 0.12f,
-                    center = Offset(size.width * 0.33f, size.height * 0.26f)
-                )
+                drawCircle(Color.White.copy(alpha = .5f), size.minDimension * .12f, Offset(size.width * .33f, size.height * .26f))
             }
         }
         Spacer(Modifier.height(7.dp))
-        Text(
-            text = "جامعتي",
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-            color = Color(0xFFFFE9A1),
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
-        Text(
-            text = "مركز المجلدات",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = Color(0xFFB9B5A1),
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
+        Text("جامعتي", color = Color(0xFFFFE9A1), maxLines = 1, textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
+        Text("مركز المجلدات", color = Color(0xFFB9B5A1), maxLines = 1, textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp))
     }
 }
 
-/**
- * مواصفات ذرة غبار ذهبي نيزكي (المقترح #10 المعتمد):
- * إحداثيات نسبية وسرعة انجراف متناهية البطء وحجم ناعم ونوع اللون.
- */
-private class StardustParticle(
-    val x: Float,
-    val y: Float,
-    val radiusPx: Float,
-    val speed: Float,
-    val phase: Float,
-    val colorIndex: Int
-)
-
-/**
- * لوحة ألوان غبار الذهب النيزكي الداكن:
- * درجات ذهبية وكهرمانية ونحاسية دافئة خالية من الوهج المشتت.
- */
-private val STARDUST_COLORS = listOf(
-    Color(0xFFFFD54F), // ذهب مشرق ناعم
-    Color(0xFFFFE082), // ذهب دافئ فاتح
-    Color(0xFFE6C280), // نحاس كوني خافت
-    Color(0xFFFFF8E1)  // أبيض عاجي نجمي
-)
-
-/**
- * سماء غبار الذهب النيزكي الداكن (المقترح #10 المعتمد في اختيارات.MD):
- * طبقة Canvas خفيفة لسماء OLED عميقة يعبرها غبار ذهبي ينجرف بهدوء وبطء فائق،
- * مع نجوم خافتة تومض برقة — مشهد تأملي مريح للأعصاب ويوفر استهلاك البطارية.
- */
 @Composable
-private fun GoldenStardustBackground(modifier: Modifier = Modifier) {
-    // نجوم ثابتة خافتة
-    val stars = remember {
-        val random = Random(42)
-        List(60) {
-            Triple(random.nextFloat(), random.nextFloat(), random.nextFloat())
+private fun GalaxyFolderPicker(nodes: List<GalaxySceneNode>, onDismiss: () -> Unit, onOpen: (Long) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val matches = remember(nodes, query) { nodes.filter { it.placement.folder.name.contains(query.trim(), ignoreCase = true) } }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("مجلدات المجرة") }, text = {
+        Column {
+            OutlinedTextField(query, onValueChange = { query = it }, label = { Text("بحث عن مجلد") },
+                modifier = Modifier.fillMaxWidth().testTag("galaxy-folder-search"), singleLine = true)
+            LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                items(matches, key = { it.placement.folder.folderId }) { node ->
+                    ListItem(headlineContent = { Text(node.placement.folder.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = { Text("${node.placement.folder.fileCount} ملف") },
+                        modifier = Modifier.clickable { onOpen(node.placement.folder.folderId) })
+                }
+            }
+            if (matches.isEmpty()) Text("لا توجد مجلدات مطابقة", Modifier.padding(top = 12.dp))
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
+}
+
+/** Pauses with the lifecycle; the elapsed clock does not restart at an animation boundary. */
+@Composable
+private fun rememberGalaxyClock(enabled: Boolean): State<Double> {
+    val elapsed = remember { mutableStateOf(0.0) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(enabled, lifecycle) {
+        if (enabled) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var previous: Long? = null
+            while (isActive) withFrameNanos { now ->
+                previous?.let { elapsed.value += ((now - it) / 1_000_000_000.0).coerceIn(0.0, .1) }
+                previous = now
+            }
         }
     }
+    return elapsed
+}
 
-    // ذرات غبار الذهب النيزكي (بذرة عشوائية ثابتة)
-    val stardust = remember {
-        val random = Random(101)
-        List(45) {
-            StardustParticle(
-                x = random.nextFloat(),
-                y = random.nextFloat(),
-                radiusPx = 1.2f + random.nextFloat() * 2.2f,
-                speed = 0.4f + random.nextFloat() * 0.6f,
-                phase = random.nextFloat(),
-                colorIndex = random.nextInt(STARDUST_COLORS.size)
-            )
-        }
-    }
+private fun orbitRadians(seconds: Double): Double =
+    (seconds / (orbitDurationMillis(0) / 1_000.0) % 1.0) * orbitDirectionDegrees(0) * PI / 180.0
+private fun sunPulse(seconds: Double): Float = 1f + .04f * sin(seconds * 2.0 * PI / 4.5).toFloat()
+private fun Offset.point() = GalaxyPoint(x.toDouble(), y.toDouble())
+private fun GalaxyPoint.offset() = Offset(x.toFloat(), y.toFloat())
 
-    val transition = rememberInfiniteTransition(label = "goldenStardust")
-    // دورة انجراف هادئة جداً (50 ثانية) تحاكي انعدام الجاذبية الكونية
-    val driftClock by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(50_000, easing = LinearEasing)),
-        label = "driftClock"
-    )
-    val twinkle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(4_500, easing = LinearEasing)),
-        label = "twinkle"
-    )
+private data class StardustParticle(val x: Float, val y: Float, val radiusPx: Float, val speed: Float, val phase: Float, val color: Color)
+private val STARDUST_COLORS = listOf(SUN_GOLD, Color(0xFFFFE082), Color(0xFFE6C280), Color(0xFFFFF8E1))
 
+@Composable
+private fun GoldenStardustBackground(clock: State<Double>, modifier: Modifier = Modifier) {
+    val stars = remember { Random(42).let { random -> List(60) { Triple(random.nextFloat(), random.nextFloat(), random.nextFloat()) } } }
+    val particles = remember { Random(101).let { random -> List(45) {
+        StardustParticle(random.nextFloat(), random.nextFloat(), 1.2f + random.nextFloat() * 2.2f,
+            .4f + random.nextFloat() * .6f, random.nextFloat(), STARDUST_COLORS[random.nextInt(STARDUST_COLORS.size)])
+    } } }
     Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-
-        // 1) النجوم الخلفية الثابتة
-        stars.forEach { star ->
-            val (fx, fy, phase) = star
-            val alpha = 0.20f + 0.45f * kotlin.math.abs(
-                sin((twinkle + phase) * 2f * PI.toFloat())
-            )
-            drawCircle(
-                color = Color.White.copy(alpha = alpha * 0.7f),
-                radius = 1.0f + phase * 1.4f,
-                center = Offset(fx * w, fy * h)
-            )
+        val seconds = clock.value
+        val twinkle = seconds / 4.5
+        stars.forEach { (x, y, phase) ->
+            val alpha = .2f + .45f * abs(sin((twinkle + phase) * 2.0 * PI)).toFloat()
+            drawCircle(Color.White.copy(alpha = alpha * .7f), 1f + phase * 1.4f, Offset(x * size.width, y * size.height))
         }
-
-        // 2) ذرات غبار الذهب النيزكي البطيئة الانجراف
-        stardust.forEach { p ->
-            // حركة رأسية هادئة مع تموج أفقي متناهي الصغر
-            val currentProgress = (driftClock * p.speed + p.phase) % 1f
-            val py = (p.y + currentProgress) % 1f * h
-            val px = (p.x + sin((currentProgress + p.phase) * 2f * PI.toFloat()) * 0.025f) * w
-
-            val baseColor = STARDUST_COLORS[p.colorIndex]
-            val pulseAlpha = 0.25f + 0.50f * kotlin.math.abs(
-                sin((twinkle + p.phase) * 2f * PI.toFloat())
-            )
-
-            // توهج خفيف للذرة
-            drawCircle(
-                color = baseColor.copy(alpha = pulseAlpha * 0.20f),
-                radius = p.radiusPx * 2.5f,
-                center = Offset(px, py)
-            )
-            // مركز الذرة الذهبية
-            drawCircle(
-                color = baseColor.copy(alpha = pulseAlpha * 0.85f),
-                radius = p.radiusPx,
-                center = Offset(px, py)
-            )
+        particles.forEach { particle ->
+            val progress = galaxyDustProgress(seconds, particle.speed, particle.phase)
+            val position = Offset(((particle.x + sin((progress + particle.phase) * 2.0 * PI) * .025) * size.width).toFloat(),
+                (((particle.y + progress) % 1.0) * size.height).toFloat())
+            val alpha = .25f + .5f * abs(sin((twinkle + particle.phase) * 2.0 * PI)).toFloat()
+            drawCircle(particle.color.copy(alpha = alpha * .2f), particle.radiusPx * 2.5f, position)
+            drawCircle(particle.color.copy(alpha = alpha * .85f), particle.radiusPx, position)
         }
     }
 }

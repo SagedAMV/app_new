@@ -2,76 +2,176 @@ name: Build Android APK
 
 on:
   push:
+    branches: [main, 'arena/**']
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: ubuntu-latest
-    
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-      
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-      
-    - name: Build Release Full APK
-      run: ./gradlew assembleReleaseFull --no-daemon --stacktrace
-      
-    - name: Verify APK exists
-      run: |
-        APK_PATH="app/build/outputs/apk/releaseFull/app-releaseFull.apk"
-        if [ ! -f "$APK_PATH" ]; then
-          echo "ERROR: APK not found at $APK_PATH"
-          exit 1
-        fi
-        echo "APK found!"
-        ls -lh "$APK_PATH"
-        
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: UniHub-releaseFull
-        path: app/build/outputs/apk/releaseFull/app-releaseFull.apk
-        retention-days: 30
-        
-    - name: Push APK to buled repository
-      env:
-        BULED_REPO_TOKEN: ${{ secrets.BULED_REPO_TOKEN }}
-      run: |
-        set -e
-        
-        if [ -z "$BULED_REPO_TOKEN" ]; then
-          echo "BULED_REPO_TOKEN not set, skipping APK push"
-          exit 0
-        fi
-        
-        git clone https://$BULED_REPO_TOKEN@github.com/SagedAMV/buled.git /tmp/buled
-        cd /tmp/buled
-        
-        VERSION=$(grep 'versionName' /home/runner/work/app_new/app_new/app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
-        APK_NAME="UniHub-v${VERSION}-release-full.apk"
-        
-        if [ -f "$APK_NAME" ]; then
-          echo "APK $APK_NAME already exists, skipping"
-          exit 0
-        fi
-        
-        cp /home/runner/work/app_new/app_new/app/build/outputs/apk/releaseFull/app-releaseFull.apk "$APK_NAME"
-        
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        git add "$APK_NAME"
-        git commit -m "تحديث النسخة الكاملة v${VERSION}"
-        git push origin main
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
+        with:
+          cache-read-only: false
+
+      - name: Check build verification helpers
+        run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
+
+      - name: Test encrypted provisioning service locally
+        run: |
+          node --test service/cloudflare/worker.test.mjs
+          python3 service/cloudflare/schema_test.py
+
+      - name: Run JVM unit tests
+        run: ./gradlew testReleaseFullUnitTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee unit-tests.log
+
+      - name: Run Android lint
+        run: ./gradlew lintReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee lint.log
+
+      - name: Build installable Debug APK
+        run: ./gradlew assembleDebug --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee debug-build.log
+
+      - name: Compile native Android UI tests
+        run: ./gradlew assembleDebugAndroidTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee ui-test-build.log
+
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Test Galaxy and authentication UI on Android 35
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        with:
+          emulator-boot-timeout: 300
+          # Pin the host emulator independently of the Android 35 system image.
+          # Emulator 36.1.9; compare against the disappearing 37.2.12 process.
+          emulator-build: 13823996
+          pre-emulator-launch-script: python3 scripts/emulator_monitor.py install
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swangle_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2 > ui-emulator.log 2>&1
+          script: bash scripts/run_android_ui_tests.sh
+
+      - name: Build Release Full APK
+        run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
+
+      - name: Verify Debug APK alignment and signature
+        id: debug-apk
+        run: python3 scripts/android_ci.py verify debug --require-signed
+
+      # A clean checkout has no keystore.properties. AGP correctly produces
+      # app-releaseFull-unsigned.apk, not app-releaseFull.apk. Do not pretend
+      # that this is signed or replace the owner's release key with a debug key.
+      - name: Verify Release Full APK alignment and signing status
+        id: release-apk
+        run: python3 scripts/android_ci.py verify releaseFull
+
+      - name: Upload installable Debug APK
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: UniHub-debug
+          path: ${{ steps.debug-apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release Full APK
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: UniHub-releaseFull-${{ steps.release-apk.outputs.signed == 'true' && 'signed' || 'unsigned' }}
+          path: ${{ steps.release-apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summarize tests, lint, and build errors
+        if: always()
+        run: python3 scripts/android_ci.py report
+
+      - name: Summarize Android UI test results
+        if: always()
+        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 16
+
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: UniHub-build-reports
+          path: |
+            *-build.log
+            unit-tests.log
+            lint.log
+            ui-tests.log
+            ui-emulator.log
+            ui-emulator-status.log
+            ui-logcat.log
+            ui-device-status.log
+            ui-host-memory.log
+            ui-host-kernel.log
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+            app/build/test-results/testReleaseFullUnitTest/
+            app/build/reports/tests/testReleaseFullUnitTest/
+            app/build/reports/lint-results-releaseFull.*
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Never deploy test/PR builds or an unsigned APK to the distribution repo.
+      - name: Push signed APK to buled repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release-apk.outputs.signed == 'true'
+        env:
+          BULED_REPO_TOKEN: ${{ secrets.BULED_REPO_TOKEN }}
+          APK_PATH: ${{ steps.release-apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BULED_REPO_TOKEN" ]; then
+            echo "BULED_REPO_TOKEN not set, skipping APK push"
+            exit 0
+          fi
+
+          SOURCE_APK="$GITHUB_WORKSPACE/$APK_PATH"
+          VERSION=$(python3 -c 'import json; print(json.load(open("app/build/outputs/apk/releaseFull/output-metadata.json"))["elements"][0]["versionName"])')
+          APK_NAME="UniHub-v${VERSION}-release-full.apk"
+          # Keep the token out of the clone URL and saved git configuration.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$BULED_REPO_TOKEN" | base64 -w0)"
+          git clone https://github.com/SagedAMV/buled.git "$RUNNER_TEMP/buled"
+          cd "$RUNNER_TEMP/buled"
+          if [ -f "$APK_NAME" ]; then
+            echo "APK $APK_NAME already exists, skipping"
+            exit 0
+          fi
+          cp "$SOURCE_APK" "$APK_NAME"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add "$APK_NAME"
+          git commit -m "تحديث النسخة الكاملة v${VERSION}"
+          git push origin main

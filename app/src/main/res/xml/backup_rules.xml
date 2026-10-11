@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- النسخ الاحتياطي يدوي عبر ميزة التصدير داخل التطبيق -->
+    <!-- User data backups are exported explicitly; connection/session secrets are never portable. -->
+    <exclude domain="file" path="datastore/unihub_cloud_auth.preferences_pb" />
+    <exclude domain="file" path="datastore/unihub_cloud_sync.preferences_pb" />
 </full-backup-content>

@@ -72,6 +72,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.autofill.AutofillType
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -85,11 +88,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.unihub.app.data.auth.AuthSessionState
 import com.unihub.app.data.auth.DeviceApprovalStatus
 import com.unihub.app.data.auth.DeviceChangeRequest
 import com.unihub.app.data.cloud.CloudflareR2Config
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import com.unihub.app.data.auth.CloudAuthRules
 
 /**
  * البوابة الأمنية الرئيسية للتطبيق:
@@ -113,6 +121,10 @@ fun AuthGateScreen(
     val dismissedIds by viewModel.dismissedRequestIds.collectAsStateWithLifecycle()
     val cloudSettings by viewModel.cloudSettings.collectAsStateWithLifecycle()
     val isSavingCloudSettings by viewModel.isSavingCloudSettings.collectAsStateWithLifecycle()
+    val setupSuccessVersion by viewModel.setupSuccessVersion.collectAsStateWithLifecycle()
+    val pendingNote by viewModel.pendingNote.collectAsStateWithLifecycle()
+    val sessionMessageDismissed by viewModel.sessionMessageDismissed.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     AnimatedContent(
         targetState = session,
@@ -170,29 +182,38 @@ fun AuthGateScreen(
             is AuthSessionState.Unauthenticated -> {
                 CloudLoginScreen(
                     isBusy = isBusy,
-                    initialError = errorMessage ?: current.message,
+                    initialError = errorMessage ?: cloudSettings?.credentialError ?: current.message.takeUnless { sessionMessageDismissed },
                     statusMessage = statusMessage,
                     cloudSettingsConfigured = cloudSettings?.isConfigured == true,
                     currentAccountId = cloudSettings?.credentials?.accountId ?: CloudflareR2Config.DEFAULT_ACCOUNT_ID,
                     currentBucketName = cloudSettings?.credentials?.bucketName ?: CloudflareR2Config.DEFAULT_BUCKET_NAME,
                     isSavingCloudSettings = isSavingCloudSettings,
-                    onLogin = viewModel::login,
+                    serviceAvailable = viewModel.serviceAvailable,
+                    setupSuccessVersion = setupSuccessVersion,
+                    onLogin = { username, password, bootstrap, invitation -> viewModel.login(username, password, bootstrap, invitation) },
+                    onInputsChanged = viewModel::clearMessages,
+                    onRetry = viewModel::retryInitialization,
+                    onCancelCloudOperation = viewModel::cancelConnectionOperation,
                     onSaveCloudCredentials = viewModel::saveInitialCloudCredentials
                 )
             }
 
             is AuthSessionState.WaitingAdminApproval -> {
-                LaunchedEffect(current.username) {
-                    while (true) {
-                        delay(8_000L)
-                        viewModel.checkPendingStatus(silent = true)
+                LaunchedEffect(current.username, lifecycleOwner) {
+                    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        val backoff = ApprovalPollingBackoff()
+                        var wait = 15_000L
+                        while (isActive) {
+                            delay(wait)
+                            wait = backoff.nextDelayMs(viewModel.awaitPendingCheck(silent = true))
+                        }
                     }
                 }
                 PendingAdminApprovalScreen(
                     username = current.username,
                     deviceLabel = current.requestedDevice.summaryLabel,
                     message = statusMessage ?: current.message,
-                    statusNote = current.statusNote,
+                    statusNote = pendingNote ?: current.statusNote,
                     errorMessage = errorMessage,
                     isBusy = isBusy,
                     onCheckNow = { viewModel.checkPendingStatus(silent = false) },
@@ -228,8 +249,9 @@ fun AuthGateScreen(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun CloudLoginScreen(
+internal fun CloudLoginScreen(
     isBusy: Boolean,
     initialError: String?,
     statusMessage: String?,
@@ -237,21 +259,25 @@ private fun CloudLoginScreen(
     currentAccountId: String,
     currentBucketName: String,
     isSavingCloudSettings: Boolean,
-    onLogin: (String, String) -> Unit,
+    serviceAvailable: Boolean,
+    setupSuccessVersion: Int,
+    onLogin: (String, String, Boolean, String) -> Unit,
+    onInputsChanged: () -> Unit,
+    onRetry: () -> Unit,
+    onCancelCloudOperation: () -> Unit,
     onSaveCloudCredentials: (String, String, String, String) -> Unit
 ) {
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var showCloudSetup by rememberSaveable { mutableStateOf(false) }
-    var cloudAccountId by rememberSaveable { mutableStateOf(currentAccountId) }
-    var cloudBucket by rememberSaveable { mutableStateOf(currentBucketName) }
-    var cloudAccessKey by remember { mutableStateOf("") }
-    var cloudSecretKey by remember { mutableStateOf("") }
-
-    LaunchedEffect(currentAccountId, currentBucketName) {
-        cloudAccountId = currentAccountId
-        cloudBucket = currentBucketName
+    var invitation by remember { mutableStateOf("") }
+    var ownerBootstrap by remember { mutableStateOf(false) }
+    var confirmBootstrap by remember { mutableStateOf(false) }
+    ProtectAuthWindow()
+    val submit: () -> Unit = {
+        if (ownerBootstrap && CloudAuthRules.normalizeUsername(username) == CloudAuthRules.ADMIN_USERNAME) confirmBootstrap = true
+        else onLogin(username, password, false, invitation)
     }
 
     // أنيميشن الدخول المتدرج (Staggered Entrance) لعناصر واجهة تسجيل الدخول
@@ -309,7 +335,8 @@ private fun CloudLoginScreen(
         label = "ShieldFloatOffsetY"
     )
 
-    val canSubmit = !isBusy && username.isNotBlank() && password.isNotBlank()
+    val canSubmit = !isBusy && !isSavingCloudSettings && AuthInteractionRules.inputError(username, password) == null &&
+        (cloudSettingsConfigured || (serviceAvailable && invitation.trim().matches(Regex("[A-Za-z0-9_-]{43}"))))
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -422,8 +449,9 @@ private fun CloudLoginScreen(
                     ) {
                         OutlinedTextField(
                             value = username,
-                            onValueChange = { username = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            onValueChange = { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
+                            modifier = Modifier.fillMaxWidth().testTag("auth.username")
+                                .authAutofill(AutofillType.Username) { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
                             label = { Text("اسم المستخدم") },
                             leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                             singleLine = true,
@@ -436,8 +464,9 @@ private fun CloudLoginScreen(
 
                         OutlinedTextField(
                             value = password,
-                            onValueChange = { password = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            onValueChange = { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
+                            modifier = Modifier.fillMaxWidth().testTag("auth.password")
+                                .authAutofill(AutofillType.Password) { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
                             label = { Text("كلمة المرور") },
                             leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                             trailingIcon = {
@@ -468,7 +497,7 @@ private fun CloudLoginScreen(
                             keyboardActions = KeyboardActions(
                                 onDone = {
                                     if (canSubmit) {
-                                        onLogin(username, password)
+                                        submit()
                                     }
                                 }
                             )
@@ -513,17 +542,30 @@ private fun CloudLoginScreen(
                         }
 
                         Text(
-                            text = "لأول تشغيل بلا سجل مصادقة: استخدم اسم المشرف saged واختر كلمة مرور قوية من 12 خانة على الأقل.",
+                            text = if (cloudSettingsConfigured) "الاتصال جاهز. لاستعادة كلمة المرور أو اعتماد جهاز جديد تواصل مع مالك التطبيق."
+                                else "فعّل الاتصال برمز المالك أو باركود مشفر؛ لا تحتاج إعداد حساب Cloudflare.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
+                        if (!cloudSettingsConfigured && serviceAvailable) {
+                            OutlinedTextField(invitation, { if (it.length <= 64) { invitation = it; onInputsChanged() } },
+                                label = { Text("رمز التفعيل من المالك") }, singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(), enabled = !isBusy,
+                                modifier = Modifier.fillMaxWidth().testTag("auth.invitation"))
+                        }
+                        if (CloudAuthRules.normalizeUsername(username) == CloudAuthRules.ADMIN_USERNAME) {
+                            ConfirmationCheckbox(ownerBootstrap, { ownerBootstrap = it },
+                                "أنا المالك وأريد تهيئة حساب المالك إذا لم يوجد سجل حسابات")
+                        }
+
                         Button(
-                            onClick = { onLogin(username, password) },
+                            onClick = { submit() },
                             enabled = canSubmit,
                             modifier = Modifier
+                                .testTag("auth.login")
                                 .fillMaxWidth()
-                                .height(50.dp)
+                                .heightIn(min = 50.dp)
                                 .graphicsLayer {
                                     scaleX = buttonScale
                                     scaleY = buttonScale
@@ -559,14 +601,17 @@ private fun CloudLoginScreen(
                         }
 
                         OutlinedButton(
-                            onClick = { showCloudSetup = true },
+                            onClick = { onInputsChanged(); showCloudSetup = true },
                             enabled = !isBusy && !isSavingCloudSettings,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                if (cloudSettingsConfigured) "إصلاح أو تغيير اتصال السحابة"
-                                else "إعداد اتصال السحابة — أول تشغيل"
+                                if (cloudSettingsConfigured) "استعادة الاتصال أو استيراد باركود"
+                                else "تفعيل الاتصال بالخدمة أو الباركود"
                             )
+                        }
+                        TextButton(onClick = onRetry, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
+                            Text("إعادة فحص الجلسة على هذا الجهاز")
                         }
                     }
                 }
@@ -575,86 +620,23 @@ private fun CloudLoginScreen(
     }
 
     if (showCloudSetup) {
-        AlertDialog(
-            onDismissRequest = { if (!isSavingCloudSettings) showCloudSetup = false },
-            title = { Text(if (cloudSettingsConfigured) "إصلاح اتصال Cloudflare R2" else "إعداد اتصال Cloudflare R2") },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 480.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "أدخل بيانات الحاوية ومفاتيح R2 من لوحة Cloudflare. تستخدم هذه الشاشة قبل تسجيل الدخول لإعداد الاتصال أو إصلاحه، وتُحفظ المفاتيح مشفّرة على هذا الجهاز فقط.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = cloudAccountId,
-                        onValueChange = { cloudAccountId = it.trim() },
-                        label = { Text("Cloudflare Account ID") },
-                        singleLine = true,
-                        enabled = !isSavingCloudSettings,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = cloudBucket,
-                        onValueChange = { cloudBucket = it.trim() },
-                        label = { Text("اسم الحاوية (Bucket)") },
-                        singleLine = true,
-                        enabled = !isSavingCloudSettings,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = cloudAccessKey,
-                        onValueChange = { cloudAccessKey = it },
-                        label = { Text("R2 Access Key ID") },
-                        singleLine = true,
-                        enabled = !isSavingCloudSettings,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = cloudSecretKey,
-                        onValueChange = { cloudSecretKey = it },
-                        label = { Text("R2 Secret Access Key") },
-                        singleLine = true,
-                        enabled = !isSavingCloudSettings,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (!initialError.isNullOrBlank()) {
-                        Text(
-                            text = initialError,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { onSaveCloudCredentials(cloudAccountId, cloudBucket, cloudAccessKey, cloudSecretKey) },
-                    enabled = !isSavingCloudSettings && cloudAccountId.isNotBlank() &&
-                        cloudBucket.isNotBlank() &&
-                        (cloudSettingsConfigured || (cloudAccessKey.isNotBlank() && cloudSecretKey.isNotBlank()))
-                ) {
-                    if (isSavingCloudSettings) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("حفظ الإعدادات")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showCloudSetup = false },
-                    enabled = !isSavingCloudSettings
-                ) { Text("إلغاء") }
-            }
+        CloudConnectionDialog(
+            currentAccountId = currentAccountId,
+            currentBucketName = currentBucketName,
+            isSavingManual = isSavingCloudSettings,
+            manualError = initialError,
+            manualSuccessVersion = setupSuccessVersion,
+            onSaveManual = onSaveCloudCredentials,
+            onCancelManual = onCancelCloudOperation,
+            onDismiss = { showCloudSetup = false }
         )
+    }
+    if (confirmBootstrap) {
+        AlertDialog(onDismissRequest = { confirmBootstrap = false },
+            title = { Text("تأكيد تهيئة حساب المالك") },
+            text = { Text("هذه الخطوة للمالك فقط عندما لا يوجد سجل حسابات. لن تعيد ضبط سجل موجود. اختر كلمة مرور من 12 خانة على الأقل، ولا توزع الاتصال قبل إتمام التهيئة.") },
+            confirmButton = { Button(onClick = { confirmBootstrap = false; onLogin(username, password, true, invitation) }, enabled = !isBusy) { Text("تأكيد تهيئة المالك") } },
+            dismissButton = { TextButton(onClick = { confirmBootstrap = false }) { Text("إلغاء") } })
     }
 }
 
@@ -686,7 +668,10 @@ private fun PendingAdminApprovalScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             ElevatedCard(
@@ -788,7 +773,7 @@ private fun PendingAdminApprovalScreen(
 
                     OutlinedButton(
                         onClick = onSwitchAccount,
-                        enabled = !isBusy,
+                        enabled = true,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("العودة لتسجيل الدخول بحساب آخر")
