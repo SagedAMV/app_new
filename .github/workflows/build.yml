@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
@@ -110,25 +110,6 @@ jobs:
           path: ${{ steps.release-apk.outputs.path }}
           if-no-files-found: error
           retention-days: 30
-
-      # The debug APK is signed by the Android debug key and is therefore the
-      # installable download available from branch builds. ReleaseFull remains
-      # an artifact only when the owner's release keystore is not configured.
-      - name: Publish installable APK download
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APK_PATH: ${{ steps.debug-apk.outputs.path }}
-          RELEASE_TAG: build-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          VERSION=$(python3 -c 'import json; print(json.load(open("app/build/outputs/apk/debug/output-metadata.json"))["elements"][0]["versionName"])')
-          APK_NAME="UniHub-v${VERSION}-debug.apk"
-          gh release create "$RELEASE_TAG" "$APK_PATH#$APK_NAME" \\
-            --repo "$GITHUB_REPOSITORY" \\
-            --target "$GITHUB_SHA" \\
-            --title "UniHub build ${GITHUB_RUN_NUMBER}" \\
-            --notes "Installable debug APK built and verified by GitHub Actions. Commit: ${GITHUB_SHA}."
 
       - name: Summarize tests, lint, and build errors
         if: always()
