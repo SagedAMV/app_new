@@ -57,7 +57,12 @@ fun AppNavHost() {
                 )
             }
 
-            composable<FilesRoute> { entry ->
+            composable<FilesRoute>(
+                enterTransition = { filesEnter() },
+                exitTransition = { filesExit() },
+                popEnterTransition = { filesPopEnter() },
+                popExitTransition = { filesPopExit() }
+            ) { entry ->
                 val route = entry.toRoute<FilesRoute>()
                 FilesScreen(
                     folderId = route.folderId,

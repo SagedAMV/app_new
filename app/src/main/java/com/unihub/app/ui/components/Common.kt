@@ -80,18 +80,19 @@ fun EmptyState(
     title: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     action: (@Composable () -> Unit)? = null
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 40.dp, horizontal = 24.dp),
+            .padding(vertical = if (compact) 14.dp else 40.dp, horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(44.dp),
+            modifier = Modifier.size(if (compact) 32.dp else 44.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
         Spacer(Modifier.height(12.dp))
@@ -156,7 +157,7 @@ fun TintChip(
     )
 }
 
-/** بطاقة إحصاء مضغوطة للرئيسية */
+/** بطاقة إحصاء مضغوطة للرئيسية: مسطّحة بحد خفيف وأيقونة داخل دائرة ملوّنة ناعمة */
 @Composable
 fun StatCard(
     icon: ImageVector,
@@ -166,30 +167,47 @@ fun StatCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    androidx.compose.material3.ElevatedCard(
+    androidx.compose.material3.Card(
         onClick = onClick,
         modifier = modifier,
-        shape = MaterialTheme.shapes.medium
+        shape = MaterialTheme.shapes.medium,
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(22.dp)
-            )
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(tint.copy(alpha = 0.14f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
             )
         }
     }

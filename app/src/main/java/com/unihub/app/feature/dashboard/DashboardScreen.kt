@@ -3,7 +3,9 @@ package com.unihub.app.feature.dashboard
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -40,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -131,7 +134,8 @@ fun DashboardScreen(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = Formatters.greeting(),
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
@@ -168,7 +172,8 @@ fun DashboardScreen(
             Spacer(Modifier.height(16.dp))
 
             // الإحصاءات السريعة
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StaggerIn(1) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatCard(
                     icon = Icons.Outlined.TaskAlt,
                     value = pendingTaskCount.toString(),
@@ -202,94 +207,193 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+            }
 
             // محاضرات اليوم
-            SectionHeader(
-                title = "محاضرات اليوم",
-                action = {
-                    FilledTonalButton(onClick = { onOpenPlanner(PlannerTab.SCHEDULE) }) {
-                        Text("الجدول")
+            StaggerIn(2) {
+            Column {
+                SectionHeader(
+                    title = "محاضرات اليوم",
+                    action = {
+                        TextButton(onClick = { onOpenPlanner(PlannerTab.SCHEDULE) }) {
+                            Text("الجدول")
+                        }
+                    }
+                )
+                if (todayLectures.isEmpty()) {
+                    EmptyState(
+                        compact = true,
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        title = "لا محاضرات اليوم",
+                        subtitle = "استمتع بيومك أو أضف محاضراتك من الجدول الأسبوعي"
+                    )
+                } else {
+                    todayLectures.forEach { lecture ->
+                        TodayLectureRow(lecture)
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
-            )
-            if (todayLectures.isEmpty()) {
-                EmptyState(
-                    icon = Icons.AutoMirrored.Outlined.MenuBook,
-                    title = "لا محاضرات اليوم",
-                    subtitle = "استمتع بيومك أو أضف محاضراتك من الجدول الأسبوعي"
-                )
-            } else {
-                todayLectures.forEach { lecture ->
-                    TodayLectureRow(lecture)
-                    Spacer(Modifier.height(8.dp))
-                }
+            }
             }
 
             // المهام المستحقة
-            SectionHeader(
-                title = "مهام مستحقة",
-                action = {
-                    FilledTonalButton(onClick = { onOpenPlanner(PlannerTab.TASKS) }) {
-                        Text("الكل")
+            StaggerIn(3) {
+            Column {
+                SectionHeader(
+                    title = "مهام مستحقة",
+                    action = {
+                        TextButton(onClick = { onOpenPlanner(PlannerTab.TASKS) }) {
+                            Text("عرض الكل")
+                        }
+                    }
+                )
+                if (dueSoonTasks.isEmpty()) {
+                    EmptyState(
+                        compact = true,
+                        icon = Icons.Outlined.CheckCircle,
+                        title = "لا مهام مستحقة الآن",
+                        subtitle = "كل شيء تحت السيطرة — أضف مهمة جديدة من تبويب المهام"
+                    )
+                } else {
+                    dueSoonTasks.forEach { task ->
+                        DueTaskRow(
+                            task = task,
+                            onToggle = { viewModel.toggleTask(task) }
+                        )
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
-            )
-            if (dueSoonTasks.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.CheckCircle,
-                    title = "لا مهام مستحقة الآن",
-                    subtitle = "كل شيء تحت السيطرة — أضف مهمة جديدة من تبويب المهام"
-                )
-            } else {
-                dueSoonTasks.forEach { task ->
-                    DueTaskRow(
-                        task = task,
-                        onToggle = { viewModel.toggleTask(task) }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+            }
             }
 
             // الامتحانات القادمة
-            SectionHeader(
-                title = "امتحانات قادمة",
-                action = {
-                    FilledTonalButton(onClick = { onOpenPlanner(PlannerTab.EXAMS) }) {
-                        Text("الكل")
+            StaggerIn(4) {
+            Column {
+                SectionHeader(
+                    title = "امتحانات قادمة",
+                    action = {
+                        TextButton(onClick = { onOpenPlanner(PlannerTab.EXAMS) }) {
+                            Text("عرض الكل")
+                        }
+                    }
+                )
+                if (upcomingExams.isEmpty()) {
+                    EmptyState(
+                        compact = true,
+                        icon = Icons.Outlined.School,
+                        title = "لا امتحانات قريبة",
+                        subtitle = "أضف امتحاناتك لتصلك تذكيرات قبلها بيوم وساعة"
+                    )
+                } else {
+                    upcomingExams.forEach { exam ->
+                        UpcomingExamRow(exam)
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
-            )
-            if (upcomingExams.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.School,
-                    title = "لا امتحانات قريبة",
-                    subtitle = "أضف امتحاناتك لتصلك تذكيرات قبلها بيوم وساعة"
-                )
-            } else {
-                upcomingExams.forEach { exam ->
-                    UpcomingExamRow(exam)
-                    Spacer(Modifier.height(8.dp))
-                }
+            }
             }
 
             // إجراءات سريعة
-            SectionHeader(title = "إجراء سريع")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton(
-                    onClick = { onOpenPlanner(PlannerTab.TASKS) },
-                    modifier = Modifier.weight(1f)
-                ) { Text("مهمة جديدة") }
-                FilledTonalButton(
-                    onClick = { onOpenPlanner(PlannerTab.NOTES) },
-                    modifier = Modifier.weight(1f)
-                ) { Text("ملاحظة جديدة") }
-                FilledTonalButton(
-                    onClick = { onOpenFiles(null) },
-                    modifier = Modifier.weight(1f)
-                ) { Text("الملفات") }
+            StaggerIn(5) {
+            Column {
+                SectionHeader(title = "إجراء سريع")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    QuickActionTile(
+                        icon = Icons.Outlined.TaskAlt,
+                        label = "مهمة جديدة",
+                        onClick = { onOpenPlanner(PlannerTab.TASKS) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionTile(
+                        icon = Icons.Outlined.Description,
+                        label = "ملاحظة جديدة",
+                        onClick = { onOpenPlanner(PlannerTab.NOTES) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionTile(
+                        icon = Icons.Outlined.Folder,
+                        label = "الملفات",
+                        onClick = { onOpenFiles(null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             }
         }
     }
+}
+
+/** ظهور متتابع هادئ لأقسام الرئيسية: تلاشٍ مع ارتفاع خفيف بتأخير يزداد مع الترتيب */
+@Composable
+private fun StaggerIn(index: Int, content: @Composable () -> Unit) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(index * 70L)
+        shown = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "dash-stagger"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = progress
+                translationY = (1f - progress) * 20f
+            }
+    ) { content() }
+}
+
+/** بلاطة إجراء سريع: أيقونة فوق نص داخل بطاقة مسطّحة بحد خفيف */
+@Composable
+private fun QuickActionTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/** بطاقة صف هادئة موحّدة: سطح فاتح بحد خفيف بدل لون البطاقة الافتراضي الداكن نسبياً */
+@Composable
+private fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        content = content
+    )
 }
 
 /**
@@ -709,7 +813,7 @@ private fun dayCountLabel(days: Long?): String = when (days) {
 
 @Composable
 private fun TodayLectureRow(lecture: LectureEntity) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+    SoftCard {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -750,7 +854,7 @@ private fun TodayLectureRow(lecture: LectureEntity) {
 
 @Composable
 private fun DueTaskRow(task: TaskEntity, onToggle: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+    SoftCard {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -786,7 +890,7 @@ private fun UpcomingExamRow(exam: ExamEntity) {
     // بالقسر `?: 0` وهي دلالة مضللة، بينما المصدر المشترك يعرض «قريباً».
     // كما يُلغى هنا تكرار منطق التسمية الذي كان مكتوباً مرتين بصيغتين.
     val days = exam.daysRemaining
-    Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+    SoftCard {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically

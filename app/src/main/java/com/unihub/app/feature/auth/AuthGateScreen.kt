@@ -1,6 +1,13 @@
 package com.unihub.app.feature.auth
 
 import androidx.compose.animation.AnimatedContent
+import com.unihub.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -280,59 +287,41 @@ internal fun CloudLoginScreen(
         else onLogin(username, password, false, invitation)
     }
 
-    // أنيميشن الدخول المتدرج (Staggered Entrance) لعناصر واجهة تسجيل الدخول
+    // أنيميشن دخول ناعم ومتدرج: الشعار ثم النص ثم الحقول
     var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        entered = true
-    }
+    LaunchedEffect(Unit) { entered = true }
 
-    val headerProgress by animateFloatAsState(
+    val logoProgress by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 460, easing = FastOutSlowInEasing),
-        label = "LoginHeaderProgress"
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+        label = "LoginLogoProgress"
     )
-    val cardProgress by animateFloatAsState(
+    val textProgress by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 520, delayMillis = 90, easing = FastOutSlowInEasing),
-        label = "LoginCardProgress"
+        animationSpec = tween(durationMillis = 520, delayMillis = 120, easing = FastOutSlowInEasing),
+        label = "LoginTextProgress"
+    )
+    val formProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 560, delayMillis = 240, easing = FastOutSlowInEasing),
+        label = "LoginFormProgress"
     )
     val buttonScale by animateFloatAsState(
         targetValue = if (isBusy) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "LoginButtonScale"
     )
 
-    // أنيميشن نبض وهالة مستمرة حول أيقونة درع الحماية
-    val infiniteTransition = rememberInfiniteTransition(label = "LoginHeroPulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.12f,
+    // تنفّس خفيف جداً للشعار (حركة هادئة بدل النبض القوي)
+    val breathing = rememberInfiniteTransition(label = "LoginLogoBreathing")
+    val breathScale by breathing.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.035f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "ShieldPulseScale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.42f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ShieldPulseAlpha"
-    )
-    val floatOffsetY by infiniteTransition.animateFloat(
-        initialValue = -4f,
-        targetValue = 4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ShieldFloatOffsetY"
+        label = "LoginLogoBreathScale"
     )
 
     val canSubmit = !isBusy && !isSavingCloudSettings && AuthInteractionRules.inputError(username, password) == null &&
@@ -351,268 +340,230 @@ internal fun CloudLoginScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 420.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // قسم الشعار والترحيب المتحرك
+                // أيقونة التطبيق الأصلية (قبعة التخرج) بنفس ألوان أيقونة التشغيل
+                Box(
+                    modifier = Modifier
+                        .size(92.dp)
+                        .graphicsLayer {
+                            val s = (0.8f + 0.2f * logoProgress) * breathScale
+                            alpha = logoProgress.coerceIn(0f, 1f)
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .shadow(10.dp, RoundedCornerShape(26.dp), clip = false)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(colorResource(R.color.launcher_background)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(Modifier.height(20.dp))
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.graphicsLayer {
-                        alpha = headerProgress
-                        translationY = (1f - headerProgress) * -36f
-                        scaleX = 0.9f + (0.1f * headerProgress)
-                        scaleY = 0.9f + (0.1f * headerProgress)
+                        alpha = textProgress
+                        translationY = (1f - textProgress) * 18f
                     }
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(104.dp)
-                            .graphicsLayer {
-                                translationY = floatOffsetY
-                            }
-                    ) {
-                        // هالة خارجية نابضة
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp)
-                                .graphicsLayer {
-                                    scaleX = pulseScale
-                                    scaleY = pulseScale
-                                    alpha = pulseAlpha
-                                }
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
-                                        )
-                                    )
-                                )
-                        )
-
-                        Surface(
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shadowElevation = 6.dp,
-                            modifier = Modifier.size(74.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.Security,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(14.dp))
                     Text(
-                        text = "تسجيل الدخول إلى UniHub",
-                        style = MaterialTheme.typography.headlineSmall,
+                        text = "UniHub",
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "أدخل بيانات حسابك السحابي للمتابعة إلى مساحة عملك الجامعية",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "سجّل دخولك للمتابعة",
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(28.dp))
 
-                // بطاقة حقول الإدخال المتحركة (بدون أي نص يعرض نوع الجهاز أو إصدار الأندرويد)
-                ElevatedCard(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
-                            alpha = cardProgress
-                            translationY = (1f - cardProgress) * 44f
-                            scaleX = 0.95f + (0.05f * cardProgress)
-                            scaleY = 0.95f + (0.05f * cardProgress)
+                            alpha = formProgress
+                            translationY = (1f - formProgress) * 28f
                         },
-                    shape = MaterialTheme.shapes.large,
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
+                        modifier = Modifier.fillMaxWidth().testTag("auth.username")
+                            .authAutofill(AutofillType.Username) { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
+                        label = { Text("اسم المستخدم") },
+                        leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                        singleLine = true,
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
+                        modifier = Modifier.fillMaxWidth().testTag("auth.password")
+                            .authAutofill(AutofillType.Password) { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
+                        label = { Text("كلمة المرور") },
+                        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Crossfade(
+                                    targetState = passwordVisible,
+                                    animationSpec = tween(220),
+                                    label = "PasswordVisibilityIcon"
+                                ) { visible ->
+                                    Icon(
+                                        imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = if (visible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
+                                    )
+                                }
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        singleLine = true,
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { if (canSubmit) submit() }
+                        )
+                    )
+
+                    if (!cloudSettingsConfigured && serviceAvailable) {
+                        OutlinedTextField(
+                            value = invitation,
+                            onValueChange = { if (it.length <= 64) { invitation = it; onInputsChanged() } },
+                            label = { Text("رمز التفعيل من المالك") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            enabled = !isBusy,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("auth.invitation")
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = !initialError.isNullOrBlank(),
+                        enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
+                        exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
                     ) {
-                        OutlinedTextField(
-                            value = username,
-                            onValueChange = { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
-                            modifier = Modifier.fillMaxWidth().testTag("auth.username")
-                                .authAutofill(AutofillType.Username) { if (it.length <= CloudAuthRules.MAX_USERNAME_LENGTH) { username = it; onInputsChanged() } },
-                            label = { Text("اسم المستخدم") },
-                            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
-                            singleLine = true,
-                            enabled = !isBusy,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Text,
-                                imeAction = ImeAction.Next
-                            )
-                        )
-
-                        OutlinedTextField(
-                            value = password,
-                            onValueChange = { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
-                            modifier = Modifier.fillMaxWidth().testTag("auth.password")
-                                .authAutofill(AutofillType.Password) { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { password = it; onInputsChanged() } },
-                            label = { Text("كلمة المرور") },
-                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-                            trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Crossfade(
-                                        targetState = passwordVisible,
-                                        animationSpec = tween(220),
-                                        label = "PasswordVisibilityIcon"
-                                    ) { visible ->
-                                        Icon(
-                                            imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                            contentDescription = if (visible) "إخفاء كلمة المرور" else "إظهار كلمة المرور"
-                                        )
-                                    }
-                                }
-                            },
-                            visualTransformation = if (passwordVisible) {
-                                VisualTransformation.None
-                            } else {
-                                PasswordVisualTransformation()
-                            },
-                            singleLine = true,
-                            enabled = !isBusy,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Password,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    if (canSubmit) {
-                                        submit()
-                                    }
-                                }
-                            )
-                        )
-
-                        AnimatedVisibility(
-                            visible = !initialError.isNullOrBlank(),
-                            enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
-                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                shape = MaterialTheme.shapes.small,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = initialError.orEmpty(),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-
-                        AnimatedVisibility(
-                            visible = !statusMessage.isNullOrBlank(),
-                            enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
-                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = MaterialTheme.shapes.small,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = statusMessage.orEmpty(),
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = if (cloudSettingsConfigured) "الاتصال جاهز. لاستعادة كلمة المرور أو اعتماد جهاز جديد تواصل مع مالك التطبيق."
-                                else "فعّل الاتصال برمز المالك أو باركود مشفر؛ لا تحتاج إعداد حساب Cloudflare.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (!cloudSettingsConfigured && serviceAvailable) {
-                            OutlinedTextField(invitation, { if (it.length <= 64) { invitation = it; onInputsChanged() } },
-                                label = { Text("رمز التفعيل من المالك") }, singleLine = true,
-                                visualTransformation = PasswordVisualTransformation(), enabled = !isBusy,
-                                modifier = Modifier.fillMaxWidth().testTag("auth.invitation"))
-                        }
-                        if (CloudAuthRules.normalizeUsername(username) == CloudAuthRules.ADMIN_USERNAME) {
-                            ConfirmationCheckbox(ownerBootstrap, { ownerBootstrap = it },
-                                "أنا المالك وأريد تهيئة حساب المالك إذا لم يوجد سجل حسابات")
-                        }
-
-                        Button(
-                            onClick = { submit() },
-                            enabled = canSubmit,
-                            modifier = Modifier
-                                .testTag("auth.login")
-                                .fillMaxWidth()
-                                .heightIn(min = 50.dp)
-                                .graphicsLayer {
-                                    scaleX = buttonScale
-                                    scaleY = buttonScale
-                                }
-                        ) {
-                            AnimatedContent(
-                                targetState = isBusy,
-                                transitionSpec = {
-                                    (fadeIn(tween(220)) + scaleIn(initialScale = 0.92f))
-                                        .togetherWith(fadeOut(tween(180)) + scaleOut(targetScale = 0.92f))
-                                },
-                                label = "LoginButtonContent"
-                            ) { busy ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    if (busy) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                        Spacer(Modifier.width(10.dp))
-                                        Text("جارٍ التحقق من السحابة…")
-                                    } else {
-                                        Icon(Icons.Filled.CloudQueue, contentDescription = null)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("تسجيل الدخول")
-                                    }
-                                }
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = { onInputsChanged(); showCloudSetup = true },
-                            enabled = !isBusy && !isSavingCloudSettings,
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                if (cloudSettingsConfigured) "استعادة الاتصال أو استيراد باركود"
-                                else "تفعيل الاتصال بالخدمة أو الباركود"
+                                text = initialError.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
                             )
                         }
-                        TextButton(onClick = onRetry, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
-                            Text("إعادة فحص الجلسة على هذا الجهاز")
+                    }
+
+                    AnimatedVisibility(
+                        visible = !statusMessage.isNullOrBlank(),
+                        enter = expandVertically(animationSpec = tween(260)) + fadeIn(tween(260)),
+                        exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(200))
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = statusMessage.orEmpty(),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
                         }
+                    }
+
+                    if (CloudAuthRules.normalizeUsername(username) == CloudAuthRules.ADMIN_USERNAME) {
+                        ConfirmationCheckbox(ownerBootstrap, { ownerBootstrap = it },
+                            "أنا المالك وأريد تهيئة حساب المالك إذا لم يوجد سجل حسابات")
+                    }
+
+                    Button(
+                        onClick = { submit() },
+                        enabled = canSubmit,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .testTag("auth.login")
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .graphicsLayer {
+                                scaleX = buttonScale
+                                scaleY = buttonScale
+                            }
+                    ) {
+                        AnimatedContent(
+                            targetState = isBusy,
+                            transitionSpec = {
+                                (fadeIn(tween(220)) + scaleIn(initialScale = 0.92f))
+                                    .togetherWith(fadeOut(tween(180)) + scaleOut(targetScale = 0.92f))
+                            },
+                            label = "LoginButtonContent"
+                        ) { busy ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                if (busy) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("جارٍ التحقق…")
+                                } else {
+                                    Text("تسجيل الدخول", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    TextButton(
+                        onClick = { onInputsChanged(); showCloudSetup = true },
+                        enabled = !isBusy && !isSavingCloudSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (cloudSettingsConfigured) "استعادة الاتصال أو استيراد باركود"
+                            else "تفعيل الاتصال بالخدمة أو الباركود"
+                        )
+                    }
+                    TextButton(onClick = onRetry, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text("إعادة فحص الجلسة")
                     }
                 }
             }

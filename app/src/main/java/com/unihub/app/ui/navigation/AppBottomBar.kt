@@ -9,11 +9,20 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
@@ -41,9 +50,18 @@ private val items = listOf(
  */
 @Composable
 fun AppBottomBar(navController: NavController, currentDestination: NavDestination?) {
-    NavigationBar {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp
+    ) {
         items.forEach { item ->
             val selected = currentDestination?.hasRoute(item.routeClass) == true
+            // تكبير ناعم للأيقونة المختارة بنابض هادئ
+            val iconScale by animateFloatAsState(
+                targetValue = if (selected) 1.08f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+                label = "nav-icon-scale"
+            )
             NavigationBarItem(
                 selected = selected,
                 onClick = {
@@ -57,10 +75,19 @@ fun AppBottomBar(navController: NavController, currentDestination: NavDestinatio
                 icon = {
                     Icon(
                         imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.label
+                        contentDescription = item.label,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = iconScale
+                            scaleY = iconScale
+                        }
                     )
                 },
-                label = { Text(item.label) }
+                label = { Text(item.label) },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.primary
+                )
             )
         }
     }
