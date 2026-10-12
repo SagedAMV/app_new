@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05070c">
+  <meta name="description" content="معاينة محلية متحركة لشاشة المجرّة في UniHub — ببيانات توضيحية فقط.">
+  <title>المجرّة — معاينة UniHub</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --space-0: #05070c;
+      --space-1: #0b101a;
+      --space-2: #080c14;
+      --ink: #e0e5e1;
+      --muted: #a9b4ad;
+      --muted-2: #b9b5a1;
+      --gold: #ffd54f;
+      --gold-light: #ffe9a1;
+      --mint: #a3cdbb;
+      --mint-container: #2c5245;
+      --nav-surface: #1b211e;
+      --line: rgba(183, 199, 212, .62);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--space-0);
+      color: var(--ink);
+      overscroll-behavior: none;
+    }
+
+    body { -webkit-tap-highlight-color: transparent; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, svg [tabindex]:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+
+    #app {
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      min-height: 320px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--space-0) 0%, var(--space-1) 50%, var(--space-0) 100%);
+      isolation: isolate;
+    }
+
+    #screen {
+      position: relative;
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #universe {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 150px;
+      overflow: hidden;
+      isolation: isolate;
+      touch-action: none;
+      background: linear-gradient(180deg, #05070c 0%, #0b101a 52%, #05070c 100%);
+    }
+
+    #dust-canvas, #orbit-map {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #dust-canvas { z-index: 0; pointer-events: none; }
+    #orbit-map { z-index: 1; overflow: visible; direction: ltr; }
+    #ring-layer, #edge-layer { pointer-events: none; }
+    .orbit-ring {
+      fill: none;
+      stroke: rgba(255, 213, 79, .17);
+      vector-effect: non-scaling-stroke;
+    }
+    .orbit-ring:nth-child(3n + 1) { stroke: rgba(255, 213, 79, .27); }
+    .orbit-edge {
+      stroke: var(--line);
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .folder-node {
+      cursor: pointer;
+      pointer-events: all;
+      outline: none;
+    }
+    .folder-node:focus-visible .planet-core,
+    .folder-node:focus .planet-core {
+      stroke: #fff8c9;
+      stroke-width: 2.4;
+    }
+    .planet-glow { opacity: .28; }
+    .planet-core { stroke: rgba(255,255,255,.09); stroke-width: .8; }
+    .planet-shine { fill: rgba(255,255,255,.27); pointer-events: none; }
+    .folder-name {
+      fill: #e9eee9;
+      font-size: 10px;
+      font-weight: 600;
+      text-anchor: middle;
+      dominant-baseline: hanging;
+      direction: rtl;
+      unicode-bidi: plaintext;
+      pointer-events: none;
+    }
+    .folder-count {
+      fill: #afbbb3;
+      font-size: 9px;
+      text-anchor: middle;
+      dominant-baseline: hanging;
+      direction: rtl;
+      unicode-bidi: plaintext;
+      pointer-events: none;
+    }
+
+    #sun-anchor {
+      position: absolute;
+      z-index: 2;
+      width: 132px;
+      min-height: 112px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      pointer-events: none;
+      transform-origin: 50% 38px;
+      will-change: transform, left, top;
+    }
+
+    .sun-disk {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      flex: 0 0 auto;
+      overflow: hidden;
+      border-radius: 50%;
+      background: radial-gradient(circle at 34% 27%, #fff8c9 0 10%, #ffd54f 37%, #ef8f24 69%, #9f4e11 100%);
+      box-shadow: 0 0 0 12px rgba(255,213,79,.09), 0 0 0 24px rgba(255,213,79,.045), 0 0 33px rgba(255,189,57,.34);
+    }
+
+    .sun-disk::after {
+      content: "";
+      position: absolute;
+      top: 19px;
+      left: 23px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.52);
+      filter: blur(.3px);
+    }
+
+    .sun-title {
+      margin-top: 7px;
+      color: var(--gold-light);
+      font-size: 17px;
+      font-weight: 650;
+      line-height: 22px;
+      white-space: nowrap;
+    }
+
+    .sun-caption {
+      color: var(--muted-2);
+      font-size: 10px;
+      line-height: 15px;
+      white-space: nowrap;
+    }
+
+    .state-panel {
+      position: absolute;
+      z-index: 4;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 24px;
+      text-align: center;
+      background: transparent;
+    }
+    .state-panel[hidden] { display: none; }
+    .state-panel h1, .state-panel p { margin: 0; }
+    .state-panel h1 { font-size: 17px; font-weight: 650; }
+    .state-panel p { max-width: 340px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .empty-sun { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; }
+    .empty-sun .sun-disk { transform: scale(var(--empty-pulse, 1)); }
+    .loading-spinner {
+      width: 30px;
+      height: 30px;
+      border: 2.5px solid rgba(255, 213, 79, .2);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: loading-spin 900ms linear infinite;
+    }
+    @keyframes loading-spin { to { transform: rotate(360deg); } }
+
+    .retry-button {
+      min-height: 42px;
+      margin-top: 5px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--mint);
+      color: #123a2e;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 180ms ease, filter 180ms ease;
+    }
+    .retry-button:active { transform: scale(.97); }
+
+    #controls {
+      z-index: 3;
+      display: flex;
+      flex: 0 0 48px;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(7px, 3vw, 18px);
+      padding: 2px 8px;
+      background: rgba(8, 12, 20, .94);
+    }
+    #controls[hidden] { display: none; }
+
+    .tool-button {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--gold);
+      cursor: pointer;
+      transition: background-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+    }
+    .tool-button:hover { background: rgba(255, 213, 79, .09); }
+    .tool-button:active { transform: scale(.91); }
+    .tool-button:disabled { opacity: .42; cursor: default; transform: none; }
+    .tool-button svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tool-button .icon-fill { fill: currentColor; stroke: none; }
+
+    #hint {
+      z-index: 3;
+      flex: 0 0 auto;
+      min-height: 31px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 4px 12px 7px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      text-align: center;
+      background: rgba(8, 12, 20, .94);
+    }
+    #hint[hidden] { display: none; }
+
+    #bottom-navigation {
+      z-index: 5;
+      display: flex;
+      flex: 0 0 auto;
+      min-height: 67px;
+      align-items: stretch;
+      justify-content: space-around;
+      gap: 2px;
+      padding: 4px 8px calc(4px + var(--safe-bottom));
+      border-top: 1px solid rgba(255,255,255,.035);
+      background: var(--nav-surface);
+    }
+
+    .nav-item {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      flex: 1 1 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 2px 3px 1px;
+      border: 0;
+      border-radius: 14px;
+      background: transparent;
+      color: #a9b4ad;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item::before {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      top: 3px;
+      left: 50%;
+      width: 48px;
+      height: 29px;
+      border-radius: 18px;
+      background: transparent;
+      transform: translateX(-50%) scale(.92);
+      transition: background-color 220ms ease, transform 260ms cubic-bezier(.2,.8,.2,1.2);
+    }
+    .nav-icon, .nav-label { position: relative; z-index: 1; }
+    .nav-item[aria-current="page"] { color: var(--mint); }
+    .nav-item[aria-current="page"]::before { background: var(--mint-container); transform: translateX(-50%) scale(1); }
+    .nav-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform 260ms cubic-bezier(.2,.8,.2,1.2); }
+    .nav-item[aria-current="page"] .nav-icon { transform: scale(1.08); }
+    .nav-item .icon-filled { fill: currentColor; stroke: currentColor; }
+    .nav-label { max-width: 100%; overflow: hidden; color: inherit; font-size: 10px; font-weight: 550; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
+
+    #toast {
+      position: fixed;
+      z-index: 20;
+      right: 50%;
+      bottom: calc(84px + var(--safe-bottom));
+      max-width: min(88vw, 360px);
+      padding: 10px 15px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      background: rgba(27, 33, 30, .96);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,.3);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(50%, 8px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    #toast.is-visible { opacity: 1; transform: translate(50%, 0); }
+
+    #folder-dialog {
+      width: min(520px, calc(100vw - 28px));
+      max-width: 520px;
+      max-height: min(78dvh, 620px);
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 24px;
+      background: #111820;
+      color: var(--ink);
+      box-shadow: 0 24px 80px rgba(0,0,0,.5);
+    }
+    #folder-dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(3px); }
+    .dialog-content { display: flex; max-height: min(78dvh, 620px); flex-direction: column; padding: 18px 18px 12px; }
+    .dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .dialog-header h2 { margin: 0; font-size: 18px; font-weight: 650; }
+    .icon-close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.055); color: var(--ink); cursor: pointer; }
+    .icon-close svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .search-wrap { position: relative; margin-bottom: 9px; }
+    .search-wrap svg { position: absolute; top: 50%; right: 13px; width: 19px; height: 19px; color: var(--muted); transform: translateY(-50%); pointer-events: none; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    #folder-search {
+      width: 100%;
+      min-height: 47px;
+      padding: 10px 42px 10px 12px;
+      border: 1px solid #5d6b63;
+      border-radius: 12px;
+      outline: none;
+      background: #121b18;
+      color: var(--ink);
+      font-size: 14px;
+    }
+    #folder-search:focus { border-color: var(--mint); box-shadow: 0 0 0 1px var(--mint); }
+    #folder-search::placeholder { color: #9da9a2; }
+    #folder-results { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+    .folder-row {
+      display: flex;
+      width: 100%;
+      min-height: 58px;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 4px;
+      border: 0;
+      border-bottom: 1px solid rgba(255,255,255,.055);
+      background: transparent;
+      color: var(--ink);
+      text-align: right;
+      cursor: pointer;
+    }
+    .folder-row:hover { background: rgba(255,255,255,.035); }
+    .folder-swatch { width: 12px; height: 12px; flex: 0 0 12px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+    .folder-row-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+    .folder-row-name { overflow: hidden; font-size: 14px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-row-count { color: var(--muted); font-size: 12px; }
+    #no-matches { margin: 0; padding: 22px 8px; color: var(--muted); font-size: 13px; text-align: center; }
+    #no-matches[hidden] { display: none; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 360px) {
+      #controls { gap: 4px; padding-inline: 4px; }
+      .tool-button { width: 39px; height: 40px; flex-basis: 39px; }
+      #hint { font-size: 10px; padding-inline: 8px; }
+      #bottom-navigation { padding-inline: 3px; }
+    }
+
+    @media (max-height: 430px) {
+      #controls { flex-basis: 42px; }
+      .tool-button { width: 38px; height: 38px; flex-basis: 38px; }
+      #hint { min-height: 25px; padding-block: 2px 4px; }
+      #bottom-navigation { min-height: 58px; }
+      #sun-anchor { transform-origin: 50% 31px; }
+      .sun-disk { width: 62px; height: 62px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" aria-describedby="demo-description">
+    <p id="demo-description" class="sr-only">معاينة محلية لشاشة المجرّة. أسماء المجلدات وأعدادها توضيحية وليست بيانات المستخدم.</p>
+    <main id="screen" aria-label="شاشة المجرّة">
+      <section id="universe" aria-label="خريطة المجلدات حول جامعتي">
+        <canvas id="dust-canvas" aria-hidden="true"></canvas>
+        <svg id="orbit-map" viewBox="0 0 360 520" preserveAspectRatio="none" role="group" aria-label="الكواكب والمدارات">
+          <g id="ring-layer" aria-hidden="true"></g>
+          <g id="edge-layer" aria-hidden="true"></g>
+          <g id="node-layer"></g>
+        </svg>
+
+        <div id="sun-anchor" role="img" aria-label="جامعتي، مركز المجلدات">
+          <div class="sun-disk" aria-hidden="true"></div>
+          <span class="sun-title">جامعتي</span>
+          <span class="sun-caption">مركز المجلدات</span>
+        </div>
+
+        <section id="loading-state" class="state-panel" hidden role="status" aria-live="polite">
+          <div class="loading-spinner" aria-hidden="true"></div>
+          <p>جارٍ تحميل المجلدات…</p>
+        </section>
+
+        <section id="empty-state" class="state-panel" hidden aria-labelledby="empty-title">
+          <div class="empty-sun" aria-hidden="true">
+            <div class="sun-disk"></div>
+            <span class="sun-title">جامعتي</span>
+            <span class="sun-caption">مركز المجلدات</span>
+          </div>
+          <h1 id="empty-title">لا توجد مجلدات بعد</h1>
+          <p>أنشئ مجلدات لموادك من شاشة الملفات، وستظهر ككواكب حول جامعتي.</p>
+          <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:8px;fill:none;stroke:#a9b4ad;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round">
+            <circle cx="12" cy="12" r="8.5"></circle><path d="M3.8 12h16.4M12 3.5c2.5 2.3 3.5 5.1 3.5 8.5s-1 6.2-3.5 8.5c-2.5-2.3-3.5-5.1-3.5-8.5S9.5 5.8 12 3.5Z"></path>
+          </svg>
+        </section>
+
+        <section id="error-state" class="state-panel" hidden aria-labelledby="error-title" role="alert">
+          <h1 id="error-title">تعذّر تحميل مجلدات المجرة</h1>
+          <p>تعذر عرض المجلدات الآن. جرّب مرة أخرى.</p>
+          <button id="retry-button" class="retry-button" type="button">إعادة المحاولة</button>
+        </section>
+      </section>
+
+      <div id="controls" role="toolbar" aria-label="أدوات عرض المجرة">
+        <button id="zoom-in" class="tool-button" type="button" aria-label="تكبير" title="تكبير">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"></circle><path d="m16 16 4.2 4.2M10.8 7.7v6.2M7.7 10.8h6.2"></path></svg>
+        </button>
+        <button id="zoom-out" class="tool-button" type="button" aria-label="تصغير" title="تصغير">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"></circle><path d="m16 16 4.2 4.2M7.7 10.8h6.2"></path></svg>
+        </button>
+        <button id="overview" class="tool-button" type="button" aria-label="عرض المجرة كاملة" title="عرض المجرة كاملة">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"></path><path d="M8 8h8v8H8z"></path></svg>
+        </button>
+        <button id="motion-toggle" class="tool-button" type="button" aria-label="إيقاف الدوران" title="إيقاف الدوران" aria-pressed="false">
+          <svg id="motion-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" class="icon-fill"></path><path d="M6 5v14M18 5v14" style="display:none"></path></svg>
+        </button>
+        <button id="folder-list" class="tool-button" type="button" aria-label="قائمة المجلدات والبحث" title="قائمة المجلدات والبحث">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"></path><path d="M3.5 6h.1M3.5 12h.1M3.5 18h.1" stroke-width="3"></path></svg>
+        </button>
+      </div>
+      <p id="hint">اسحب للتنقل · اضغط المجلد لفتحه · زر العرض الشامل يعيد التمركز</p>
+    </main>
+
+    <nav id="bottom-navigation" aria-label="التنقل الرئيسي">
+      <button class="nav-item" type="button" data-route="الرئيسية" aria-label="الرئيسية">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"></path></svg>
+        <span class="nav-label">الرئيسية</span>
+      </button>
+      <button class="nav-item" type="button" data-route="الملفات" aria-label="الملفات">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2 2h7.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"></path></svg>
+        <span class="nav-label">الملفات</span>
+      </button>
+      <button class="nav-item" type="button" data-route="المخطط" aria-label="المخطط">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"></path><path d="m3.5 6 1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"></path></svg>
+        <span class="nav-label">المخطط</span>
+      </button>
+      <button class="nav-item" type="button" data-route="المجرّة" aria-label="المجرّة" aria-current="page">
+        <svg class="nav-icon icon-filled" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Zm7 12 .9 3.1L23 18l-3.1.9L19 22l-.9-3.1L15 18l3.1-.9L19 14ZM5 14l.7 2.3L8 17l-2.3.7L5 20l-.7-2.3L2 17l2.3-.7L5 14Z"></path></svg>
+        <span class="nav-label">المجرّة</span>
+      </button>
+    </nav>
+  </div>
+
+  <dialog id="folder-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="dialog-title">مجلدات المجرة</h2>
+        <button id="close-dialog" class="icon-close" type="button" aria-label="إغلاق">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+        </button>
+      </div>
+      <label class="search-wrap">
+        <span class="sr-only">بحث عن مجلد</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"></circle><path d="m16 16 4.2 4.2"></path></svg>
+        <input id="folder-search" type="search" autocomplete="off" placeholder="بحث عن مجلد" aria-label="بحث عن مجلد">
+      </label>
+      <div id="folder-results" role="group" aria-label="نتائج المجلدات"></div>
+      <p id="no-matches" hidden>لا توجد مجلدات مطابقة</p>
+    </div>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const FALLBACK_COLOR = "#4E7D6E";
+      const MIN_ZOOM = 0.1;
+      const MAX_ZOOM = 12;
+      const LABEL_SCALE = 0.6;
+      const INITIAL_COMFORT_SCALE = 0.72;
+      const ORBIT_DURATION_MS = 90000;
+      const DEFAULT_FOLDERS = [
+        { id: 1, name: "المحاضرات", color: "#4E7D6E", fileCount: 12, parentId: null },
+        { id: 2, name: "الملخصات", color: "#7A6A4F", fileCount: 8, parentId: null },
+        { id: 3, name: "الاختبارات", color: "#5B6478", fileCount: 4, parentId: null },
+        { id: 4, name: "المشاريع", color: "#8A5E5E", fileCount: 18, parentId: null },
+        { id: 5, name: "المراجع", color: "#5E7A8A", fileCount: 6, parentId: null },
+        { id: 6, name: "ملاحظات", color: "#6E7A4E", fileCount: 3, parentId: null }
+      ];
+
+      function clamp(value, minimum, maximum) {
+        const min = Number.isFinite(minimum) ? minimum : 0.1;
+        const max = Number.isFinite(maximum) ? Math.max(min, maximum) : 12;
+        return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
+      }
+
+      function planetSize(fileCount) {
+        const count = Number.isFinite(Number(fileCount)) ? Math.max(0, Number(fileCount)) : 0;
+        return clamp(28 + Math.sqrt(count) * 1.2, 28, 40);
+      }
+
+      function compactLabel(value, maxLength = 14) {
+        const original = String(value == null ? "" : value);
+        const characters = Array.from(original);
+        return characters.length > maxLength
+          ? `${characters.slice(0, Math.max(1, maxLength - 1)).join("")}…`
+          : original;
+      }
+
+      function normalizeFolders(input) {
+        const source = Array.isArray(input) ? input : [];
+        const seen = new Set();
+        const raw = [];
+        source.forEach((item) => {
+          if (!item || item.id === undefined || item.id === null) return;
+          const id = String(item.id).trim();
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          const requestedCount = Number(item.fileCount);
+          const color = typeof item.color === "string" && /^#[0-9a-fA-F]{6}$/.test(item.color)
+            ? item.color : FALLBACK_COLOR;
+          raw.push({
+            id,
+            name: String(item.name == null ? "مجلد" : item.name),
+            color,
+            fileCount: Number.isFinite(requestedCount) ? Math.max(0, requestedCount) : 0,
+            parentId: item.parentId == null ? null : String(item.parentId)
+          });
+        });
+        const ids = new Set(raw.map((item) => item.id));
+        return raw.map((item) => ({
+          ...item,
+          parentId: item.parentId && item.parentId !== item.id && ids.has(item.parentId) ? item.parentId : null
+        }));
+      }
+
+      function buildLayout(input, viewportWidth, viewportHeight) {
+        const folders = normalizeFolders(input);
+        const byId = new Map(folders.map((folder) => [folder.id, folder]));
+        const depths = new Map();
+        folders.forEach((folder) => {
+          let depth = 0;
+          let cursor = folder;
+          const seen = new Set([folder.id]);
+          while (cursor.parentId && byId.has(cursor.parentId)) {
+            if (seen.has(cursor.parentId)) {
+              depth = 0;
+              break;
+            }
+            seen.add(cursor.parentId);
+            cursor = byId.get(cursor.parentId);
+            depth += 1;
+          }
+          depths.set(folder.id, depth);
+        });
+
+        const byDepth = new Map();
+        folders.forEach((folder) => {
+          const depth = depths.get(folder.id) || 0;
+          if (!byDepth.has(depth)) byDepth.set(depth, []);
+          byDepth.get(depth).push(folder);
+        });
+        const maxDepth = byDepth.size ? Math.max(...byDepth.keys()) : 0;
+        const ringRadii = [];
+        let previousRadius = 0;
+        for (let depth = 0; depth <= maxDepth; depth += 1) {
+          const level = byDepth.get(depth) || [];
+          const needed = level.length > 1 ? 128 / (2 * Math.sin(Math.PI / level.length)) : 160;
+          const radius = Math.max(160 + depth * 132, depth ? previousRadius + 132 : 160, needed);
+          ringRadii.push(radius);
+          previousRadius = radius;
+        }
+
+        const nodes = [];
+        byDepth.forEach((level, depth) => {
+          level.forEach((folder, index) => {
+            const angle = -Math.PI / 2 + (index / Math.max(1, level.length)) * Math.PI * 2;
+            const radius = ringRadii[depth] || 160;
+            nodes.push({ ...folder, depth, radius, angle, x: radius * Math.cos(angle), y: radius * Math.sin(angle) });
+          });
+        });
+        const nodesById = new Map(nodes.map((node) => [node.id, node]));
+        const edges = nodes.filter((node) => node.parentId && nodesById.has(node.parentId)).map((node) => ({
+          parent: nodesById.get(node.parentId), child: node
+        }));
+        const lastRadius = ringRadii.length ? ringRadii[ringRadii.length - 1] : 160;
+        const contentSizeDp = (lastRadius + 50 + 26) * 2;
+        const width = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 320;
+        const height = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 520;
+        const fitScale = Math.min(width / contentSizeDp, height / contentSizeDp, 1);
+        return { folders, nodes, edges, ringRadii, contentSizeDp, fitScale };
+      }
+
+      function filterFolders(folders, query) {
+        const needle = String(query == null ? "" : query).trim().toLocaleLowerCase();
+        if (!needle) return Array.isArray(folders) ? folders.slice() : [];
+        return (Array.isArray(folders) ? folders : []).filter((folder) =>
+          String(folder.name == null ? "" : folder.name).toLocaleLowerCase().includes(needle));
+      }
+
+      function zoomCamera(camera, factor, minimum, maximum, anchorX, anchorY, centerX, centerY) {
+        const min = Number.isFinite(minimum) && minimum > 0 ? minimum : MIN_ZOOM;
+        const max = Number.isFinite(maximum) && maximum >= min ? maximum : MAX_ZOOM;
+        const current = clamp(camera && camera.scale, min, max);
+        const oldPanX = Number.isFinite(camera && camera.panX) ? camera.panX : 0;
+        const oldPanY = Number.isFinite(camera && camera.panY) ? camera.panY : 0;
+        if (!Number.isFinite(factor) || factor <= 0 || !Number.isFinite(anchorX) || !Number.isFinite(anchorY) ||
+            !Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+          return { scale: current, panX: oldPanX, panY: oldPanY };
+        }
+        const next = clamp(current * factor, min, max);
+        const worldX = (anchorX - centerX - oldPanX) / current;
+        const worldY = (anchorY - centerY - oldPanY) / current;
+        return {
+          scale: next,
+          panX: anchorX - centerX - worldX * next,
+          panY: anchorY - centerY - worldY * next
+        };
+      }
+
+      function stateFromSearch(search) {
+        try {
+          const query = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+          const state = query.get("state");
+          return state === "empty" || state === "error" || state === "loading" ? state : "ready";
+        } catch (_) {
+          return "ready";
+        }
+      }
+
+      const GalaxyPreviewModel = Object.freeze({
+        FALLBACK_COLOR,
+        MIN_ZOOM,
+        MAX_ZOOM,
+        LABEL_SCALE,
+        INITIAL_COMFORT_SCALE,
+        ORBIT_DURATION_MS,
+        DEFAULT_FOLDERS: normalizeFolders(DEFAULT_FOLDERS),
+        clamp,
+        planetSize,
+        compactLabel,
+        normalizeFolders,
+        buildLayout,
+        filterFolders,
+        zoomCamera,
+        stateFromSearch
+      });
+      globalThis.GalaxyPreviewModel = GalaxyPreviewModel;
+
+      if (typeof document === "undefined") return;
+
+      const universe = document.getElementById("universe");
+      const canvas = document.getElementById("dust-canvas");
+      const map = document.getElementById("orbit-map");
+      const ringLayer = document.getElementById("ring-layer");
+      const edgeLayer = document.getElementById("edge-layer");
+      const nodeLayer = document.getElementById("node-layer");
+      const sunAnchor = document.getElementById("sun-anchor");
+      const emptySunDisk = document.querySelector("#empty-state .sun-disk");
+      const controls = document.getElementById("controls");
+      const hint = document.getElementById("hint");
+      const loadingState = document.getElementById("loading-state");
+      const emptyState = document.getElementById("empty-state");
+      const errorState = document.getElementById("error-state");
+      const dialog = document.getElementById("folder-dialog");
+      const searchInput = document.getElementById("folder-search");
+      const resultsList = document.getElementById("folder-results");
+      const noMatches = document.getElementById("no-matches");
+      const toast = document.getElementById("toast");
+      const pauseButton = document.getElementById("motion-toggle");
+      const motionIcon = document.getElementById("motion-icon");
+      const mediaReduceMotion = typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+
+      let motionEnabled = !mediaReduceMotion.matches;
+      let userPaused = !motionEnabled;
+      let elapsedSeconds = 0;
+      let previousFrame = null;
+      let frameHandle = 0;
+      let toastTimer = 0;
+      let mode = GalaxyPreviewModel.stateFromSearch(window.location.search);
+      let folders = mode === "empty" || mode === "error" || mode === "loading"
+        ? [] : GalaxyPreviewModel.DEFAULT_FOLDERS.map((folder) => ({ ...folder }));
+      let layout = GalaxyPreviewModel.buildLayout(folders, 320, 520);
+      let camera = { scale: layout.fitScale, panX: 0, panY: 0 };
+      let viewport = { width: 320, height: 520 };
+      let nodeElements = new Map();
+      let edgeElements = [];
+      let ringElements = [];
+      const pointers = new Map();
+      let dragStart = null;
+      let pinchStart = null;
+
+      function svgElement(name, attributes) {
+        const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+        Object.entries(attributes || {}).forEach(([key, value]) => element.setAttribute(key, String(value)));
+        return element;
+      }
+
+      function safeFolderColor(color) {
+        return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : FALLBACK_COLOR;
+      }
+
+      function updateViewport() {
+        const bounds = universe.getBoundingClientRect();
+        const width = Math.max(1, bounds.width);
+        const height = Math.max(1, bounds.height);
+        const previousFit = layout.fitScale || 1;
+        viewport = { width, height };
+        map.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        layout = GalaxyPreviewModel.buildLayout(folders, width, height);
+        if (camera.scale <= previousFit + 0.001 || !Number.isFinite(camera.scale)) {
+          camera = { scale: layout.fitScale, panX: 0, panY: 0 };
+        } else {
+          camera.scale = clamp(camera.scale, layout.fitScale, MAX_ZOOM);
+          clampCameraPan();
+        }
+        rebuildScene();
+        drawFrame(elapsedSeconds);
+      }
+
+      function clampCameraPan() {
+        const zoomFactor = Math.max(1, camera.scale / Math.max(layout.fitScale, MIN_ZOOM));
+        const limitX = Math.max(0, viewport.width * 0.42 * zoomFactor);
+        const limitY = Math.max(0, viewport.height * 0.42 * zoomFactor);
+        camera.panX = clamp(camera.panX, -limitX, limitX);
+        camera.panY = clamp(camera.panY, -limitY, limitY);
+      }
+
+      function rebuildScene() {
+        ringLayer.replaceChildren();
+        edgeLayer.replaceChildren();
+        nodeLayer.replaceChildren();
+        ringElements = layout.ringRadii.map((radius, index) => {
+          const ring = svgElement("circle", { class: "orbit-ring", "data-radius": radius, "aria-hidden": "true" });
+          ring.style.opacity = index % 3 === 0 ? ".95" : ".72";
+          ringLayer.appendChild(ring);
+          return ring;
+        });
+        edgeElements = layout.edges.map((edge) => {
+          const line = svgElement("line", { class: "orbit-edge", "data-parent": edge.parent.id, "data-child": edge.child.id });
+          edgeLayer.appendChild(line);
+          return { line, edge };
+        });
+        nodeElements = new Map();
+        layout.nodes.forEach((node) => {
+          const group = svgElement("g", {
+            class: "folder-node",
+            tabindex: "0",
+            role: "button",
+            "data-folder-id": node.id,
+            "aria-label": `${node.name}، ${node.fileCount} ملف`
+          });
+          const size = planetSize(node.fileCount);
+          const radius = size / 2;
+          const glow = svgElement("circle", { class: "planet-glow", r: radius + 6, fill: safeFolderColor(node.color) });
+          const planet = svgElement("circle", { class: "planet-core", r: radius, fill: safeFolderColor(node.color) });
+          const shine = svgElement("circle", { class: "planet-shine", r: Math.max(2.5, radius * .12), cx: -radius * .34, cy: -radius * .34 });
+          const name = svgElement("text", { class: "folder-name", x: "0", y: String(radius + 5) });
+          name.textContent = compactLabel(node.name);
+          const count = svgElement("text", { class: "folder-count", x: "0", y: String(radius + 19) });
+          count.textContent = `${node.fileCount} ملف`;
+          group.append(glow, planet, shine, name, count);
+          nodeLayer.appendChild(group);
+          nodeElements.set(node.id, { group, node });
+        });
+        hint.textContent = camera.scale >= LABEL_SCALE
+          ? "اسحب للتنقل · اضغط المجلد لفتحه · زر العرض الشامل يعيد التمركز"
+          : "عرض شامل · اضغط كوكبًا لتقريبه أو اختر مجلدًا من القائمة";
+      }
+
+      function rotatePoint(point, radians) {
+        const cosine = Math.cos(radians);
+        const sine = Math.sin(radians);
+        return { x: point.x * cosine - point.y * sine, y: point.x * sine + point.y * cosine };
+      }
+
+      function drawFrame(seconds) {
+        const width = viewport.width;
+        const height = viewport.height;
+        const centerX = width / 2 + camera.panX;
+        const centerY = height / 2 + camera.panY;
+        const radians = ((seconds * 1000 / ORBIT_DURATION_MS) % 1) * Math.PI * 2;
+        const factor = Number.isFinite(camera.scale) ? camera.scale : layout.fitScale;
+
+        ringElements.forEach((ring) => {
+          const radius = Number(ring.getAttribute("data-radius")) * factor;
+          ring.setAttribute("cx", String(centerX));
+          ring.setAttribute("cy", String(centerY));
+          ring.setAttribute("r", String(radius));
+          ring.setAttribute("stroke-width", String(Math.max(.5, factor)));
+        });
+
+        edgeElements.forEach(({ line, edge }) => {
+          const parent = rotatePoint(edge.parent, radians);
+          const child = rotatePoint(edge.child, radians);
+          line.setAttribute("x1", String(centerX + parent.x * factor));
+          line.setAttribute("y1", String(centerY + parent.y * factor));
+          line.setAttribute("x2", String(centerX + child.x * factor));
+          line.setAttribute("y2", String(centerY + child.y * factor));
+          line.setAttribute("stroke-width", String(Math.max(.5, 1.15 * factor)));
+        });
+
+        nodeElements.forEach(({ group, node }) => {
+          const position = rotatePoint(node, radians);
+          group.setAttribute("transform", `translate(${centerX + position.x * factor} ${centerY + position.y * factor}) scale(${factor})`);
+          const labels = group.querySelectorAll(".folder-name, .folder-count");
+          labels.forEach((label) => { label.style.display = factor >= LABEL_SCALE ? "" : "none"; });
+        });
+
+        const pulse = 1 + .04 * Math.sin(seconds * 2 * Math.PI / 4.5);
+        const sunScale = Math.max(factor, INITIAL_COMFORT_SCALE) * pulse;
+        sunAnchor.style.left = `${centerX}px`;
+        sunAnchor.style.top = `${centerY}px`;
+        sunAnchor.style.transform = `translate(-50%, -38px) scale(${sunScale})`;
+        if (emptySunDisk) emptySunDisk.style.setProperty("--empty-pulse", String(pulse));
+        paintDust(seconds);
+        hint.textContent = factor >= LABEL_SCALE
+          ? "اسحب للتنقل · اضغط المجلد لفتحه · زر العرض الشامل يعيد التمركز"
+          : "عرض شامل · اضغط كوكبًا لتقريبه أو اختر مجلدًا من القائمة";
+      }
+
+      let stars = [];
+      let particles = [];
+      function seededRandom(seed) {
+        let value = seed >>> 0;
+        return () => {
+          value = (value * 1664525 + 1013904223) >>> 0;
+          return value / 4294967296;
+        };
+      }
+
+      function seedDust() {
+        const randomStars = seededRandom(42);
+        const randomDust = seededRandom(101);
+        stars = Array.from({ length: 60 }, () => ({ x: randomStars(), y: randomStars(), phase: randomStars() }));
+        const colors = ["#ffd54f", "#ffe082", "#e6c280", "#fff8e1"];
+        particles = Array.from({ length: 45 }, () => ({
+          x: randomDust(), y: randomDust(), radius: 1.2 + randomDust() * 2.2,
+          speed: .4 + randomDust() * .6, phase: randomDust(), color: colors[Math.floor(randomDust() * colors.length)]
+        }));
+      }
+
+      function paintDust(seconds) {
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        const pixelWidth = Math.max(1, Math.round(viewport.width * ratio));
+        const pixelHeight = Math.max(1, Math.round(viewport.height * ratio));
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+          canvas.width = pixelWidth;
+          canvas.height = pixelHeight;
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
+        }
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.clearRect(0, 0, viewport.width, viewport.height);
+        const twinkle = seconds / 4.5;
+        stars.forEach((star) => {
+          const alpha = .2 + .45 * Math.abs(Math.sin((twinkle + star.phase) * 2 * Math.PI));
+          context.beginPath();
+          context.fillStyle = `rgba(255,255,255,${alpha * .7})`;
+          context.arc(star.x * viewport.width, star.y * viewport.height, 1 + star.phase * 1.4, 0, Math.PI * 2);
+          context.fill();
+        });
+        particles.forEach((particle) => {
+          const progress = ((seconds * particle.speed / 50 + particle.phase) % 1 + 1) % 1;
+          const x = (particle.x + Math.sin((progress + particle.phase) * 2 * Math.PI) * .025) * viewport.width;
+          const y = ((particle.y + progress) % 1) * viewport.height;
+          const alpha = .25 + .5 * Math.abs(Math.sin((twinkle + particle.phase) * 2 * Math.PI));
+          context.beginPath();
+          context.fillStyle = particle.color;
+          context.globalAlpha = alpha * .2;
+          context.arc(x, y, particle.radius * 2.5, 0, Math.PI * 2);
+          context.fill();
+          context.beginPath();
+          context.globalAlpha = alpha * .85;
+          context.arc(x, y, particle.radius, 0, Math.PI * 2);
+          context.fill();
+        });
+        context.globalAlpha = 1;
+      }
+
+      function animate(now) {
+        frameHandle = 0;
+        if (previousFrame !== null) elapsedSeconds += Math.min((now - previousFrame) / 1000, .1);
+        previousFrame = now;
+        drawFrame(elapsedSeconds);
+        if (motionEnabled && !userPaused && document.visibilityState !== "hidden") {
+          frameHandle = window.requestAnimationFrame(animate);
+        } else {
+          previousFrame = null;
+        }
+      }
+
+      function startAnimation() {
+        if (motionEnabled && !userPaused && !frameHandle && document.visibilityState !== "hidden") {
+          frameHandle = window.requestAnimationFrame(animate);
+        } else {
+          drawFrame(elapsedSeconds);
+        }
+      }
+
+      function syncMotionControl() {
+        const paused = userPaused || !motionEnabled;
+        pauseButton.disabled = !motionEnabled;
+        pauseButton.setAttribute("aria-pressed", String(paused));
+        const title = paused ? "تشغيل الدوران" : "إيقاف الدوران";
+        pauseButton.setAttribute("aria-label", title);
+        pauseButton.title = motionEnabled ? title : "الحركة متوقفة حسب إعداد تقليل الحركة";
+        motionIcon.innerHTML = paused
+          ? '<path d="M8 5v14l11-7z" class="icon-fill"></path>'
+          : '<path d="M7 5h3v14H7zM14 5h3v14h-3z" class="icon-fill"></path>';
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+        if (mode === "ready" && !folders.length) mode = "empty";
+        const hasContent = mode === "ready" && folders.length > 0;
+        map.style.display = hasContent ? "block" : "none";
+        sunAnchor.style.display = hasContent ? "flex" : "none";
+        loadingState.hidden = mode !== "loading";
+        emptyState.hidden = mode !== "empty";
+        errorState.hidden = mode !== "error";
+        controls.hidden = !hasContent;
+        hint.hidden = !hasContent;
+        if (hasContent) universe.setAttribute("aria-label", "خريطة المجلدات حول جامعتي");
+        updateViewport();
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("is-visible");
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 2300);
+      }
+
+      function openFolder(id) {
+        const folder = folders.find((item) => item.id === String(id));
+        if (!folder) return;
+        if (dialog.open) closeFolderDialog();
+        showToast(`معاينة فتح «${folder.name}» · ${folder.fileCount} ملف`);
+      }
+
+      function focusFolder(id) {
+        const node = layout.nodes.find((item) => item.id === String(id));
+        if (!node) return;
+        const radians = ((elapsedSeconds * 1000 / ORBIT_DURATION_MS) % 1) * Math.PI * 2;
+        const position = rotatePoint(node, radians);
+        camera.scale = clamp(Math.max(camera.scale, INITIAL_COMFORT_SCALE), layout.fitScale, MAX_ZOOM);
+        camera.panX = -position.x * camera.scale;
+        camera.panY = -position.y * camera.scale;
+        clampCameraPan();
+        userPaused = true;
+        syncMotionControl();
+        drawFrame(elapsedSeconds);
+      }
+
+      function handleFolderPress(id) {
+        if (camera.scale < LABEL_SCALE) focusFolder(id);
+        else openFolder(id);
+      }
+
+      function zoomAt(factor, pointX, pointY) {
+        const centerX = viewport.width / 2;
+        const centerY = viewport.height / 2;
+        camera = GalaxyPreviewModel.zoomCamera(camera, factor, layout.fitScale, MAX_ZOOM,
+          pointX, pointY, centerX, centerY);
+        clampCameraPan();
+        drawFrame(elapsedSeconds);
+      }
+
+      function overview() {
+        camera = { scale: layout.fitScale, panX: 0, panY: 0 };
+        drawFrame(elapsedSeconds);
+      }
+
+      function renderFolderResults(query) {
+        resultsList.replaceChildren();
+        const matches = GalaxyPreviewModel.filterFolders(folders, query);
+        noMatches.hidden = matches.length > 0;
+        matches.forEach((folder) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "folder-row";
+          button.setAttribute("aria-label", `${folder.name}، ${folder.fileCount} ملف`);
+          const swatch = document.createElement("span");
+          swatch.className = "folder-swatch";
+          swatch.style.backgroundColor = safeFolderColor(folder.color);
+          swatch.style.color = safeFolderColor(folder.color);
+          swatch.setAttribute("aria-hidden", "true");
+          const copy = document.createElement("span");
+          copy.className = "folder-row-copy";
+          const name = document.createElement("span");
+          name.className = "folder-row-name";
+          name.textContent = folder.name;
+          const count = document.createElement("span");
+          count.className = "folder-row-count";
+          count.textContent = `${folder.fileCount} ملف`;
+          copy.append(name, count);
+          button.append(swatch, copy);
+          button.addEventListener("click", () => openFolder(folder.id));
+          resultsList.appendChild(button);
+        });
+      }
+
+      function closeFolderDialog() {
+        if (typeof dialog.close === "function" && dialog.open) dialog.close();
+        else dialog.removeAttribute("open");
+      }
+
+      function openFolderDialog() {
+        searchInput.value = "";
+        renderFolderResults("");
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+        window.requestAnimationFrame(() => searchInput.focus());
+      }
+
+      function setMotionPreference(reduced) {
+        motionEnabled = !reduced;
+        if (!motionEnabled) {
+          userPaused = true;
+          if (frameHandle) window.cancelAnimationFrame(frameHandle);
+          frameHandle = 0;
+          previousFrame = null;
+        } else if (!userPaused) {
+          previousFrame = null;
+          startAnimation();
+        }
+        syncMotionControl();
+        drawFrame(elapsedSeconds);
+      }
+
+      document.getElementById("zoom-in").addEventListener("click", () => zoomAt(1.5, viewport.width / 2, viewport.height / 2));
+      document.getElementById("zoom-out").addEventListener("click", () => zoomAt(1 / 1.5, viewport.width / 2, viewport.height / 2));
+      document.getElementById("overview").addEventListener("click", overview);
+      document.getElementById("folder-list").addEventListener("click", openFolderDialog);
+      document.getElementById("close-dialog").addEventListener("click", closeFolderDialog);
+      document.getElementById("retry-button").addEventListener("click", () => {
+        folders = GalaxyPreviewModel.DEFAULT_FOLDERS.map((folder) => ({ ...folder }));
+        setMode("ready");
+        showToast("عادت مجلدات المعاينة التوضيحية");
+      });
+      pauseButton.addEventListener("click", () => {
+        if (!motionEnabled) return;
+        userPaused = !userPaused;
+        syncMotionControl();
+        if (userPaused) {
+          if (frameHandle) window.cancelAnimationFrame(frameHandle);
+          frameHandle = 0;
+          previousFrame = null;
+          drawFrame(elapsedSeconds);
+        } else {
+          previousFrame = null;
+          startAnimation();
+        }
+      });
+      searchInput.addEventListener("input", () => renderFolderResults(searchInput.value));
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+      });
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          if (item.getAttribute("aria-current") !== "page") showToast("هذه معاينة مستقلة لشاشة المجرّة فقط");
+        });
+      });
+      map.addEventListener("click", (event) => {
+        const node = event.target.closest && event.target.closest("[data-folder-id]");
+        if (node) handleFolderPress(node.getAttribute("data-folder-id"));
+      });
+      map.addEventListener("keydown", (event) => {
+        const node = event.target.closest && event.target.closest("[data-folder-id]");
+        if (node && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          handleFolderPress(node.getAttribute("data-folder-id"));
+        }
+      });
+      map.addEventListener("dblclick", (event) => {
+        if (!(event.target.closest && event.target.closest("[data-folder-id]"))) overview();
+      });
+      map.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const rect = map.getBoundingClientRect();
+        zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
+      }, { passive: false });
+
+      function pointFromEvent(event) {
+        const rect = map.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+      function pointerDistance(first, second) {
+        return Math.hypot(second.x - first.x, second.y - first.y);
+      }
+      map.addEventListener("pointerdown", (event) => {
+        if (event.target.closest && event.target.closest("[data-folder-id]")) return;
+        pointers.set(event.pointerId, pointFromEvent(event));
+        try { map.setPointerCapture(event.pointerId); } catch (_) { /* بعض المتصفحات لا تدعم الالتقاط */ }
+        if (pointers.size === 1) {
+          const point = pointers.get(event.pointerId);
+          dragStart = { point, panX: camera.panX, panY: camera.panY, moved: false };
+        } else if (pointers.size >= 2) {
+          const points = Array.from(pointers.values()).slice(0, 2);
+          pinchStart = { distance: Math.max(1, pointerDistance(points[0], points[1])), camera: { ...camera } };
+          dragStart = null;
+        }
+      });
+      map.addEventListener("pointermove", (event) => {
+        if (!pointers.has(event.pointerId)) return;
+        pointers.set(event.pointerId, pointFromEvent(event));
+        if (pointers.size >= 2 && pinchStart) {
+          const points = Array.from(pointers.values()).slice(0, 2);
+          const distance = Math.max(1, pointerDistance(points[0], points[1]));
+          const midpoint = { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 };
+          const factor = distance / pinchStart.distance;
+          camera = GalaxyPreviewModel.zoomCamera(pinchStart.camera, factor, layout.fitScale, MAX_ZOOM,
+            midpoint.x, midpoint.y, viewport.width / 2, viewport.height / 2);
+          clampCameraPan();
+          drawFrame(elapsedSeconds);
+        } else if (dragStart && pointers.size === 1) {
+          const point = pointers.get(event.pointerId);
+          if (Math.hypot(point.x - dragStart.point.x, point.y - dragStart.point.y) > 3) dragStart.moved = true;
+          camera.panX = dragStart.panX + point.x - dragStart.point.x;
+          camera.panY = dragStart.panY + point.y - dragStart.point.y;
+          clampCameraPan();
+          drawFrame(elapsedSeconds);
+        }
+      });
+      function finishPointer(event) {
+        pointers.delete(event.pointerId);
+        if (pointers.size < 2) pinchStart = null;
+        if (!pointers.size) dragStart = null;
+      }
+      map.addEventListener("pointerup", finishPointer);
+      map.addEventListener("pointercancel", finishPointer);
+      map.addEventListener("lostpointercapture", finishPointer);
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          if (frameHandle) window.cancelAnimationFrame(frameHandle);
+          frameHandle = 0;
+          previousFrame = null;
+        } else startAnimation();
+      });
+      if (typeof mediaReduceMotion.addEventListener === "function") {
+        mediaReduceMotion.addEventListener("change", (event) => setMotionPreference(event.matches));
+      } else if (typeof mediaReduceMotion.addListener === "function") {
+        mediaReduceMotion.addListener((event) => setMotionPreference(event.matches));
+      }
+
+      seedDust();
+      syncMotionControl();
+      setMode(mode);
+      if (typeof ResizeObserver === "function") {
+        const resizeObserver = new ResizeObserver(() => updateViewport());
+        resizeObserver.observe(universe);
+      } else {
+        window.addEventListener("resize", updateViewport, { passive: true });
+      }
+      if (motionEnabled && !userPaused) startAnimation();
+    })();
+  </script>
+</body>
+</html>
