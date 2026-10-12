@@ -26,7 +26,7 @@ class UniHubApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var autoBackupExporter: AutoBackupExporter
 
-    /** مدير المزامنة السحابية (أوفلاين / أونلاين) مع Cloudflare R2 */
+    /** مدير المزامنة السحابية (أوفلاين / أونلاين) مع Appwrite */
     @Inject lateinit var cloudSyncManager: CloudSyncManager
 
     /** نطاق إقلاع خفيف لفحوصات الخلفية غير الحرجة — لا يعطل الإقلاع أبداً */

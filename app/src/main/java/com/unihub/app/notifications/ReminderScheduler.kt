@@ -82,7 +82,7 @@ class ReminderScheduler @Inject constructor(
     /** إلغاء كل التذكيرات (يُستخدم بعد استيراد نسخة احتياطية لإعادة الجدولة النظيفة) */
     fun cancelAll() {
         // WorkRequest يضيف اسم العامل كوسم افتراضي، بما فيه الطلبات القديمة.
-        // لا نلغي كل أعمال التطبيق: ذلك كان يوقف مزامنة R2 والنسخ التلقائي أيضاً.
+        // لا نلغي كل أعمال التطبيق: ذلك كان يوقف مزامنة Appwrite والنسخ التلقائي أيضاً.
         workManager.cancelAllWorkByTag(ReminderWorker::class.java.name)
     }
 

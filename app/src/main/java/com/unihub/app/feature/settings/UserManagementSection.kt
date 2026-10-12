@@ -78,8 +78,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.unihub.app.data.auth.AuthSessionState
 import com.unihub.app.data.auth.CloudAuthRegistry
 import com.unihub.app.data.auth.CloudUserAccount
-import com.unihub.app.data.auth.DeviceApprovalStatus
-import com.unihub.app.data.auth.DeviceChangeRequest
 import com.unihub.app.data.auth.UserPermissions
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.SectionHeader
@@ -157,7 +155,7 @@ fun UserManagementSection(
             }
 
             Text(
-                text = "الجهاز الموثق: ${currentUser.boundDevice?.summaryLabel ?: "هذا الجهاز"}",
+                text = "الحساب موثق بجلسة Appwrite؛ الكاش المحلي خاص بهذا الجهاز",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -201,7 +199,7 @@ fun UserManagementSection(
     }
 
     if (isAdmin) {
-        SectionHeader(title = "إعدادات المستخدمين وطلبات الأجهزة (للمشرف)")
+        SectionHeader(title = "مستخدمو Appwrite وصلاحياتهم (للمشرف)")
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large
@@ -245,36 +243,6 @@ fun UserManagementSection(
                     Icon(Icons.Outlined.PersonAdd, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("إضافة مستخدم جديد")
-                }
-
-                val pendingRequests = authRegistry?.pendingDeviceRequests
-                    ?.filter { it.status == DeviceApprovalStatus.PENDING }
-                    .orEmpty()
-
-                AnimatedVisibility(
-                    visible = pendingRequests.isNotEmpty(),
-                    enter = expandVertically(tween(260)) + fadeIn(tween(260)),
-                    exit = shrinkVertically(tween(200)) + fadeOut(tween(200))
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HorizontalDivider()
-                        Text(
-                            text = "طلبات تسجيل دخول من أجهزة جديدة (${pendingRequests.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        pendingRequests.forEach { req ->
-                            key(req.requestId) {
-                                PendingDeviceRequestCard(
-                                    request = req,
-                                    busy = authBusy,
-                                    onApprove = { viewModel.resolveDeviceChangeRequest(req, approve = true) },
-                                    onReject = { viewModel.resolveDeviceChangeRequest(req, approve = false) }
-                                )
-                            }
-                        }
-                    }
                 }
 
                 HorizontalDivider()
@@ -322,7 +290,7 @@ fun UserManagementSection(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        label = { Text("ابحث عن مستخدم بالاسم أو الجهاز…") },
+                        label = { Text("ابحث بالبريد الإلكتروني أو الاسم…") },
                         leadingIcon = {
                             Icon(Icons.Outlined.Search, contentDescription = null)
                         },
@@ -390,7 +358,7 @@ fun UserManagementSection(
                                     viewModel.updateUserPermissions(account.username, newPerms)
                                 },
                                 onChangePassword = { passwordTargetUser = account },
-                                onResetDevice = { viewModel.resetUserBoundDevice(account.username) },
+                                onRevokeSessions = { viewModel.revokeUserSessions(account.username) },
                                 onDeleteUser = { deleteTargetUser = account }
                             )
                         }
@@ -446,59 +414,11 @@ fun UserManagementSection(
     }
 }
 
-@Composable
-private fun PendingDeviceRequestCard(
-    request: DeviceChangeRequest,
-    busy: Boolean,
-    onApprove: () -> Unit,
-    onReject: () -> Unit
-) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "المستخدم «${request.username}» يطلب الدخول من جهاز جديد",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "الجهاز السابق: ${request.currentBoundDevice?.summaryLabel ?: "غير محدد"}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "الجهاز الجديد: ${request.requestedDevice.summaryLabel}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Button(onClick = onApprove, enabled = !busy) {
-                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("سماح بالدخول")
-                }
-                OutlinedButton(onClick = onReject, enabled = !busy) {
-                    Text("رفض", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-}
-
 /**
  * بطاقة حساب المستخدم القابلة للطي والتوسيع بأنيميشن متكامل:
  * - في الوضع المطوي (الافتراضي): تعرض اسم المستخدم وشارة حالته وملخصاً مدمجاً وسهم توسيع متحرك.
  * - عند النقر على البطاقة: تتوسع بأنيميشن ناعم لتعرض جميع الخيارات (نشط/موقوف، الرمز وتغييره،
- *   الصلاحيات الثلاث، فك ربط الجهاز، وحذف المستخدم).
+ *   الصلاحيات الثلاث، إلغاء جلسات Appwrite، وحذف المستخدم).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -510,7 +430,7 @@ private fun AdminUserAccountCard(
     onToggleActive: (Boolean) -> Unit,
     onUpdatePermissions: (UserPermissions) -> Unit,
     onChangePassword: () -> Unit,
-    onResetDevice: () -> Unit,
+    onRevokeSessions: () -> Unit,
     onDeleteUser: () -> Unit
 ) {
     val summary = remember(account) {
@@ -679,7 +599,7 @@ private fun AdminUserAccountCard(
 
                     // تفاصيل الجهاز المرتبط الكاملة
                     Text(
-                        text = "الجهاز المرتبط: ${account.boundDevice?.summaryLabel ?: "غير مرتبط بجهاز بعد"}",
+                        text = "تُدار جلسات هذا الحساب على خادم Appwrite",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -777,41 +697,41 @@ private fun AdminUserAccountCard(
                             checked = perms.canDownload,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
-                                onUpdatePermissions(perms.copy(canDownload = checked))
+                                onUpdatePermissions(perms.copy(canDownload = checked, canUpload = perms.canUpload && checked, canModify = perms.canModify && checked))
                             }
                         )
                         PermissionToggleRow(
-                            label = "السماح بالرفع إلى السحابة",
+                            label = "السماح بالرفع (يشمل قراءة الفهرس والملفات)",
                             checked = perms.canUpload,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
-                                onUpdatePermissions(perms.copy(canUpload = checked))
+                                onUpdatePermissions(perms.copy(canDownload = perms.canDownload || checked, canUpload = checked, canModify = perms.canModify && checked))
                             }
                         )
                         PermissionToggleRow(
-                            label = "السماح بالتعديل أو الحذف في الحساب السحابي",
+                            label = "السماح بالتعديل والحذف (يشمل القراءة والرفع)",
                             checked = perms.canModify,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
-                                onUpdatePermissions(perms.copy(canModify = checked))
+                                onUpdatePermissions(perms.copy(canDownload = perms.canDownload || checked, canUpload = perms.canUpload || checked, canModify = checked))
                             }
                         )
                     }
 
-                    // أزرار فك ربط الجهاز وحذف المستخدم
+                    // أزرار إلغاء جلسات Appwrite وحذف المستخدم
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (account.boundDevice != null) {
-                            OutlinedButton(onClick = onResetDevice, enabled = !busy) {
+                        if (!account.isAdmin) {
+                            OutlinedButton(onClick = onRevokeSessions, enabled = !busy) {
                                 Icon(
                                     Icons.Outlined.LinkOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text("فك ربط الجهاز")
+                                Text("إلغاء جلسات Appwrite")
                             }
                         }
                         if (SettingsCatalogRules.canShowDestructiveControlsForUser(account)) {
@@ -1007,7 +927,7 @@ private fun AddUserDialog(
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم") },
+                    label = { Text("البريد الإلكتروني") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

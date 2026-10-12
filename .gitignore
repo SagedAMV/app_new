@@ -18,11 +18,11 @@ giud.md
 *.jks
 *.keystore
 
-# Cloud provisioning secrets and local deployment state (never ship in an APK or Git).
-**/.dev.vars
-**/.dev.vars.*
+# Appwrite Function secrets and generated verification/deployment artifacts.
 **/.env
 **/.env.*
-**/.wrangler/
-/service/cloudflare/wrangler.toml
-/service/cloudflare/private/
+/service/appwrite/build/
+/service/appwrite/auth-bridge/code.tar.gz
+/.cache/
+**/__pycache__/
+*.pyc

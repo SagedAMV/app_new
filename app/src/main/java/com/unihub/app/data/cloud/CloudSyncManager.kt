@@ -65,15 +65,15 @@ data class CloudDownloadReport(val downloadedCount: Int, val failedNames: List<S
 }
 
 /**
- * R2 ليس خادم Push لحظياً. نفحصه كل 20 ثانية فقط أثناء ظهور MainActivity،
+ * هذا المسار لا يشترك في أحداث Appwrite Realtime؛ نفحصه كل 20 ثانية فقط أثناء ظهور MainActivity،
  * وفي الخلفية بواسطة WorkManager (غير دقيق التوقيت). لا تنزل الفحوص أي محتوى ملف.
- * جميع عمليات R2 متسلسلة، وهوية الملف remoteKey + ETag، والاختيار يبدأ فارغاً.
+ * جميع عمليات التخزين متسلسلة، وهوية الملف remoteKey + ETag، والاختيار يبدأ فارغاً.
  */
 @Singleton
 class CloudSyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backupRepository: BackupRepository,
-    private val r2Client: CloudflareR2Client,
+    private val storageRepository: AppwriteStorageRepository,
     private val preferences: CloudSyncPreferences,
     private val scheduler: CloudSyncScheduler,
     private val notificationHelper: CloudFileNotificationHelper,
@@ -151,15 +151,25 @@ class CloudSyncManager @Inject constructor(
         }.onFailure { Log.w(TAG, "تعذّر تسجيل مراقب الشبكة", it) }
         scope.launch {
             combine(
-                preferences.settings.map { it.credentials to it.autoSyncEnabled }.distinctUntilChanged(),
-                authManager.sessionState.map { it is AuthSessionState.Authenticated }.distinctUntilChanged()
-            ) { settings, authenticated -> Triple(settings.first, settings.second, authenticated) }
-                .collect { (creds, auto, authenticated) ->
-                mutex.withLock {
-                    val state = ensureConnection(creds)
-                    refreshAvailable(state)
+                preferences.settings.map { it.connection to it.autoSyncEnabled }.distinctUntilChanged(),
+                authManager.sessionState.map { (it as? AuthSessionState.Authenticated)?.user?.userId }.distinctUntilChanged()
+            ) { settings, userId -> Triple(settings.first, settings.second, userId) }
+                .collect { (connection, auto, userId) ->
+                if (userId == null) {
+                    downloadJob?.cancel()
+                    scheduler.cancelAll()
+                    notificationHelper.cancel()
                 }
-                if (!creds.isConfigured || !authenticated) scheduler.cancelAll()
+                _allRemoteFiles.value = emptyList()
+                _availableRemoteFiles.value = emptyList()
+                _remoteFolders.value = emptyList()
+                mutex.withLock {
+                    if (userId == authManager.currentAuthenticatedUser()?.userId) {
+                        val state = ensureConnection(connection)
+                        if (userId != null) refreshAvailable(state)
+                    }
+                }
+                if (!connection.isConfigured || userId == null) scheduler.cancelAll()
                 else if (auto) scheduler.ensurePeriodicSync()
                 else scheduler.cancelSync()
             }
@@ -217,10 +227,7 @@ class CloudSyncManager @Inject constructor(
         try {
             val settings = preferences.snapshot()
             requireConnection(settings)
-            authManager.verifyActiveSessionWithCloud()
-            if (!authManager.isAuthenticatedNow()) {
-                throw IOException("يجب تسجيل الدخول أولاً للوصول إلى السحابة")
-            }
+            authManager.requirePermission(AuthPermission.DOWNLOAD).getOrThrow()
             scanLocked(settings, notifyOnScan)
         } finally { _isSyncing.value = false; mutex.unlock() }
     }
@@ -340,7 +347,7 @@ class CloudSyncManager @Inject constructor(
                     if (!disk.isFile) continue
                     val stat = CloudLocalFileStat(candidate.id, candidate.createdAt, candidate.filePath, disk.length(), disk.lastModified())
                     val cachedFp = state.localFingerprints.firstOrNull { CloudPresenceMatcher.validFingerprint(it, stat) }
-                    val sha = cachedFp?.sha256 ?: r2Client.sha256Hex(disk) { jobContext.ensureActive() }.also { computed ->
+                    val sha = cachedFp?.sha256 ?: storageRepository.sha256Hex(disk) { jobContext.ensureActive() }.also { computed ->
                         val fp = CloudLocalFingerprint(stat.id, stat.createdAt, stat.path, stat.size, stat.modifiedAt, computed)
                         catalog.update(activeConnection) { current ->
                             current.copy(localFingerprints = current.localFingerprints.filterNot { old -> old.localId == stat.id } + fp)
@@ -434,9 +441,8 @@ class CloudSyncManager @Inject constructor(
                     continue
                 }
                 val staging = File(context.filesDir, "cloud-downloads").apply { mkdirs() }
-                // اسم ثابت لكل مفتاح سحابي — لا createTempFile العشوائي: حتى يجد الاستئناف
-                // بعد انقطاع الشبكة (أو بعد إعادة تشغيل التطبيق) جزأه ويستكمل من نصفه.
-                val temp = CloudDownloadPart.fileFor(staging, remote.remoteKey)
+                // الاستئناف ثابت لنفس الاتصال ونسخة الملف فقط؛ لا نخلط جزءًا من نسخة أو حساب آخر.
+                val temp = CloudDownloadPart.fileFor(staging, remote.remoteKey, remote.versionToken, activeConnection)
                 val resumedBytes = (if (temp.isFile) temp.length() else 0L).coerceIn(0L, remote.size.coerceAtLeast(0L))
                 _transferState.value = CloudTransferState(
                     kind = CloudTransferKind.DOWNLOAD,
@@ -455,8 +461,8 @@ class CloudSyncManager @Inject constructor(
                     val remaining = remote.size - (if (temp.isFile) temp.length() else 0L)
                     if (freeSpaceForNewData() - RESERVE_BYTES < remaining.coerceAtLeast(0L)) throw IOException("المساحة لا تكفي")
                     var downloadedHash = ""
-                    val found = r2Client.downloadFile(
-                        settings.credentials, remote.remoteKey, temp, remote.etag, remote.size,
+                    val found = storageRepository.downloadFile(
+                        settings.connection, remote.remoteKey, temp, remote.etag, remote.size,
                         onDigest = { downloadedHash = it },
                         resume = true
                     ) { bytes, total ->
@@ -481,7 +487,7 @@ class CloudSyncManager @Inject constructor(
                     val targetId = local?.takeIf {
                         val disk = File(it.filePath)
                         previous != null && it.createdAt == previous.localCreatedAt && disk.length() == previous.localSize &&
-                            r2Client.sha256Hex(disk) { jobContext.ensureActive() } == previous.sha256
+                            storageRepository.sha256Hex(disk) { jobContext.ensureActive() } == previous.sha256
                     }?.id
                     // وجهة محلية صريحة، حتى عندما تكون المستوى الرئيسي (null)، لا ترجع إلى folderId البعيد.
                     val localRemote = remote.copy(folderId = parent?.id, folderName = parent?.name)
@@ -567,8 +573,8 @@ class CloudSyncManager @Inject constructor(
         mutate(root)
         root.put("exportedAt", System.currentTimeMillis())
         val text = root.toString()
-        val uploaded = r2Client.uploadText(
-            settings.credentials, CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY, text,
+        val uploaded = storageRepository.uploadText(
+            settings.connection, CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY, text,
             ifMatch = scan.manifestEtag.takeIf { it.isNotBlank() },
             ifNoneMatch = scan.remoteManifest == null
         ).getOrThrow()
@@ -693,7 +699,7 @@ class CloudSyncManager @Inject constructor(
     /**
      * حذف ملفات من السحابة نفسها (جولة تعليمات.md — تحكم كامل داخل الواجهة).
      *
-     * **الترتيب مقصود** (قرار محاكمة الحلقة 5 — H1): تُحذف كائنات R2 أولاً ثم يُنظَّف بيان
+     * **الترتيب مقصود** (قرار محاكمة الحلقة 5 — H1): تُحذف كائنات التخزين أولاً ثم يُنظَّف بيان
      * الفهرس. السبب: [discoverFiles] يبني القائمة من كائنات الحاوية لا من سجلات البيان،
      * فحذف الكائن يُخفي الملف فوراً حتى لو تعارض نشر البيان مع جهاز آخر — بلا كائن يتيم
      * يُتبنّى تلقائياً فيعود إشعاراً كاذباً للمستخدم.
@@ -715,7 +721,7 @@ class CloudSyncManager @Inject constructor(
         val deleted = linkedSetOf<String>()
         val failed = mutableListOf<String>()
         for (file in targets) {
-            r2Client.deleteObject(settings.credentials, file.remoteKey).fold(
+            storageRepository.deleteObject(settings.connection, file.remoteKey).fold(
                 onSuccess = { deleted += file.remoteKey },
                 onFailure = { failed += file.fullDisplayName }
             )
@@ -765,7 +771,7 @@ class CloudSyncManager @Inject constructor(
     }
 
     private data class Scan(
-        val objects: List<R2ObjectSummary>,
+        val objects: List<CloudObjectSummary>,
         val remoteManifest: JSONObject?,
         val manifestEtag: String,
         val state: CloudCatalogSnapshot,
@@ -774,13 +780,13 @@ class CloudSyncManager @Inject constructor(
     )
 
     private suspend fun scanLocked(settings: CloudSyncSettings, notify: Boolean): Scan {
-        val previous = ensureConnection(settings.credentials)
-        val objects = r2Client.listBucketObjects(settings.credentials).getOrThrow()
-        val manifestObject = objects.firstOrNull { it.key == CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY }
+        val previous = ensureConnection(settings.connection)
+        val objects = storageRepository.listBucketObjects(settings.connection).getOrThrow()
+        val manifestObject = objects.firstOrNull { it.key == CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY }
         val remoteText = if (manifestObject == null) null else if (
             manifestObject.etag == previous.metadataEtag && previous.metadataBaseline != null
         ) previous.metadataBaseline else {
-            r2Client.downloadTextObject(settings.credentials, manifestObject.key, manifestObject.etag).getOrThrow()?.text
+            storageRepository.downloadTextObject(settings.connection, manifestObject.key, manifestObject.etag).getOrThrow()?.text
                 ?: throw CloudConflictException()
         }
         val remote = remoteText?.let { text -> JSONObject(text).also {
@@ -844,7 +850,7 @@ class CloudSyncManager @Inject constructor(
                     .put("cloudFolders", scan.remoteManifest?.optJSONArray("cloudFolders") ?: JSONArray())
                     .put("storageMode", "selective-v2").put("exportedAt", System.currentTimeMillis())
                 val text = root.toString()
-                val uploaded = r2Client.uploadText(settings.credentials, CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY, text,
+                val uploaded = storageRepository.uploadText(settings.connection, CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY, text,
                     ifMatch = scan.manifestEtag.takeIf { it.isNotBlank() }, ifNoneMatch = scan.remoteManifest == null).getOrThrow()
                 catalog.update(activeConnection) { it.copy(metadataBaseline = text, metadataEtag = uploaded.etag) }
                 preferences.recordUploadSuccess(generation, System.currentTimeMillis(), "تمت مزامنة النصوص فقط؛ الملفات الثقيلة تنتظر اختيارك")
@@ -908,7 +914,7 @@ class CloudSyncManager @Inject constructor(
                 .put("cloudFolders", CloudFolderTree.mergeFolders(published?.optJSONArray("cloudFolders"), folderDescriptions))
                 .put("storageMode", "selective-v2").put("exportedAt", System.currentTimeMillis())
             val text = root.toString()
-            val response = r2Client.uploadText(settings.credentials, CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY, text,
+            val response = storageRepository.uploadText(settings.connection, CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY, text,
                 ifMatch = etag.takeIf { it.isNotBlank() }, ifNoneMatch = published == null).getOrThrow()
             published = root; etag = response.etag
             val all = discoverFiles(objects.values.toList(), root)
@@ -956,7 +962,7 @@ class CloudSyncManager @Inject constructor(
                 val state = catalog.snapshot(activeConnection)
                 val previous = state.links.firstOrNull { it.localId == file.id && it.localCreatedAt == file.createdAt }
                 val hash = if (previous != null && previous.localSize == length && previous.localModifiedAt == modified) previous.sha256
-                    else r2Client.sha256Hex(disk) { ctx.ensureActive() }
+                    else storageRepository.sha256Hex(disk) { ctx.ensureActive() }
                 val old = previous?.let { objects[it.remoteKey] }
                 // reusable يصبح الرابط نفسه حين تتحقق شروط إعادة الاستخدام — smart cast بدل force-unwrap (بوابة «صفر !!» في تعليمات.md)
                 val reusable = previous?.takeIf { it.sha256 == hash &&
@@ -975,10 +981,10 @@ class CloudSyncManager @Inject constructor(
                     val reserved = CloudFileLink(file.id, key, "", hash, length, modified, file.createdAt)
                     catalog.update(activeConnection) { it.copy(links = it.links.filterNot { oldLink -> oldLink.localId == id } + reserved) }
                     _transferState.value = _transferState.value.copy(phase = "")
-                    val response = r2Client.uploadFile(settings.credentials, key, disk, file.mimeType) { done, total ->
+                    val response = storageRepository.uploadFile(settings.connection, key, disk, file.mimeType) { done, total ->
                         _transferState.value = _transferState.value.copy(bytesDone = done, bytesTotal = total)
                     }.getOrThrow()
-                    obj = R2ObjectSummary(key, length, response.etag, System.currentTimeMillis()); objects[key] = obj
+                    obj = CloudObjectSummary(key, length, response.etag, System.currentTimeMillis()); objects[key] = obj
                     uploaded++
                 } else {
                     present++
@@ -1027,7 +1033,7 @@ class CloudSyncManager @Inject constructor(
         return parent
     }
 
-    private suspend fun ensureConnection(creds: R2Credentials): CloudCatalogSnapshot {
+    private suspend fun ensureConnection(creds: CloudStorageConnection): CloudCatalogSnapshot {
         val id = connectionId(creds)
         if (id != activeConnection) {
             verificationJob?.cancel(); verificationJob = null
@@ -1079,7 +1085,7 @@ class CloudSyncManager @Inject constructor(
                     if (activeConnection != id) return@launch
                     val disk = File(stat.path)
                     _localVerification.value = CloudLocalVerification(true, disk.name, completed, todo.size)
-                    val hash = r2Client.sha256Hex(disk) { ctx.ensureActive() }
+                    val hash = storageRepository.sha256Hex(disk) { ctx.ensureActive() }
                     val now = localStats().firstOrNull { it.id == stat.id }
                     if (now != null && now == stat) {
                         val fp = CloudLocalFingerprint(stat.id, stat.createdAt, stat.path, stat.size, stat.modifiedAt, hash)
@@ -1110,7 +1116,7 @@ class CloudSyncManager @Inject constructor(
         }
     }
 
-    private fun discoverFiles(objects: List<R2ObjectSummary>, manifest: JSONObject?): List<RemoteCloudFile> {
+    private fun discoverFiles(objects: List<CloudObjectSummary>, manifest: JSONObject?): List<RemoteCloudFile> {
         val rows = manifest?.optJSONArray("files") ?: JSONArray()
         val folders = manifest?.optJSONArray("folders") ?: JSONArray()
         val folderNames = (0 until folders.length()).mapNotNull { i ->
@@ -1121,15 +1127,14 @@ class CloudSyncManager @Inject constructor(
         val metadata = (0 until rows.length()).mapNotNull { i ->
             val row = rows.optJSONObject(i) ?: return@mapNotNull null
             if (row.optString("remoteKey").isBlank() && row.optLong("id") > 0) {
-                row.put("remoteKey", CloudflareR2Config.remoteFileObjectKey(row.optLong("id"), row.optString("extension")))
+                row.put("remoteKey", CloudStorageConfig.remoteFileObjectKey(row.optLong("id"), row.optString("extension")))
             }
             remoteFileFromJson(row)
         }.associateBy { it.remoteKey }
         val system = setOf(
-            CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY,
-            CloudflareR2Config.REMOTE_META_OBJECT_KEY,
-            CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY,
-            CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+            CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY,
+            CloudStorageConfig.REMOTE_META_OBJECT_KEY,
+            CloudStorageConfig.REMOTE_BACKUP_OBJECT_KEY,
         )
         return objects.filterNot { it.key in system || it.key.endsWith('/') || it.key.startsWith("unihub-tests/") }.map { obj ->
             val known = metadata[obj.key]
@@ -1139,7 +1144,7 @@ class CloudSyncManager @Inject constructor(
                 cloudFolderKey = known.cloudFolderKey ?: known.folderId?.let { "legacy:$it" },
                 sha256 = known.sha256.takeIf { known.etag == obj.etag }.orEmpty()
             ) else {
-                val fullName = obj.key.substringAfterLast('/')
+                val fullName = obj.displayName.ifBlank { obj.key.substringAfterLast('/') }
                 val dot = fullName.lastIndexOf('.')
                 val extension = if (dot > 0) fullName.substring(dot + 1).lowercase(Locale.US) else ""
                 RemoteCloudFile(
@@ -1186,7 +1191,7 @@ class CloudSyncManager @Inject constructor(
     }
 
     private fun requireConnection(settings: CloudSyncSettings) {
-        if (!settings.isConfigured) throw IOException("بيانات خادم R2 غير مضبوطة")
+        if (!settings.isConfigured) throw IOException("إعدادات مشروع ملفات Appwrite غير مطابقة")
         if (!checkIsOnline()) throw IOException("لا يتوفر إنترنت؛ البيانات والملفات السابقة محفوظة محلياً")
     }
 
@@ -1201,8 +1206,8 @@ class CloudSyncManager @Inject constructor(
         return online
     }
 
-    private fun connectionId(creds: R2Credentials): String = MessageDigest.getInstance("SHA-256")
-        .digest("${creds.resolvedEndpoint}/${creds.bucketName}".toByteArray(Charsets.UTF_8))
+    private fun connectionId(creds: CloudStorageConnection): String = MessageDigest.getInstance("SHA-256")
+        .digest("${creds.endpointUrl}/${creds.projectId}/${creds.bucketId}/${authManager.currentAuthenticatedUser()?.userId.orEmpty()}".toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(Locale.US, it.toInt() and 255) }
 
     /**

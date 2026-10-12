@@ -209,12 +209,12 @@ object SettingsCatalogRules {
                 .joinToString(" ")
                 .ifBlank { device.deviceName.ifBlank { "جهاز مرتبط" } }
             "مرتبط: $modelPart"
-        } ?: "غير مرتبط بجهاز"
+        } ?: "جلسات Appwrite"
 
         return CollapsedUserSummary(
             username = account.username,
             statusBadgeText = statusBadge,
-            isStatusActive = account.isAdmin || account.isActive,
+            isStatusActive = account.isActive,
             isAdmin = account.isAdmin,
             boundDeviceShortText = deviceText,
             permissionsSummaryText = permText,
@@ -237,7 +237,6 @@ object SettingsCatalogRules {
         isAdmin: Boolean,
         currentUsername: String?,
         totalUsersCount: Int,
-        pendingDeviceRequestsCount: Int,
         themeMode: ThemeMode,
         useDynamicColor: Boolean,
         isBackupFolderConfigured: Boolean,
@@ -246,13 +245,7 @@ object SettingsCatalogRules {
     ): String = when (category) {
         SettingsCategory.USER_MANAGEMENT -> {
             if (isAdmin) {
-                val usersPart = "$totalUsersCount مستخدم مسجل"
-                val requestsPart = if (pendingDeviceRequestsCount > 0) {
-                    " • $pendingDeviceRequestsCount طلب جهاز معلق"
-                } else {
-                    " • لا طلبات معلقة"
-                }
-                "$usersPart$requestsPart"
+                "$totalUsersCount مستخدم مسجل في Appwrite"
             } else {
                 val userLabel = currentUsername?.takeIf { it.isNotBlank() } ?: "مستخدم سحابي"
                 "الحساب الحالي: $userLabel • إعدادات الحساب والجهاز"

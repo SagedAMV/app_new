@@ -12,6 +12,7 @@ import com.unihub.app.core.common.UiMessenger
 import com.unihub.app.core.validation.InputValidationException
 import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.core.validation.UserInputRules
+import com.unihub.app.data.auth.CloudAuthRules
 import com.unihub.app.data.auth.AuthPermission
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.cloud.CloudSyncManager
@@ -153,9 +154,10 @@ class FilesViewModel @Inject constructor(
     val cloudUploadReport = cloudSyncManager.lastUploadReport
     fun closeUploadPlan() { _uploadPlan.value = null }
 
+    // Planning is local/offline; CloudSyncManager re-verifies Account and server permissions when the queue runs.
     fun previewSelectedUpload(files: List<FileEntity>) {
         viewModelScope.launch {
-            authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
+            CloudAuthRules.checkPermission(authManager.currentAuthenticatedUser(), AuthPermission.UPLOAD).onFailure {
                 messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }
@@ -164,7 +166,7 @@ class FilesViewModel @Inject constructor(
     }
     fun previewFolderUpload(id: Long, name: String) {
         viewModelScope.launch {
-            authManager.requirePermission(AuthPermission.UPLOAD).onFailure {
+            CloudAuthRules.checkPermission(authManager.currentAuthenticatedUser(), AuthPermission.UPLOAD).onFailure {
                 messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }

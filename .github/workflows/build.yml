@@ -41,10 +41,11 @@ jobs:
       - name: Check build verification helpers
         run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
 
-      - name: Test encrypted provisioning service locally
-        run: |
-          node --test service/cloudflare/worker.test.mjs
-          python3 service/cloudflare/schema_test.py
+      - name: Check Appwrite project boundaries
+        run: python3 scripts/check_appwrite_migration.py
+
+      - name: Test Kotlin Appwrite auth bridge
+        run: ./gradlew :appwrite-bridge:test --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee appwrite-bridge-tests.log
 
       - name: Run JVM unit tests
         run: ./gradlew testReleaseFullUnitTest --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee unit-tests.log
@@ -127,6 +128,9 @@ jobs:
           path: |
             *-build.log
             unit-tests.log
+            appwrite-bridge-tests.log
+            service/appwrite/build/test-results/test/
+            service/appwrite/build/reports/tests/test/
             lint.log
             ui-tests.log
             ui-emulator.log
