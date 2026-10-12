@@ -123,7 +123,14 @@ class BridgeService(private val api: BridgeApi) {
         val id = BridgeConfig.shadowId(userId)
         val user = try { api.storage("GET", "/users/$id") }
         catch (error: UpstreamFailure) { if (error.status == 404 && error.type == "user_not_found") return null else throw error }
-        if (user.optString("\$id") != id || !labels(user).containsAll(setOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel(userId)))) {
+        val identityLabels = setOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel(userId))
+        if (user.optString("\$id") != id || !labels(user).containsAll(identityLabels)) {
+            throw BridgeFailure(409, "conflict")
+        }
+        if (user.optString("email").isNotBlank() || user.optString("phone").isNotBlank()) {
+            // A technical identity must never become an independently sign-in-capable account.
+            api.storage("PATCH", "/users/$id/status", JSONObject().put("status", false))
+            api.storage("PUT", "/users/$id/labels", JSONObject().put("labels", JSONArray(identityLabels)))
             throw BridgeFailure(409, "conflict")
         }
         return user

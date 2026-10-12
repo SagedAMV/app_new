@@ -90,6 +90,16 @@ class BridgeServiceTest {
         assertEquals(0, api.lastJwtDuration)
         assertTrue(api.storageRequests.none { it.startsWith("PUT") || it.startsWith("PATCH") })
     }
+    @Test fun independentlySignInCapableShadowIsDisabledBeforeRefusingTheGrant() {
+        val api = FakeApi(actorId = "student")
+        api.seedShadow("student")
+        val shadow = api.storageUsers.getValue(BridgeConfig.shadowId("student"))
+        shadow.put("email", "unexpected@example.test")
+        denied(409) { BridgeService(api).execute(JWT, request("storageToken")) }
+        assertFalse(shadow.getBoolean("status"))
+        assertFalse(BridgeConfig.READ in labels(shadow))
+        assertEquals(0, api.lastJwtDuration)
+    }
     @Test fun listingUsersStripsPasswordsHashesAndPreferences() {
         val api = FakeApi()
         api.authUsers.values.forEach { it.put("password", "secret-verifier").put("hash", "server-hash").put("prefs", JSONObject().put("secret", "hidden")) }
@@ -188,7 +198,7 @@ class BridgeServiceTest {
         }
         fun seedShadow(id: String) {
             val shadow = BridgeConfig.shadowId(id)
-            storageUsers[shadow] = user(shadow, listOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel(id), BridgeConfig.READ))
+            storageUsers[shadow] = user(shadow, listOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel(id), BridgeConfig.READ)).put("email", "")
         }
         private fun users(records: MutableMap<String, JSONObject>, method: String, path: String, body: JSONObject?): JSONObject {
             if (path == "/users" && method == "POST") {

@@ -313,7 +313,7 @@ open class AppwriteStorageTransport(
                 JSONObject(conn.inputStream.use { readBoundedText(it, MAX_JSON_BYTES) }).getJSONArray("files")
             }
             for (i in 0 until page.length()) result += AppwriteStoredFile.fromJson(page.getJSONObject(i))
-            if (result.size > 100_000) throw IOException("فهرس التخزين تجاوز حد الأمان؛ أرشف الإصدارات القديمة عبر المشرف")
+            if (result.size > 100_000) throw IOException("فهرس التخزين تجاوز حد الأمان؛ تواصل مع المشرف لتوسعة الكتالوج دون حذف إصداراته")
             cursor = if (page.length() >= AppwriteFileProtocol.PAGE_SIZE) result.lastOrNull()?.id else null
             if (cursor != null && !cursors.add(cursor)) throw IOException("تكرر مؤشر صفحة ملفات Appwrite")
         } while (cursor != null)
