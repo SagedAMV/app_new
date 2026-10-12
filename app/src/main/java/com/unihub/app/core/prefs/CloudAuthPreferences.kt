@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.toMutablePreferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.unihub.app.data.auth.CloudAuthRegistry
 import com.unihub.app.data.auth.CloudAuthRules
@@ -37,7 +36,7 @@ private val appwriteProfileMigrationKey = booleanPreferencesKey("appwrite_profil
 private val Context.cloudAuthDataStore by preferencesDataStore(
     name = "unihub_cloud_auth",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-    migrations = {
+    produceMigrations = {
         listOf(object : DataMigration<Preferences> {
             override suspend fun shouldMigrate(currentData: Preferences) = currentData[appwriteProfileMigrationKey] != true
             override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {

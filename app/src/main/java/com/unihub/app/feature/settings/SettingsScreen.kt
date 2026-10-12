@@ -228,7 +228,6 @@ fun SettingsScreen(
                     isAdmin = currentUser?.isAdmin == true,
                     currentUsername = currentUser?.username,
                     totalUsersCount = totalUsersCount,
-                    pendingRequestsCount = pendingRequestsCount,
                     themeMode = themeMode,
                     useDynamicColor = useDynamicColor,
                     isBackupFolderConfigured = autoBackup?.isFolderConfigured == true,
@@ -278,7 +277,6 @@ private fun SettingsCategoriesHome(
     isAdmin: Boolean,
     currentUsername: String?,
     totalUsersCount: Int,
-    pendingRequestsCount: Int,
     themeMode: ThemeMode,
     useDynamicColor: Boolean,
     isBackupFolderConfigured: Boolean,
@@ -344,13 +342,10 @@ private fun SettingsCategoriesHome(
                 backupIntervalDays = backupIntervalDays
             )
 
-            val showPendingBadge =
-                category == SettingsCategory.USER_MANAGEMENT && isAdmin && pendingRequestsCount > 0
-
             SettingsCategoryCard(
                 category = category,
                 subtitle = subtitle,
-                pendingBadgeCount = if (showPendingBadge) pendingRequestsCount else 0,
+                pendingBadgeCount = 0,
                 badgeScale = badgePulseScale,
                 onClick = { onSelectCategory(category) },
                 modifier = Modifier.graphicsLayer {
@@ -528,9 +523,6 @@ private fun SettingsCategoryDetailScreen(
                     authBusy = authBusy,
                     viewModel = viewModel
                 )
-                if ((authSession as? AuthSessionState.Authenticated)?.user?.isAdmin == true) {
-                    com.unihub.app.feature.auth.OwnerCloudDistributionSection()
-                }
             }
 
             SettingsCategory.APPEARANCE -> {

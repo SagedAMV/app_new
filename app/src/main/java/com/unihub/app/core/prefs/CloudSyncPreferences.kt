@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.toMutablePreferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.unihub.app.data.cloud.CloudStorageConnection
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,7 +37,7 @@ private val migratedKey = booleanPreferencesKey("appwrite_migrated_v1")
 private val Context.cloudSyncDataStore by preferencesDataStore(
     name = "unihub_cloud_sync",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-    migrations = {
+    produceMigrations = {
         listOf(object : DataMigration<Preferences> {
             override suspend fun shouldMigrate(currentData: Preferences) = currentData[migratedKey] != true
             override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {

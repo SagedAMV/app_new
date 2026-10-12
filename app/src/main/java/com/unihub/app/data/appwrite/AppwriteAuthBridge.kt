@@ -55,7 +55,7 @@ class AppwriteAuthBridge @Inject constructor(
             throw AppwriteBridgeException(503, "bridge_unavailable")
         }
         val status = execution.responseStatusCode.toInt()
-        if (execution.status != "completed" || status !in 200..299) {
+        if (execution.status != io.appwrite.enums.ExecutionStatus.COMPLETED || status !in 200..299) {
             throw AppwriteBridgeException(status, result.optString("code", "bridge_unavailable"))
         }
         return result

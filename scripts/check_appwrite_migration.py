@@ -46,7 +46,7 @@ for path in (ROOT / "app/src/main").rglob("*"):
     if path.suffix not in {".kt", ".xml"}:
         continue
     text = path.read_text(encoding="utf-8")
-    check(not re.search(r"Cloudflare|CloudflareR2|R2Credentials|S3Protocol|S3Encoding|AWS4-HMAC|PROVISIONING_URL|data\.provision", text, re.I),
+    check(not re.search(r"Cloudflare|CloudflareR2|R2Credentials|S3Protocol|S3Encoding|AWS4-HMAC|PROVISIONING_URL|data\.provision|OwnerCloudDistributionSection|WaitingAdminApproval", text, re.I),
           f"old provider reference in {path.relative_to(ROOT)}")
     check(not re.search(r"STORAGE_API_KEY|X-Appwrite-Key|setSelfSigned\(true\)|setKey\(", text, re.I),
           f"server-only secret/unsafe client configuration in {path.relative_to(ROOT)}")
