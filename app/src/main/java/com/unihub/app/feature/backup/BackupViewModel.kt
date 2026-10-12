@@ -8,7 +8,6 @@ import com.unihub.app.core.prefs.CloudSyncPreferences
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.cloud.CloudSyncManager
-import com.unihub.app.data.cloud.R2Credentials
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,32 +73,6 @@ class BackupViewModel @Inject constructor(
         }
     }
 
-    fun saveCloudCredentials(accountId: String, endpointUrl: String, bucketName: String, accessKeyId: String, secretAccessKey: String) {
-        viewModelScope.launch {
-            authManager.requireAdmin().getOrElse {
-                showStatus(CloudFailureMessages.or(it, "تعديل إعدادات الخادم السحابي متاح للمشرف فقط"), isError = true)
-                return@launch
-            }
-            runCatching {
-                val existing = cloudSyncPreferences.snapshot().credentials
-                val creds = R2Credentials(
-                    accountId = accountId.trim(),
-                    endpointUrl = endpointUrl.trim(),
-                    bucketName = bucketName.trim(),
-                    accessKeyId = accessKeyId.trim().ifBlank { existing.accessKeyId },
-                    secretAccessKey = secretAccessKey.trim().ifBlank { existing.secretAccessKey }
-                )
-                require(creds.isConfigured) {
-                    "إعدادات R2 غير صالحة. تأكد من معرّف الحساب والحاوية والمفتاحين، واستخدم نقطة النهاية الرسمية لحساب Cloudflare نفسه."
-                }
-                cloudSyncPreferences.saveCredentials(creds)
-            }.onSuccess {
-                showStatus("تم حفظ إعدادات R2 مشفّرة محلياً")
-            }.onFailure {
-                showStatus(CloudFailureMessages.userMessage(it), isError = true)
-            }
-        }
-    }
 
     fun exportTo(uri: Uri) = runBusy {
         backupRepository.export(uri)

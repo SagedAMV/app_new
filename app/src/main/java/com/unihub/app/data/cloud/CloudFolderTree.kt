@@ -75,7 +75,7 @@ object CloudFolderTree {
             selected.fold(0L) { sum, file -> Math.addExact(sum, file.size.coerceAtLeast(0)) })
     }
 
-    fun foldersFromManifest(manifest: JSONObject?, files: List<RemoteCloudFile>, objects: List<R2ObjectSummary>): List<RemoteCloudFolder> {
+    fun foldersFromManifest(manifest: JSONObject?, files: List<RemoteCloudFile>, objects: List<CloudObjectSummary>): List<RemoteCloudFolder> {
         val result = linkedMapOf<String, RemoteCloudFolder>()
         val cloud = manifest?.optJSONArray("cloudFolders") ?: JSONArray()
         for (i in 0 until cloud.length()) cloud.optJSONObject(i)?.let(::folderFromJson)?.let { result[it.key] = it }

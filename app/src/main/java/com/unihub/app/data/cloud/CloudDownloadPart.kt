@@ -7,7 +7,7 @@ import java.io.File
  *
  * الطبقة هنا عمدًا: قرار تقني بلا Android وبلا شبكة، فيُختبر محليًا (طبيعة تطبيق.md §11
  * «تحقق من الطبقة الصحيحة التي يجب أن يعيش فيها المنطق»). قبل هذا الملف كان الجزء المنزَّل
- * يُمحى عند كل انقطاع — لأن [CloudflareR2Client.downloadFile] يكتب `FileOutputStream` جديدًا
+ * يُمحى عند كل انقطاع — لأن [AppwriteStorageRepository.downloadFile] يكتب `FileOutputStream` جديدًا
  * ويطبّق `if (!completed) targetFile.delete()`، ولأن المدير يحذف المؤقت في `finally` حتى عند
  * الإلغاء — فصار المستخدم يرى «ينزّل الملف من جديد» كل مرة.
  */
@@ -53,4 +53,13 @@ object CloudDownloadPart {
 
     /** مسار الجزء في مخزن التخزين المؤقت؛ لا يُنشئ شيئًا */
     fun fileFor(staging: File, remoteKey: String): File = File(staging, fileName(remoteKey))
+
+    /** A part is reusable only for the same project/user AND immutable file version. */
+    fun fileFor(staging: File, remoteKey: String, versionToken: String, connectionId: String): File {
+        require(versionToken.isNotBlank() && connectionId.isNotBlank())
+        val identity = "$connectionId\u0000$remoteKey\u0000$versionToken"
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        return File(staging, "dl_$hash$SUFFIX")
+    }
 }

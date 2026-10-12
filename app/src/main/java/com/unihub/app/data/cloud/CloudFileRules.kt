@@ -1,5 +1,7 @@
 package com.unihub.app.data.cloud
 
+import com.unihub.app.data.appwrite.AppwriteFileProtocol
+
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,7 +26,7 @@ object CloudFileRules {
             .lowercase(java.util.Locale.US).ifBlank { "bin" }
         require(identity.isEmpty() || identity.matches(Regex("[A-Za-z0-9_-]{1,64}")))
         val suffix = if (identity.isEmpty()) "" else "_$identity"
-        return "${CloudflareR2Config.REMOTE_FILES_PREFIX}$sha256$suffix.$safeExt"
+        return "${CloudStorageConfig.REMOTE_FILES_PREFIX}$sha256$suffix.$safeExt"
     }
 }
 
@@ -41,11 +43,10 @@ object CloudDeleteRules {
     const val MAX_PER_OPERATION: Int = 200
 
     fun isDeletableObjectKey(objectKey: String): Boolean =
-        S3Encoding.isSafeObjectKey(objectKey) && !objectKey.endsWith("/") &&
-            objectKey != CloudflareR2Config.REMOTE_MANIFEST_OBJECT_KEY &&
-            objectKey != CloudflareR2Config.REMOTE_META_OBJECT_KEY &&
-            objectKey != CloudflareR2Config.REMOTE_BACKUP_OBJECT_KEY &&
-            objectKey != CloudflareR2Config.REMOTE_AUTH_OBJECT_KEY
+        AppwriteFileProtocol.isSafeObjectKey(objectKey) && !objectKey.endsWith("/") &&
+            objectKey != CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY &&
+            objectKey != CloudStorageConfig.REMOTE_META_OBJECT_KEY &&
+            objectKey != CloudStorageConfig.REMOTE_BACKUP_OBJECT_KEY
 
     /** الملفات المكتشفة فعلاً والمطابقة للمفاتيح المطلوبة — وبدون تكرار، وبترتيب الطلب. */
     fun targets(files: List<RemoteCloudFile>, requestedKeys: Collection<String>): List<RemoteCloudFile> =

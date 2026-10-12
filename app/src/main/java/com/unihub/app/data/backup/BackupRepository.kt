@@ -5,7 +5,7 @@ import android.content.Context
 import android.net.Uri
 import com.unihub.app.core.common.DateFormats
 import com.unihub.app.core.validation.InputValidator
-import com.unihub.app.data.cloud.CloudflareR2Config
+import com.unihub.app.data.cloud.CloudStorageConfig
 import com.unihub.app.data.cloud.CloudManifestTools
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.cloud.RemoteCloudFolder
@@ -362,7 +362,7 @@ class BackupRepository @Inject constructor(
             if (name.isBlank()) return@mapNotNull null
             val ext = obj.optString("extension").trim()
             val remoteKey = obj.optString("remoteKey").takeIf { it.isNotBlank() }
-                ?: CloudflareR2Config.remoteFileObjectKey(id, ext)
+                ?: CloudStorageConfig.remoteFileObjectKey(id, ext)
             val folderId = if (obj.isNull("folderId")) null else obj.optLong("folderId")
             RemoteCloudFile(
                 remoteKey = remoteKey,

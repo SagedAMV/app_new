@@ -93,7 +93,6 @@ import com.unihub.app.core.prefs.AutoBackupPreferences
 import com.unihub.app.core.prefs.AutoBackupSettings
 import com.unihub.app.core.prefs.ThemeMode
 import com.unihub.app.data.auth.AuthSessionState
-import com.unihub.app.data.auth.DeviceApprovalStatus
 import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
@@ -153,9 +152,6 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let(viewModel::onBackupFolderSelected) }
 
-    val pendingRequestsCount = authRegistry?.pendingDeviceRequests
-        ?.count { it.status == DeviceApprovalStatus.PENDING }
-        ?: 0
     val totalUsersCount = authRegistry?.users?.size ?: 0
 
     Scaffold(
@@ -342,7 +338,6 @@ private fun SettingsCategoriesHome(
                 isAdmin = isAdmin,
                 currentUsername = currentUsername,
                 totalUsersCount = totalUsersCount,
-                pendingDeviceRequestsCount = pendingRequestsCount,
                 themeMode = themeMode,
                 useDynamicColor = useDynamicColor,
                 isBackupFolderConfigured = isBackupFolderConfigured,

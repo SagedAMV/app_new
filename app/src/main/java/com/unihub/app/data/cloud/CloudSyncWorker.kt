@@ -10,7 +10,7 @@ import dagger.assisted.AssistedInject
 /**
  * عامل المزامنة السحابية في الخلفية (@HiltWorker).
  * يعمل تلقائياً عند توفر اتصال بالإنترنت ليرسل التعديلات المحلية المعلّقة
- * إلى خادم Cloudflare R2 أو يفحص فهرس الملفات؛ لا ينزّل أي ملف ثقيل دون اختيار المستخدم.
+ * إلى خادم Appwrite أو يفحص فهرس الملفات؛ لا ينزّل أي ملف ثقيل دون اختيار المستخدم.
  */
 @HiltWorker
 class CloudSyncWorker @AssistedInject constructor(

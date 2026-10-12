@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "UniHub"
 include(":app")
+include(":appwrite-bridge")
+project(":appwrite-bridge").projectDir = file("service/appwrite")

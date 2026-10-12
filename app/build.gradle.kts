@@ -25,12 +25,6 @@ val releaseSigningReady = releaseStoreFile?.isFile == true && releaseStorePasswo
     releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
 
 
-// Public endpoint only. Never pass R2 keys or provisioning invitation tokens as Gradle properties.
-val provisioningUrl = providers.gradleProperty("unihub.provisioningUrl").orElse("").get()
-require(provisioningUrl.length <= 2048 && provisioningUrl.none { it.isISOControl() }) {
-    "unihub.provisioningUrl must be a bounded public URL without control characters"
-}
-val provisioningUrlLiteral = "\"" + provisioningUrl.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "com.unihub.app"
@@ -43,7 +37,6 @@ android {
         versionCode = 5
         versionName = "1.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "PROVISIONING_URL", provisioningUrlLiteral)
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -190,9 +183,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // QR generation/decoding: pure Java; CameraX remains the native camera implementation.
-    implementation("com.google.zxing:core:3.5.3")
-    // Real JSON implementation for portable auth/provisioning tests (not Android's mock jar).
+    // Account and Functions use the auth project; streaming storage uses its own qualified Client.
+    implementation(libs.appwrite)
+    // Real JSON implementation for portable protocol tests (not Android's mock jar).
     testImplementation("org.json:json:20240303")
 
     // اختبارات الوحدة على JVM — بدونها لا تُترجم ملفات test/ أصلاً

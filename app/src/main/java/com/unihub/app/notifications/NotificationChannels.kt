@@ -29,7 +29,7 @@ object NotificationChannels {
         )
         manager.createNotificationChannel(
             NotificationChannel(CLOUD_FILES, "ملفات سحابية جديدة", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "إشعارات عند توفر ملفات جديدة على خادم Cloudflare R2 مع أسمائها وأحجامها"
+                description = "إشعارات عند توفر ملفات جديدة على خادم Appwrite مع أسمائها وأحجامها"
             }
         )
 

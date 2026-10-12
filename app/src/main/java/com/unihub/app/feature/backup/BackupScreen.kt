@@ -1,5 +1,7 @@
 package com.unihub.app.feature.backup
 
+import com.unihub.app.data.appwrite.AppwriteConfig
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +35,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -87,24 +88,6 @@ fun BackupScreen(
     val isWorking = busy || isSyncing
 
     var showServerFields by remember { mutableStateOf(false) }
-    var accountId by remember { mutableStateOf("") }
-    var endpointUrl by remember { mutableStateOf("") }
-    var bucketName by remember { mutableStateOf("") }
-    var accessKeyId by remember { mutableStateOf("") }
-    var secretAccessKey by remember { mutableStateOf("") }
-
-    LaunchedEffect(cloudSettings?.credentials) {
-        cloudSettings?.credentials?.let { creds ->
-            accountId = creds.accountId
-            endpointUrl = creds.endpointUrl
-            bucketName = creds.bucketName
-            // Never prefill long-lived credentials into editable UI fields.
-            // Empty fields mean “keep the current encrypted value”.
-            accessKeyId = ""
-            secretAccessKey = ""
-        }
-    }
-
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let(viewModel::exportTo) }
@@ -143,8 +126,8 @@ fun BackupScreen(
                 modifier = Modifier.padding(top = 8.dp)
             )
             Spacer(Modifier.height(8.dp))
-            // ─── قسم خادم Cloudflare R2 (أونلاين / أوفلاين + سحب اختياري) ────
-            SectionHeader(title = "خادم Cloudflare R2 (أونلاين / أوفلاين)")
+            // ─── قسم خادم Appwrite (أونلاين / أوفلاين + سحب اختياري) ────
+            SectionHeader(title = "خادم Appwrite (أونلاين / أوفلاين)")
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium
@@ -245,63 +228,16 @@ fun BackupScreen(
                         TextButton(onClick = { showServerFields = !showServerFields }) {
                             Icon(Icons.Outlined.Settings, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text(if (showServerFields) "إخفاء إعدادات Cloudflare R2" else "إعدادات اتصال Cloudflare R2")
+                            Text(if (showServerFields) "إخفاء معلومات Appwrite" else "مشروعا Appwrite")
                         }
-
                         if (showServerFields) {
-                            Spacer(Modifier.height(8.dp))
-                            Field(
-                                label = "Account ID (معرّف حساب Cloudflare)",
-                                value = accountId,
-                                onValueChange = { accountId = it }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Field(
-                                label = "Endpoint URL",
-                                value = endpointUrl,
-                                onValueChange = { endpointUrl = it }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Field(
-                                label = "Bucket Name (اسم الحاوية)",
-                                value = bucketName,
-                                onValueChange = { bucketName = it }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Access Key ID") },
-                                placeholder = { Text("مفتاح محفوظ؛ اتركه فارغاً للإبقاء عليه") },
-                                value = accessKeyId,
-                                onValueChange = { accessKeyId = it },
-                                visualTransformation = PasswordVisualTransformation(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Secret Access Key") },
-                                placeholder = { Text("مفتاح محفوظ؛ اتركه فارغاً للإبقاء عليه") },
-                                value = secretAccessKey,
-                                onValueChange = { secretAccessKey = it },
-                                visualTransformation = PasswordVisualTransformation(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.saveCloudCredentials(
-                                        accountId = accountId,
-                                        endpointUrl = endpointUrl,
-                                        bucketName = bucketName,
-                                        accessKeyId = accessKeyId,
-                                        secretAccessKey = secretAccessKey
-                                    )
-                                },
-                                enabled = !isWorking
-                            ) {
-                                Text("حفظ إعدادات الخادم")
-                            }
+                            Text("المستخدمون: ${AppwriteConfig.AUTH_PROJECT_ID}\n" +
+                                "الملفات: ${AppwriteConfig.STORAGE_PROJECT_ID}\n" +
+                                "الحاوية: ${AppwriteConfig.STORAGE_BUCKET_ID}\n" +
+                                AppwriteConfig.STORAGE_ENDPOINT,
+                                style = MaterialTheme.typography.bodySmall)
+                            Text("تفويض الملفات يصدر من خدمة الربط الخادمية بعد تسجيل الدخول. لا تُدخل مفاتيح API في التطبيق.",
+                                style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

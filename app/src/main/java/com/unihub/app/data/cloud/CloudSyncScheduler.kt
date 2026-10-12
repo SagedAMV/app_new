@@ -16,7 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * جدولة المزامنة السحابية مع Cloudflare R2 عبر WorkManager.
+ * جدولة المزامنة السحابية مع Appwrite عبر WorkManager.
  *
  * جميع الأعمال هنا مقيدة بشرط توفر اتصال بالإنترنت ([NetworkType.CONNECTED]):
  * إذا عدّل المستخدم بياناته وهو أوفلاين، تبقى الجدولة معلّقة لدى النظام،

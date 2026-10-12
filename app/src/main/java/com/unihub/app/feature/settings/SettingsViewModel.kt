@@ -14,7 +14,6 @@ import com.unihub.app.core.prefs.ThemeMode
 import com.unihub.app.core.prefs.ThemePreferenceManager
 import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.auth.CloudUserAccount
-import com.unihub.app.data.auth.DeviceChangeRequest
 import com.unihub.app.data.auth.UserPermissions
 import com.unihub.app.data.backup.AutoBackupExporter
 import com.unihub.app.data.backup.AutoBackupScheduler
@@ -184,7 +183,7 @@ class SettingsViewModel @Inject constructor(
 
     fun refreshAuthRegistry() {
         viewModelScope.launch {
-            authManager.verifyActiveSessionWithCloud()
+            authManager.verifyActiveSessionWithCloud().onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث مستخدمي Appwrite") }
         }
     }
 
@@ -244,29 +243,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun resolveDeviceChangeRequest(request: DeviceChangeRequest, approve: Boolean) {
+    fun revokeUserSessions(username: String) {
         viewModelScope.launch {
-            val result = if (approve) {
-                authManager.approveDeviceRequest(request.requestId)
-            } else {
-                authManager.rejectDeviceRequest(request.requestId)
-            }
-            result
-                .onSuccess {
-                    messenger.notify(
-                        if (approve) "تم السماح للمستخدم «${request.username}» بالدخول من جهازه الجديد ✓"
-                        else "تم رفض طلب الجهاز الجديد للمستخدم «${request.username}»"
-                    )
-                }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّرت معالجة الطلب") }
-        }
-    }
-
-    fun resetUserBoundDevice(username: String) {
-        viewModelScope.launch {
-            authManager.resetUserBoundDevice(username)
-                .onSuccess { messenger.notify("تم فك ربط الجهاز للمستخدم «$username»؛ سيرتبط تلقائياً بأول جهاز يسجل منه") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر فك ربط الجهاز") }
+            authManager.revokeUserSessions(username)
+                .onSuccess { messenger.notify("أُلغيت جلسات Appwrite للمستخدم «$username»؛ يلزمه تسجيل الدخول مجددًا") }
+                .onFailure { messenger.notifyError(it.message ?: "تعذّر إلغاء جلسات Appwrite") }
         }
     }
 

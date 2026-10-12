@@ -15,8 +15,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Authenticated at-rest encryption. This does not protect a secret from a compromised running app. */
-internal class CredentialSecretVault(private val alias: String = "unihub_local_secrets_v2") {
-    fun encode(plainText: String, purpose: String = "r2-credential"): String {
+internal class CredentialSecretVault(private val alias: String) {
+    fun encode(plainText: String, purpose: String): String {
         if (plainText.isEmpty()) return ""
         val bytes = plainText.toByteArray(Charsets.UTF_8)
         try {
@@ -33,39 +33,23 @@ internal class CredentialSecretVault(private val alias: String = "unihub_local_s
         }
     }
 
-    /** Legacy plaintext/v1 is read only for an explicit in-place migration on an IO dispatcher. */
-    fun decodeOrLegacy(stored: String, purpose: String = "r2-credential"): String {
+    /** Only purpose-bound authenticated ciphertext is accepted; no plaintext/old-provider fallback. */
+    fun decodeProtected(stored: String, purpose: String): String {
         if (stored.isEmpty()) return ""
-        val legacy = stored.startsWith(LEGACY_PREFIX)
-        if (!legacy && !stored.startsWith(PREFIX)) {
-            if (stored.startsWith("keystore:")) throw IOException("صيغة التشفير المحلي غير مدعومة")
-            return stored
-        }
+        if (!stored.startsWith(PREFIX)) throw IOException("كاش الحساب غير صالح؛ أعد تسجيل الدخول")
         return try {
             require(stored.length <= MAX_ENCODED_CHARS)
-            val prefix = if (legacy) LEGACY_PREFIX else PREFIX
-            val combined = Base64.getDecoder().decode(stored.removePrefix(prefix))
+            val combined = Base64.getDecoder().decode(stored.removePrefix(PREFIX))
             require(combined.size >= IV_BYTES + TAG_BITS / 8)
-            val key = existingKey(if (legacy) LEGACY_ALIAS else alias)
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, combined.copyOfRange(0, IV_BYTES)))
-            if (!legacy) cipher.updateAAD(aad(purpose))
+            cipher.init(Cipher.DECRYPT_MODE, existingKey(alias), GCMParameterSpec(TAG_BITS, combined.copyOfRange(0, IV_BYTES)))
+            cipher.updateAAD(aad(purpose))
             val plain = cipher.doFinal(combined, IV_BYTES, combined.size - IV_BYTES)
             try { String(plain, Charsets.UTF_8) } finally { plain.fill(0) }
         } catch (error: Exception) {
-            throw IOException("تعذّر فتح البيانات المحمية على هذا الجهاز؛ أعد استيراد الاتصال من الخدمة أو الباركود", error)
+            throw IOException("تعذّر فتح كاش الحساب المحمي؛ أعد تسجيل الدخول", error)
         }
     }
-
-    /** New protected fields have no plaintext migration path. Reject an unsealed replacement. */
-    fun decodeProtected(stored: String, purpose: String): String {
-        if (stored.isEmpty()) return ""
-        if (!stored.startsWith(PREFIX)) throw IOException("بيانات محمية بصيغة غير صالحة؛ أعد الاستيراد أو تسجيل الدخول")
-        return decodeOrLegacy(stored, purpose)
-    }
-
-    fun isEncoded(value: String): Boolean = value.startsWith(PREFIX) || value.startsWith(LEGACY_PREFIX)
-    fun needsMigration(value: String): Boolean = value.isNotBlank() && !value.startsWith(PREFIX)
 
     private fun aad(purpose: String) = "com.unihub.app::$alias::$purpose::v2".toByteArray(Charsets.UTF_8)
 
@@ -106,8 +90,6 @@ internal class CredentialSecretVault(private val alias: String = "unihub_local_s
     private companion object {
         val KEY_LOCK = Any()
         const val PREFIX = "keystore:v2:"
-        const val LEGACY_PREFIX = "keystore:v1:"
-        const val LEGACY_ALIAS = "unihub_r2_credentials_v1"
         const val PROVIDER = "AndroidKeyStore"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_BYTES = 12
