@@ -22,6 +22,11 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      # Publishing the installable test APK to a permanent GitHub Release
+      # download link is the only step that needs write access. Everything
+      # else in this job stays read-only.
+      contents: write
 
     steps:
       - name: Checkout code
@@ -88,6 +93,48 @@ jobs:
       - name: Verify Debug APK alignment and signature
         id: debug-apk
         run: python3 scripts/android_ci.py verify debug --require-signed
+
+      # Publish the test build as soon as it is verified, not at the end of the
+      # job: the emulator suite and the release build run after this point, and
+      # a flake there must not withhold an already-verified installable APK.
+      # The asset name is fixed so the download link never changes.
+      - name: Publish installable test APK to a permanent direct link
+        if: github.event_name != 'pull_request' && steps.debug-apk.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_PATH: ${{ steps.debug-apk.outputs.path }}
+          APK_SHA256: ${{ steps.debug-apk.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          TAG="test-latest"
+          ASSET="UniHub-test.apk"
+          cp "$GITHUB_WORKSPACE/$APK_PATH" "$ASSET"
+          VERSION=$(python3 - <<'PY'
+          import json, pathlib, re
+          meta = pathlib.Path("app/build/outputs/apk/debug/output-metadata.json")
+          if meta.is_file():
+              print(json.load(meta.open(encoding="utf-8"))["elements"][0]["versionName"])
+          else:
+              gradle = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
+              print(re.search(r'versionName\s*=\s*"([^"]+)"', gradle).group(1))
+          PY
+          )
+          # Recreate the release so the permanent link always serves the newest test build.
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" "$ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "نسخة الاختبار — UniHub v${VERSION}" \
+            --notes "نسخة اختبار قابلة للتثبيت مباشرة (Debug)، مبنية تلقائياً من \`$GITHUB_REF_NAME\`.
+          - الإصدار: v${VERSION}
+          - نوع البناء: Debug (غير مصغّر، موقّع بمفتاح التصحيح)
+          - SHA-256: \`${APK_SHA256}\`
+
+          هذه **نسخة اختبار** وليست النسخة الكاملة. الرابط ثابت ويشير دائماً إلى أحدث بناء اختبار ناجح."
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"
+          echo "TEST_APK_URL=$URL" >> "$GITHUB_ENV"
+          echo "### رابط تحميل نسخة الاختبار" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
 
       # A clean checkout has no keystore.properties. AGP correctly produces
       # app-releaseFull-unsigned.apk, not app-releaseFull.apk. Do not pretend
