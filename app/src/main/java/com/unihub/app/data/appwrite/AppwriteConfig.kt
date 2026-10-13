@@ -13,6 +13,6 @@ object AppwriteConfig {
     const val DOWNLOAD_LABEL = "unihub_download"
     const val UPLOAD_LABEL = "unihub_upload"
     const val MODIFY_LABEL = "unihub_modify"
-    const val ADMIN_LABEL = "unihub_admin"
+    const val ADMIN_LABEL = "admin"
     const val STORAGE_TOKEN_TTL_SECONDS = 300L
 }

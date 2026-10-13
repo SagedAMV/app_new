@@ -198,6 +198,51 @@ fun UserManagementSection(
         }
     }
 
+    if (!isAdmin) {
+        // Diagnose a missing server-assigned admin label without granting or guessing a role locally.
+        SectionHeader(title = "حالة صلاحيات المسؤول")
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.AdminPanelSettings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "صلاحية المسؤول غير مفعّلة لهذا الحساب",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = "لم يعثر التطبيق على وسم Appwrite المطلوب: admin. " +
+                        "اسم الحساب أو وسم unihub وحده لا يمنح صلاحيات إدارية.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "للتفعيل الآمن: افتح Appwrite Console لمشروع المستخدمين والمصادقة، " +
+                        "وتحقق من الحساب الصحيح ثم أضف له Label باسم admin. " +
+                        "بعدها سجّل الخروج من UniHub ثم ادخل مجددًا لتحديث الجلسة. " +
+                        "لا تضف هذا الوسم إلى حساب لا تملكه أو لا تثق به.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
     if (isAdmin) {
         SectionHeader(title = "مستخدمو Appwrite وصلاحياتهم (للمشرف)")
         ElevatedCard(

@@ -3,6 +3,8 @@ package com.unihub.app.feature.files
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -10,16 +12,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +41,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
@@ -86,6 +96,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -111,7 +122,6 @@ import com.unihub.app.data.local.entity.FileKind
 import com.unihub.app.ui.components.AppSheet
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.Field
-import com.unihub.app.ui.components.FeatureHeroCard
 import com.unihub.app.ui.components.UiMessagesHost
 import com.unihub.app.ui.theme.SemanticSuccess
 
@@ -183,16 +193,75 @@ fun GlowingCloudTopBarButton(
     }
 }
 
+/** بطاقة افتتاحية خاصة بالسحابة: هوية واضحة وملخص سريع دون تغيير المكوّنات العامة. */
+@Composable
+private fun CloudFilesHero(
+    online: Boolean,
+    itemCount: Int,
+    downloadableCount: Int,
+    subtitle: String
+) {
+    val containerColor = if (online) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant
+    Card(
+        modifier = Modifier.fillMaxWidth().animateContentSize(tween(240, easing = FastOutSlowInEasing)),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(54.dp).background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), CircleShape
+                ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (online) Icons.Filled.CloudQueue else Icons.Filled.CloudOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(29.dp)
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "مكتبة الملفات السحابية",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (online) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface
+                    )
+                    Badge(
+                        containerColor = if (online) SemanticSuccess else MaterialTheme.colorScheme.outline,
+                        contentColor = if (online) Color.White else MaterialTheme.colorScheme.onSurface
+                    ) {
+                        Text(if (online) "متصل" else "أوفلاين")
+                    }
+                }
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (online) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "$itemCount عنصر  •  $downloadableCount متاح للتنزيل",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
 /**
- * شاشة السحابة المستقلة — وجهة تنقل كاملة (راوت CloudFilesRoute في مخطط التنقل) بشريط
- * علوي وزر رجوع، وتقرأ حالتها مباشرةً من [CloudFilesViewModel] بمصدر حقيقة واحد
- * (نفس مدير المزامنة @Singleton) بدل تمرير نحو عشرين معاملاً من كل شاشة.
- *
- * الوظائف (جولة تعليمات.md — تسميات شائعة + تحكم كامل داخل السحابة نفسها):
- * تصفح المجلدات، الفلترة (غير المنزَّل/الجميع)، التحديد الجماعي، تنزيل المحدد أو
- * المجلد كاملاً، الفحص وإعادة المحاولة، إيقاف النقل، وتقرير آخر تنزيل — مع حوار
- * اختيار الوجهة عند التنزيل. وأضيفت إعادة تسمية الملفات والمجلدات وتغيير مسار
- * الملفات (نقلها بين مجلدات السحابة) بتحرير بيان الفهرس على الخادم.
+ * شاشة تصفح الملفات السحابية، مع التصفح والفلترة والتحديد والتنزيل وإدارة الملفات.
+ * تعتمد على [CloudFilesViewModel] كمصدر للحالة، وتحافظ على تدفق العمل القائم.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -405,15 +474,27 @@ fun CloudFilesScreen(
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FeatureHeroCard(
-                title = "مكتبة الملفات السحابية",
-                subtitle = if (isOnline) "تصفّح الملفات، تحقّق من النسخ المحلية، ونزّل ما تحتاجه." else "أنت دون اتصال؛ يمكنك مراجعة آخر قائمة محفوظة على الجهاز.",
-                icon = if (isOnline) Icons.Filled.CloudQueue else Icons.Filled.CloudOff,
-                badge = if (isOnline) "متصل" else "أوفلاين"
-            )
-            Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(420, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it / 12 }
+            ) {
+                CloudFilesHero(
+                    online = isOnline,
+                    itemCount = remoteFiles.size,
+                    downloadableCount = downloadableKeys.size,
+                    subtitle = if (isOnline) "تصفّح ملفاتك ونزّل ما تحتاجه." else "أنت دون اتصال؛ يمكنك مراجعة آخر قائمة محفوظة."
+                )
+            }
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(360, delayMillis = 70, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(360, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 5 }
+            ) {
+                Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (!canDownloadPerm || !canModifyPerm) {
                 val blockedLabels = buildList {
                     if (!canDownloadPerm) add("السحب/التنزيل")
@@ -429,9 +510,15 @@ fun CloudFilesScreen(
             if (localVerification.active) Text("جارٍ التحقق من النسخ المحلية (${localVerification.completed}/${localVerification.total}): ${localVerification.fileName}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             localVerification.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("لم تُنزَّل") })
-                FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("كل الملفات") })
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(320, delayMillis = 110, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(tween(320, delayMillis = 110, easing = FastOutSlowInEasing)) { if (layoutDirection == LayoutDirection.Rtl) -it / 10 else it / 10 }
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = missingOnly, onClick = { missingOnly = true }, label = { Text("لم تُنزَّل") })
+                    FilterChip(selected = !missingOnly, onClick = { missingOnly = false }, label = { Text("كل الملفات") })
+                }
             }
             AnimatedVisibility(
                 visible = transferState.active || transfers.pending.isNotEmpty() || transfers.failed.isNotEmpty(),
@@ -549,12 +636,36 @@ fun CloudFilesScreen(
                         }
                     }
                 }
-                items(levelChildren, key = { "folder:${it.key}" }) { folder ->
+                itemsIndexed(levelChildren, key = { _, item -> "folder:${item.key}" }) { itemIndex, folder ->
+                    val folderPressSource = remember(folder.key) { MutableInteractionSource() }
+                    val folderPressed by folderPressSource.collectIsPressedAsState()
+                    val folderPressScale by animateFloatAsState(
+                        targetValue = if (folderPressed) 0.975f else 1f,
+                        animationSpec = tween(110, easing = FastOutSlowInEasing),
+                        label = "cloud_folder_press_scale"
+                    )
                     val all = CloudFolderTree.filesWithin(remoteFiles, folders, folder.key)
                     val pending = all.filter { it.remoteKey in downloadableKeys }.mapTo(mutableSetOf()) { it.remoteKey }
                     val verifying = all.count { it.remoteKey in verifyingKeys }
                     val checked = pending.intersect(selectedKeys)
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .45f))) {
+                    val folderCardColor by animateColorAsState(
+                        targetValue = if (checked.isNotEmpty()) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                        label = "cloud_folder_selection_color"
+                    )
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(300, delayMillis = itemIndex.coerceAtMost(6) * 35, easing = FastOutSlowInEasing)) +
+                            slideInVertically(tween(300, delayMillis = itemIndex.coerceAtMost(6) * 35, easing = FastOutSlowInEasing)) { it / 7 }
+                    ) {
+                    Card(
+                        Modifier.fillMaxWidth()
+                            .graphicsLayer { scaleX = folderPressScale; scaleY = folderPressScale }
+                            .animateContentSize(tween(220, easing = FastOutSlowInEasing))
+                            .clickable(interactionSource = folderPressSource, indication = null) { currentKey = folder.key },
+                        colors = CardDefaults.cardColors(containerColor = folderCardColor)
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             TriStateCheckbox(state = when {
                                 checked.isEmpty() -> ToggleableState.Off
@@ -563,7 +674,7 @@ fun CloudFilesScreen(
                             }, onClick = { selectedKeys = if (checked.size == pending.size) selectedKeys - pending else selectedKeys + pending },
                                 enabled = canChoose && pending.isNotEmpty())
                             Icon(Icons.Filled.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.weight(1f).clickable { currentKey = folder.key }.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 6.dp)) {
                                 Text(folder.name, fontWeight = FontWeight.SemiBold)
                                 Text("${all.size} ملف • ${Formatters.fileSize(all.sumOf { it.size })} • ${pending.size} غير منزَّل" + if (verifying > 0) " • $verifying قيد المقارنة" else "",
                                     style = MaterialTheme.typography.bodySmall)
@@ -579,13 +690,43 @@ fun CloudFilesScreen(
                             }
                         }
                     }
+                    }
                 }
-                items(levelFiles, key = { "file:${it.remoteKey}" }) { file ->
+                itemsIndexed(levelFiles, key = { _, item -> "file:${item.remoteKey}" }) { itemIndex, file ->
+                    val filePressSource = remember(file.remoteKey) { MutableInteractionSource() }
+                    val filePressed by filePressSource.collectIsPressedAsState()
+                    val filePressScale by animateFloatAsState(
+                        targetValue = if (filePressed) 0.975f else if (file.remoteKey in selectedKeys) 1.012f else 1f,
+                        animationSpec = tween(140, easing = FastOutSlowInEasing),
+                        label = "cloud_file_press_selection_scale"
+                    )
                     val pending = file.remoteKey in downloadableKeys
                     val checked = file.remoteKey in selectedKeys
-                    Card(Modifier.fillMaxWidth().clickable(enabled = pending && canChoose) {
-                        selectedKeys = if (checked) selectedKeys - file.remoteKey else selectedKeys + file.remoteKey
-                    }) {
+                    val fileCardColor by animateColorAsState(
+                        targetValue = when {
+                            checked -> MaterialTheme.colorScheme.primaryContainer
+                            pending -> MaterialTheme.colorScheme.surface
+                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
+                        },
+                        animationSpec = tween(200, easing = FastOutSlowInEasing),
+                        label = "cloud_file_selection_color"
+                    )
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(280, delayMillis = (itemIndex.coerceAtMost(7) * 32), easing = FastOutSlowInEasing)) +
+                            slideInHorizontally(tween(280, delayMillis = (itemIndex.coerceAtMost(7) * 32), easing = FastOutSlowInEasing)) { width ->
+                                if (layoutDirection == LayoutDirection.Rtl) -width / 14 else width / 14
+                            }
+                    ) {
+                    Card(
+                        Modifier.fillMaxWidth()
+                            .graphicsLayer { scaleX = filePressScale; scaleY = filePressScale }
+                            .animateContentSize(tween(220, easing = FastOutSlowInEasing))
+                            .clickable(interactionSource = filePressSource, indication = null, enabled = pending && canChoose) {
+                                selectedKeys = if (checked) selectedKeys - file.remoteKey else selectedKeys + file.remoteKey
+                            },
+                        colors = CardDefaults.cardColors(containerColor = fileCardColor)
+                    ) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = checked, enabled = pending && canChoose, onCheckedChange = { value ->
                                 selectedKeys = if (value) selectedKeys + file.remoteKey else selectedKeys - file.remoteKey
@@ -600,6 +741,7 @@ fun CloudFilesScreen(
                                 Icon(Icons.Filled.MoreVert, contentDescription = "إجراءات ${file.fullDisplayName}")
                             }
                         }
+                    }
                     }
                 }
                 }
@@ -920,7 +1062,34 @@ fun CloudTransferProgressCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (state.active) {
-                Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (state.kind == CloudTransferKind.DOWNLOAD) {
+                        val downloadMotion = rememberInfiniteTransition(label = "cloud_download_motion")
+                        val downloadRotation by downloadMotion.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 360f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1250, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "cloud_download_rotation"
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.CloudDownload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = downloadRotation }
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.CloudQueue,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Text(state.message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                }
                 val progress = state.progress
                 if (progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                 else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
@@ -978,4 +1147,3 @@ private fun FileKind.icon(): ImageVector = when (this) {
     FileKind.ARCHIVE -> Icons.Filled.FolderZip
     FileKind.OTHER -> Icons.AutoMirrored.Filled.InsertDriveFile
 }
-

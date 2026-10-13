@@ -35,6 +35,7 @@ object CloudFailureMessages {
     const val FOLDER_ACCESS = "تعذّر الوصول للمجلد"
     const val NO_SPACE = "المساحة غير كافية"
     const val SESSION = "انتهت الصلاحية"
+    const val PERMISSION_DENIED = "ليست لديك صلاحية لهذه العملية"
     const val GONE_REMOTE = "الملف غير موجود بالسحابة"
     const val CONFLICT = "تعارض البيانات"
     const val TOO_BIG = "الملف كبير جداً"
@@ -44,7 +45,7 @@ object CloudFailureMessages {
     /** معجم كامل لا سواه: أي مخرج خارج هذه القائمة عند مدخل خام يُعدّ تسريبًا (اختبار P1) */
     val USER_FACING: Set<String> = setOf(
         GENERIC, OFFLINE, INTERRUPTED, UNREACHABLE, TIMEOUT, TLS, DROPPED, MISSING_LOCAL,
-        FOLDER_ACCESS, NO_SPACE, SESSION, GONE_REMOTE, CONFLICT, TOO_BIG, THROTTLED, SERVER
+        FOLDER_ACCESS, NO_SPACE, SESSION, PERMISSION_DENIED, GONE_REMOTE, CONFLICT, TOO_BIG, THROTTLED, SERVER
     )
 
     /** ما يقبله المستخدم نصًا: فيه عربية، وبلا آثار تقنية */
@@ -143,7 +144,8 @@ object CloudFailureMessages {
      * تقنية). يستعملها عميل Appwrite عند فشل الطلب، فيصل العطل عربيًا من منبعه كل الطبقات فوقه.
      */
     fun messageFor(status: Int): String = when (status) {
-        401, 403 -> SESSION
+        401 -> SESSION
+        403 -> PERMISSION_DENIED
         404 -> GONE_REMOTE
         409, 412 -> CONFLICT
         413 -> TOO_BIG

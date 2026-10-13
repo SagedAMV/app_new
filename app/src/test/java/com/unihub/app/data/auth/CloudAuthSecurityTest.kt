@@ -22,8 +22,17 @@ class CloudAuthSecurityTest {
         assertFalse(CloudAuthRules.fromAppwriteUser(json).isAdmin)
         assertFalse(CloudAuthRules.fromAppwriteUser(json).permissions.canUpload)
     }
+    @Test fun adminLabelAloneGrantsAdminAndLegacyAdminLabelDoesNot() {
+        val admin = CloudAuthRules.fromAppwriteUser(profile(labels = listOf("admin")))
+        assertTrue(admin.isAdmin)
+        assertEquals(UserPermissions.FULL, admin.permissions)
+
+        val legacy = CloudAuthRules.fromAppwriteUser(profile(labels = listOf("unihub_admin")))
+        assertFalse(legacy.isAdmin)
+        assertEquals(UserPermissions.NONE, legacy.effectivePermissions)
+    }
     @Test fun onlyManagedServerLabelsGrantPermissions() {
-        val user = CloudAuthRules.fromAppwriteUser(profile(labels = listOf(AppwriteConfig.DOWNLOAD_LABEL, "admin", "write")))
+        val user = CloudAuthRules.fromAppwriteUser(profile(labels = listOf(AppwriteConfig.DOWNLOAD_LABEL, "write")))
         assertTrue(user.permissions.canDownload)
         assertFalse(user.permissions.canUpload)
         assertFalse(user.isAdmin)

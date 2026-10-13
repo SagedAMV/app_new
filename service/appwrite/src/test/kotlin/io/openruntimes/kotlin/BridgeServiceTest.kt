@@ -36,6 +36,16 @@ class BridgeServiceTest {
             assertTrue(api.storageRequests.isEmpty())
         }
     }
+    @Test fun adminLabelIsExactAndLegacyLabelCannotManageUsers() {
+        val api = FakeApi()
+        api.authUsers.getValue(api.actorId).put("labels", JSONArray(listOf("unihub_admin")))
+        denied(403) { BridgeService(api).execute(JWT, request("listUsers")) }
+        assertTrue(api.authRequests.isEmpty())
+
+        val valid = FakeApi()
+        valid.authUsers.getValue(valid.actorId).put("labels", JSONArray(listOf("admin")))
+        assertEquals(2, BridgeService(valid).execute(JWT, request("listUsers")).getJSONArray("users").length())
+    }
     @Test fun editablePrefsAndDisplayNameDoNotGrantAdministration() {
         val api = FakeApi(actorId = "student")
         api.authUsers.getValue("student").put("name", "saged").put("prefs", JSONObject().put("isAdmin", true))

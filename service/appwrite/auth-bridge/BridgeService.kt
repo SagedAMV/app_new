@@ -14,7 +14,7 @@ object BridgeConfig {
     const val STORAGE_PROJECT = "6acd0a6800189ccc164a"
     const val BUCKET = "6acd11520015520ba016"
     const val TOKEN_SECONDS = 300
-    const val ADMIN = "unihub_admin"
+    const val ADMIN = "admin"
     const val READ = "unihub_download"
     const val CREATE = "unihub_upload"
     const val MODIFY = "unihub_modify"

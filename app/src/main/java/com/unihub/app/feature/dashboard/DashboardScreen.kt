@@ -228,8 +228,10 @@ fun DashboardScreen(
                         subtitle = "استمتع بيومك أو أضف محاضراتك من الجدول الأسبوعي"
                     )
                 } else {
-                    todayLectures.forEach { lecture ->
-                        TodayLectureRow(lecture)
+                    todayLectures.forEachIndexed { index, lecture ->
+                        ItemEntrance(index = index) {
+                            TodayLectureRow(lecture)
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
                 }
@@ -255,11 +257,13 @@ fun DashboardScreen(
                         subtitle = "كل شيء تحت السيطرة — أضف مهمة جديدة من تبويب المهام"
                     )
                 } else {
-                    dueSoonTasks.forEach { task ->
-                        DueTaskRow(
-                            task = task,
-                            onToggle = { viewModel.toggleTask(task) }
-                        )
+                    dueSoonTasks.forEachIndexed { index, task ->
+                        ItemEntrance(index = index) {
+                            DueTaskRow(
+                                task = task,
+                                onToggle = { viewModel.toggleTask(task) }
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
                 }
@@ -285,8 +289,10 @@ fun DashboardScreen(
                         subtitle = "أضف امتحاناتك لتصلك تذكيرات قبلها بيوم وساعة"
                     )
                 } else {
-                    upcomingExams.forEach { exam ->
-                        UpcomingExamRow(exam)
+                    upcomingExams.forEachIndexed { index, exam ->
+                        ItemEntrance(index = index) {
+                            UpcomingExamRow(exam)
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
                 }
@@ -341,12 +347,44 @@ private fun StaggerIn(index: Int, content: @Composable () -> Unit) {
             .fillMaxWidth()
             .graphicsLayer {
                 alpha = progress
-                translationY = (1f - progress) * 20f
+                translationY = (1f - progress) * 22f
+                val scale = 0.985f + (0.015f * progress)
+                scaleX = scale
+                scaleY = scale
             }
     ) { content() }
 }
 
-/** بلاطة إجراء سريع: أيقونة فوق نص داخل بطاقة مسطّحة بحد خفيف */
+/** دخول متتابع للعناصر داخل القسم، مع تأخير محدود حتى لا تصبح القوائم بطيئة. */
+@Composable
+private fun ItemEntrance(
+    index: Int,
+    content: @Composable () -> Unit
+) {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(index.coerceAtMost(6) * 48L)
+        entered = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "dashboard-item-entrance"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = progress
+                translationY = (1f - progress) * 14f
+                val scale = 0.99f + (0.01f * progress)
+                scaleX = scale
+                scaleY = scale
+            }
+    ) { content() }
+}
+
+/** بلاطة إجراء سريع: أيقونة داخل شارة لونية مرتبطة بنوع الإجراء */
 @Composable
 private fun QuickActionTile(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -354,6 +392,12 @@ private fun QuickActionTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val accent = when (label) {
+        "مهمة جديدة" -> MaterialTheme.colorScheme.tertiary
+        "ملاحظة جديدة" -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
     Card(
         onClick = onClick,
         modifier = modifier,
@@ -364,16 +408,23 @@ private fun QuickActionTile(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 14.dp, horizontal = 8.dp),
+                .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(accent.copy(alpha = 0.14f), MaterialTheme.shapes.small),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(23.dp)
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
