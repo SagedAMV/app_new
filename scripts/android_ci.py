@@ -73,7 +73,7 @@ def verify(variant, require_signed=False, root=ROOT):
     subprocess.run([str(tools / "zipalign"), "-c", "4", str(apk)], check=True)
     if not unsigned:
         # A file with a signed name but a bad/missing signature must fail, not fall back.
-        subprocess.run([str(tools / "apksigner"), "verify", str(apk)], check=True)
+        subprocess.run([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)], check=True)
     digest = hashlib.sha256()
     with apk.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):

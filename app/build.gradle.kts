@@ -82,6 +82,7 @@ android {
             )
         }
         debug {
+            versionNameSuffix = "-test"
             isMinifyEnabled = false
         }
 

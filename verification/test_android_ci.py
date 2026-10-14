@@ -80,6 +80,61 @@ class EmulatorMonitorTest(unittest.TestCase):
         self.assertIn("MONITOR_SIGNAL name=SIGTERM", self.log.read_text())
 
 
+class ApkInstallationSmokeTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.apk = self.root / "test.apk"
+        self.apk.write_bytes(b"APK fixture")
+        self.calls = self.root / "adb-calls"
+        adb = self.root / "adb"
+        adb.write_text("""#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$CALLS"
+case "$*" in
+  'shell getprop ro.kernel.qemu') echo "${EMULATOR:-1}" ;;
+  'shell pm path com.unihub.app') ;;
+  install*) exit "${INSTALL_STATUS:-0}" ;;
+  'shell am start '*) echo "Status: ${LAUNCH_STATUS:-ok}" ;;
+  'shell dumpsys package '*) echo 'versionCode=5 minSdk=26 targetSdk=35' ;;
+  'shell getprop ro.build.version.sdk') echo 26 ;;
+  *) exit 1 ;;
+esac
+""")
+        adb.chmod(0o755)
+        self.env = dict(os.environ, PATH=f"{self.root}:{os.environ['PATH']}", CALLS=str(self.calls))
+
+    def run_smoke(self, **env):
+        script = Path(__file__).resolve().parents[1] / "scripts/smoke_install_apk.sh"
+        return subprocess.run(["bash", str(script), str(self.apk)], cwd=self.root,
+                              env=dict(self.env, **env), capture_output=True, text=True, timeout=5)
+
+    def test_installs_exact_apk_without_test_only_flag_and_launches(self):
+        result = self.run_smoke()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn(f"install --no-streaming {self.apk}", calls)
+        self.assertIn(f"install --no-streaming -r {self.apk}", calls)
+        self.assertNotIn(" -t ", calls)
+        self.assertIn("shell am start -W", calls)
+
+    def test_never_touches_real_phone(self):
+        self.assertNotEqual(0, self.run_smoke(EMULATOR="0").returncode)
+        self.assertNotIn("install", self.calls.read_text())
+
+    def test_failed_install_blocks_launch(self):
+        self.assertNotEqual(0, self.run_smoke(INSTALL_STATUS="1").returncode)
+        self.assertNotIn("shell am start", self.calls.read_text())
+
+    def test_failed_activity_launch_is_not_success(self):
+        self.assertNotEqual(0, self.run_smoke(LAUNCH_STATUS="timeout").returncode)
+
+    def test_missing_apk_fails_before_adb(self):
+        self.apk.unlink()
+        self.assertNotEqual(0, self.run_smoke().returncode)
+        self.assertFalse(self.calls.exists())
+
+
 class AndroidCiTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
