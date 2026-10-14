@@ -20,6 +20,12 @@ def read(path: str) -> str:
 
 
 APP = "app/src/main/java/com/unihub/app/"
+bridge_root = ROOT / "service/appwrite/auth-bridge"
+check((bridge_root / "dependencies.gradle").is_file(), "missing deployable bridge dependencies.gradle")
+for reserved in ("build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"):
+    check(not (bridge_root / reserved).exists(), f"bridge package overwrites runtime build configuration: {reserved}")
+check("org.json:json:20240303" in (bridge_root / "dependencies.gradle").read_text(encoding="utf-8"),
+      "bridge deployment is missing the expected JSON dependency")
 config = read(APP + "data/appwrite/AppwriteConfig.kt")
 bridge_config = read("service/appwrite/auth-bridge/BridgeService.kt")
 for name, value in {

@@ -84,7 +84,13 @@ delete("label:unihub_modify")
 | Dynamic API key scopes | `users.read`, `users.write` في مشروع المستخدمين |
 | Execution logging | **معطّل**؛ الرد قد يحتوي JWT والطلبات الإدارية قد تحتوي كلمة مرور جديدة |
 
-قالب Open Runtimes يجمع ملفات Kotlin في الحزمة `io.openruntimes.kotlin` ويقرأ تبعية JSON من `build.gradle`. اضبط مهلة التنفيذ وذاكرة JVM وفق حدود الخطة؛ عمليات التهيئة الأولى تتطلب عدة طلبات بين المشروعين. الخدمة تحتاج دعم Appwrite لمسار `Users.createJWT` مع `duration`؛ اختبر ذلك عند النشر ولا تستبدله بمفتاح خادم في الهاتف إن لم يكن متاحًا.
+قالب Open Runtimes يجمع ملفات Kotlin في الحزمة `io.openruntimes.kotlin` ويقرأ تبعية JSON من `dependencies.gradle` داخل مجلد الدالة. **لا تسمّ ملف اعتماديات الدالة `build.gradle` أو `build.gradle.kts`، ولا تنشر جذر مستودع Android باعتباره جذر الدالة.** خطوة تحضير Runtime تنقل ملفات Gradle الخاصة بالدالة إلى مجلد بناء Runtime ثم تضيف `apply from`؛ اسم `build.gradle` يستبدل ملف بناء Runtime نفسه ويضيف إحالة دائرية إليه، فيمنع تجهيز الخدمة. ملف `service/appwrite/build.gradle.kts` مخصص للاختبارات المحلية، ويبقى خارج جذر النشر `service/appwrite/auth-bridge`.
+
+مرجع آلية الربط: [Open Runtimes — build-prepare.sh، نسخة مثبتة](https://github.com/open-runtimes/open-runtimes/blob/da714e707c181e6e8e4ab5f1a5649d2cde8f4260/runtimes/kotlin/versions/latest/hooks/build-prepare.sh). يغطي `BridgePackagingTest` الحفاظ على بناء Runtime، وعدم الإحالة الدائرية، واستمرار اعتماد JSON؛ هذا اختبار تحضير محلي وليس إثبات نشر حي.
+
+بعد تصحيح الاسم يجب إنشاء Deployment جديد ناجح وجعله Active في Appwrite؛ تحديث APK أو نجاح GitHub Actions وحدهما لا ينشران الدالة. إذا لم تكن الدالة موجودة أصلًا، فلا يزال إنشاؤها وإعداد مفاتيحها وصلاحياتها وفق هذه الصفحة مطلوبًا. عند فشل النشر راجع Build logs، ولا تفعّل تسجيل أجسام طلبات/ردود التنفيذ التي قد تحتوي أسرارًا.
+
+اضبط مهلة التنفيذ وذاكرة JVM وفق حدود الخطة؛ عمليات التهيئة الأولى تتطلب عدة طلبات بين المشروعين. الخدمة تحتاج دعم Appwrite لمسار `Users.createJWT` مع `duration`؛ اختبر ذلك عند النشر ولا تستبدله بمفتاح خادم في الهاتف إن لم يكن متاحًا.
 
 أنشئ **في مشروع الملفات** مفتاح API خادميًا بنطاقات `users.read`, `users.write`, `buckets.read` فقط. خزنه في متغير Function السري:
 
