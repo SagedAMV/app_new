@@ -20,9 +20,22 @@ class AppwriteBridgeException(val status: Int, val errorCode: String) : IOExcept
         "forbidden" -> "لا يملك الحساب صلاحية تنفيذ هذا الإجراء"
         "conflict" -> "الحساب موجود مسبقًا أو حدث تعارض؛ حدّث القائمة وأعد المحاولة"
         "not_found" -> "الحساب المطلوب غير موجود"
+        "bridge_not_deployed" -> "خدمة unihub-auth-bridge غير منشورة في مشروع المستخدمين على Appwrite؛ انشرها وفعّلها حسب دليل الإعداد"
         else -> "تعذّر تشغيل خدمة ربط Appwrite؛ تحقق من نشر unihub-auth-bridge وإعداداتها"
     }
 )
+
+/**
+ * Maps an SDK failure of the execution request itself (before the function runs) to a bridge code.
+ * Appwrite answers `function_not_found` when the function was never created or was deleted, which
+ * must not be confused with a generic runtime failure of a deployed function.
+ */
+internal fun bridgeErrorCodeFor(status: Int?, type: String?): String = when {
+    status == 401 -> "unauthorized"
+    status == 403 -> "forbidden"
+    status == 404 && type == "function_not_found" -> "bridge_not_deployed"
+    else -> "bridge_unavailable"
+}
 
 /** Executed exclusively in the Users/Auth project. The function re-verifies the caller's JWT. */
 @Singleton
@@ -45,8 +58,7 @@ class AppwriteAuthBridge @Inject constructor(
                 )
             }
         } catch (error: AppwriteException) {
-            throw AppwriteBridgeException(error.code ?: 503,
-                if (error.code == 401) "unauthorized" else if (error.code == 403) "forbidden" else "bridge_unavailable")
+            throw AppwriteBridgeException(error.code ?: 503, bridgeErrorCodeFor(error.code, error.type))
         }
         if (execution.responseBody.toByteArray(Charsets.UTF_8).size > 1024 * 1024) {
             throw IOException("رد خدمة المستخدمين تجاوز الحد المسموح")
