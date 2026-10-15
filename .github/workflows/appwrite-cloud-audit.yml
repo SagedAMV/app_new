@@ -1,0 +1,72 @@
+name: Appwrite Cloud Audit
+
+# Manual-only on purpose: this workflow receives project API keys as secrets and
+# must never run implicitly on push. Keys are masked in logs and never written to
+# the repository or to the uploaded report (the script redacts them).
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "audit | repair | test | all"
+        required: true
+        default: "all"
+        type: choice
+        options: [audit, repair, test, all]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appwrite-cloud-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up JDK 17 (for source checks parity)
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Static migration guards
+        run: python3 scripts/check_appwrite_migration.py
+
+      - name: Run Appwrite cloud audit / repair / e2e
+        env:
+          AW_USERS_KEY: ${{ secrets.AW_USERS_KEY }}
+          AW_FILES_KEY: ${{ secrets.AW_FILES_KEY }}
+        run: |
+          if [ -z "$AW_USERS_KEY" ] || [ -z "$AW_FILES_KEY" ]; then
+            echo "::error::AW_USERS_KEY / AW_FILES_KEY secrets are not set"
+            exit 2
+          fi
+          python3 scripts/appwrite_cloud_audit.py \
+            --mode "${{ inputs.mode }}" \
+            --report-dir "verification/appwrite-cloud-audit-$(date -u +%F)"
+          status=$?
+          echo "AUDIT_EXIT=$status" >> "$GITHUB_ENV"
+          exit $status
+
+      - name: Publish report to job summary
+        if: always()
+        run: |
+          report=$(ls -d verification/appwrite-cloud-audit-*/report.md 2>/dev/null | head -1)
+          if [ -n "$report" ]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload audit report artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: appwrite-cloud-audit-report
+          path: verification/appwrite-cloud-audit-*/
+          if-no-files-found: warn
