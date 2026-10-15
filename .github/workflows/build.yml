@@ -87,9 +87,6 @@ jobs:
           emulator-options: -no-window -no-snapshot -gpu swangle_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2 > ui-emulator.log 2>&1
           script: bash scripts/run_android_ui_tests.sh
 
-      - name: Build Release Full APK
-        run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
-
       - name: Verify Debug APK alignment and signature
         id: debug-apk
         run: python3 scripts/android_ci.py verify debug --require-signed
@@ -136,26 +133,11 @@ jobs:
           echo "### رابط تحميل نسخة الاختبار" >> "$GITHUB_STEP_SUMMARY"
           echo "$URL" >> "$GITHUB_STEP_SUMMARY"
 
-      # A clean checkout has no keystore.properties. AGP correctly produces
-      # app-releaseFull-unsigned.apk, not app-releaseFull.apk. Do not pretend
-      # that this is signed or replace the owner's release key with a debug key.
-      - name: Verify Release Full APK alignment and signing status
-        id: release-apk
-        run: python3 scripts/android_ci.py verify releaseFull
-
       - name: Upload installable Debug APK
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: UniHub-debug
           path: ${{ steps.debug-apk.outputs.path }}
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Release Full APK
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: UniHub-releaseFull-${{ steps.release-apk.outputs.signed == 'true' && 'signed' || 'unsigned' }}
-          path: ${{ steps.release-apk.outputs.path }}
           if-no-files-found: error
           retention-days: 30
 
@@ -193,36 +175,3 @@ jobs:
             app/build/reports/lint-results-releaseFull.*
           if-no-files-found: warn
           retention-days: 14
-
-      # Never deploy test/PR builds or an unsigned APK to the distribution repo.
-      - name: Push signed APK to buled repository
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release-apk.outputs.signed == 'true'
-        env:
-          BULED_REPO_TOKEN: ${{ secrets.BULED_REPO_TOKEN }}
-          APK_PATH: ${{ steps.release-apk.outputs.path }}
-        run: |
-          set -euo pipefail
-          if [ -z "$BULED_REPO_TOKEN" ]; then
-            echo "BULED_REPO_TOKEN not set, skipping APK push"
-            exit 0
-          fi
-
-          SOURCE_APK="$GITHUB_WORKSPACE/$APK_PATH"
-          VERSION=$(python3 -c 'import json; print(json.load(open("app/build/outputs/apk/releaseFull/output-metadata.json"))["elements"][0]["versionName"])')
-          APK_NAME="UniHub-v${VERSION}-release-full.apk"
-          # Keep the token out of the clone URL and saved git configuration.
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$BULED_REPO_TOKEN" | base64 -w0)"
-          git clone https://github.com/SagedAMV/buled.git "$RUNNER_TEMP/buled"
-          cd "$RUNNER_TEMP/buled"
-          if [ -f "$APK_NAME" ]; then
-            echo "APK $APK_NAME already exists, skipping"
-            exit 0
-          fi
-          cp "$SOURCE_APK" "$APK_NAME"
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add "$APK_NAME"
-          git commit -m "تحديث النسخة الكاملة v${VERSION}"
-          git push origin main
