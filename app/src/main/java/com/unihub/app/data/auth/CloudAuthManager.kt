@@ -204,26 +204,41 @@ class CloudAuthManager @Inject constructor(
     }
     private fun requireOnline() { if (!isOnline()) throw IOException("يلزم اتصال بالإنترنت للتحقق من Appwrite") }
 
+    /**
+     * إصلاح 2026-10-16: كانت هذه الدالة تستعمل mutex.tryLock() وترفض الطلب فورًا برسالة
+     * «جارٍ تنفيذ عملية مصادقة أخرى» إن وجدت القفل مشغولًا. بما أن CloudSyncManager يستدعي
+     * verifyActiveSessionWithCloud()/requirePermission() بشكل دوري في الخلفية (نبض كل بضع
+     * ثوانٍ طالما الشاشة بالمقدمة) وأيضًا قبل كل رفع/تنزيل يدوي، كان أي تطابق توقيت بسيط بين
+     * النبض الدوري وضغطة المستخدم على «رفع/تنزيل» يُسقط عملية المستخدم فورًا دون أي خطأ حقيقي
+     * في الشبكة أو الصلاحيات — وهذا ما ظهر في البلاغ: الحالة «متصل» ظاهرة، ومع ذلك يفشل رفع
+     * المجلد ويفشل فحص القائمة في اللحظة نفسها. التطابق مؤكد بإعادة إنتاج معزولة (انظر
+     * verification/cloud-auth-busy-lock-fix-2026-10-16/).
+     *
+     * الإصلاح: استبدال «ارفض فورًا» بـ«انتظر دورك» عبر mutex.withLock. هذه العمليات (تحقق من
+     * الجلسة، تحقق من صلاحية، تسجيل دخول/خروج) غير متعارضة منطقيًا؛ تنفيذها بالتتابع آمن تمامًا
+     * ولا داعي لرفض أي منها لمجرد أن أخرى قيد التنفيذ في تلك اللحظة.
+     */
     private suspend fun <T> busyOperation(block: suspend () -> T): Result<T> = withContext(Dispatchers.IO) {
         initializeIfNeeded()
-        if (!mutex.tryLock()) return@withContext Result.failure(IOException("جارٍ تنفيذ عملية مصادقة أخرى"))
-        _isBusy.value = true
-        try { Result.success(block()) }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: AppwriteSessionInvalidException) {
-            clearLocalSession(error.message)
-            Result.failure(error)
+        mutex.withLock {
+            _isBusy.value = true
+            try { Result.success(block()) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: AppwriteSessionInvalidException) {
+                clearLocalSession(error.message)
+                Result.failure(error)
+            }
+            catch (error: AppwriteException) {
+                if (error.code == 401 || error.code == 403) clearLocalSession("انتهت الجلسة أو رُفض الدخول في Appwrite")
+                Result.failure(IOException(when (error.code) {
+                    401, 403 -> "تعذّر توثيق الحساب؛ تحقق من البريد وكلمة المرور وصلاحية الحساب"
+                    429 -> "محاولات كثيرة؛ انتظر قليلًا ثم أعد المحاولة"
+                    else -> "تعذّر الاتصال بمشروع المستخدمين في Appwrite"
+                }))
+            }
+            catch (error: Exception) { Result.failure(error) }
+            finally { _isBusy.value = false }
         }
-        catch (error: AppwriteException) {
-            if (error.code == 401 || error.code == 403) clearLocalSession("انتهت الجلسة أو رُفض الدخول في Appwrite")
-            Result.failure(IOException(when (error.code) {
-                401, 403 -> "تعذّر توثيق الحساب؛ تحقق من البريد وكلمة المرور وصلاحية الحساب"
-                429 -> "محاولات كثيرة؛ انتظر قليلًا ثم أعد المحاولة"
-                else -> "تعذّر الاتصال بمشروع المستخدمين في Appwrite"
-            }))
-        }
-        catch (error: Exception) { Result.failure(error) }
-        finally { _isBusy.value = false; mutex.unlock() }
     }
 
     fun isOnline(): Boolean = runCatching {
