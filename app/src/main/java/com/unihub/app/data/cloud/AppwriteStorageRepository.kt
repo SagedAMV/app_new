@@ -19,5 +19,6 @@ class AppwriteStorageRepository @Inject constructor(
         projectId = storageAppwriteClient.config["project"].orEmpty(),
         bucketId = AppwriteConfig.STORAGE_BUCKET_ID
     ),
-    authorization
+    authorization,
+    platformHeaders = storageAppwriteClient.getHeaders()
 )

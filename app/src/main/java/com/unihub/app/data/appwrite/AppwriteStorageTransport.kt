@@ -39,7 +39,9 @@ import java.util.UUID
 open class AppwriteStorageTransport(
     private val target: CloudStorageConnection,
     private val authorization: StorageAuthorizer,
-    private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
+    private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+    /** Base headers copied from the official Appwrite Android SDK Client (origin/response-format/user-agent...). */
+    private val platformHeaders: Map<String, String> = emptyMap()
 ) {
     init { require(target.isConfigured) { "مشروع تخزين Appwrite غير مطابق لإعدادات التطبيق" } }
     private val filesPath = "/storage/buckets/${target.bucketId}/files"
@@ -339,10 +341,30 @@ open class AppwriteStorageTransport(
             requestMethod = method
             connectTimeout = 20_000; readTimeout = 30_000
             instanceFollowRedirects = false; useCaches = false
-            setRequestProperty("X-Appwrite-Project", target.projectId)
-            setRequestProperty("X-Appwrite-JWT", current.jwt)
-            setRequestProperty("Origin", "appwrite-android://com.unihub.app")
+
+            // Match the official SDK's header names/values (SDK v14.1.0): origin + response-format.
+            // We deliberately exclude content-type and auth headers here because individual operations
+            // override them (multipart boundaries) and we set the routing/JWT explicitly below.
             setRequestProperty("Accept-Encoding", "identity")
+            val platformKeys = platformHeaders.keys.map { it.lowercase() }.toSet()
+            platformHeaders.forEach { (name, value) ->
+                val key = name.lowercase()
+                if (value.isBlank()) return@forEach
+                if (key in setOf("content-type", "x-appwrite-project", "x-appwrite-jwt", "accept-encoding")) return@forEach
+                setRequestProperty(name, value)
+            }
+            if ("x-appwrite-response-format" !in platformKeys) {
+                setRequestProperty("x-appwrite-response-format", DEFAULT_RESPONSE_FORMAT)
+            }
+            if ("origin" !in platformKeys) {
+                setRequestProperty("origin", DEFAULT_ORIGIN)
+            }
+
+            // Authentication and routing headers.
+            setRequestProperty("x-appwrite-project", target.projectId)
+            setRequestProperty("x-appwrite-jwt", current.jwt)
+
+            // Operation-specific headers.
             headers.forEach { (name, value) -> setRequestProperty(name, value) }
         }
         return withCancellableConnection(connection) {
@@ -353,11 +375,13 @@ open class AppwriteStorageTransport(
             if (status !in 200..299) {
                 if (status == 401) authorization.clear()
                 if (status == 409 || status == 412) throw CloudConflictException()
-                val type = connection.errorStream?.use { input ->
+                val errorJson = connection.errorStream?.use { input ->
                     val text = readBoundedText(input, 32 * 1024L)
-                    runCatching { JSONObject(text).optString("type") }.getOrDefault("")
-                }.orEmpty()
-                throw StorageHttpException(status, type)
+                    runCatching { JSONObject(text) }.getOrNull()
+                }
+                val type = errorJson?.optString("type").orEmpty()
+                val upstreamMessage = errorJson?.optString("message").orEmpty()
+                throw StorageHttpException(status, type, upstreamMessage)
             }
             val result = read(connection)
             authorization.requireCurrent(lease)
@@ -382,11 +406,32 @@ open class AppwriteStorageTransport(
         return output.toString("UTF-8")
     }
     private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it.toInt() and 255) }
-    private class StorageHttpException(val status: Int, type: String) : IOException(CloudFailureMessages.messageFor(status)) {
+    private class StorageHttpException(
+        val status: Int,
+        val type: String,
+        val upstreamMessage: String
+    ) : IOException(storageFailureMessage(status, type)) {
         val fileMissing = status == 404 && type == "storage_file_not_found"
     }
+
     private companion object {
         const val BUFFER_BYTES = 64 * 1024
         const val MAX_JSON_BYTES = 1024L * 1024
+
+        // SDK v14.1.0 default. Sending it matches the official Client and avoids server-side format mismatches.
+        const val DEFAULT_RESPONSE_FORMAT = "1.9.0"
+
+        // Fallback only. The preferred value is platformHeaders["origin"] from the SDK Client.
+        const val DEFAULT_ORIGIN = "appwrite-android://com.unihub.app"
+
+        private fun storageFailureMessage(status: Int, type: String): String = when (type) {
+            // Appwrite validates client origins per project. This is the most common misconfiguration
+            // when a project uses multiple Appwrite projects (AUTH vs STORAGE) and only one of them
+            // has the Android platform registered.
+            "general_unknown_origin" ->
+                "السحابة غير معتمدة لهذا التطبيق. أضف منصة Android في مشروع الملفات على Appwrite ثم أعد المحاولة"
+
+            else -> CloudFailureMessages.messageFor(status)
+        }
     }
 }
