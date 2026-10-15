@@ -39,6 +39,10 @@ data class CloudTransferBatch(
     val remoteKeys: List<String> = emptyList(),
     val remoteFolderKeys: Set<String> = emptySet(),
     val destination: CloudDownloadDestination = CloudDownloadDestination(),
+    /** وجهة الرفع داخل السحابة (null = جذر السحابة بشجرة المجلدات) */
+    val targetFolderKey: String? = null,
+    /** اسم الوجهة كما رآه المستخدم: يبقى مع الدفعة ليُعرض في البطاقة والإشعار بعد الاستئناف */
+    val targetFolderName: String? = null,
     val status: CloudTransferStatus = CloudTransferStatus.PENDING,
     val attempts: Int = 0,
     val lastError: String = "",
@@ -54,7 +58,10 @@ data class CloudTransferBatch(
             remoteFolderKeys.sorted().joinToString(","),
             destination.location.name,
             destination.localFolderId?.toString() ?: "",
-            destination.rootFolderName ?: ""
+            destination.rootFolderName ?: "",
+            // الوجهة جزء من البصمة: نفس الملفات إلى مجلدين مختلفين طلبان مختلفان، ونفس
+            // الطلب إلى نفس المجلد لا يُكرَّر وهو منتظر.
+            targetFolderKey ?: ""
         ).joinToString("|")
 
     /** عدد العناصر التي ستنُقل/تُرفَع في هذه الدفعة — للواجهة والإشعار */
@@ -248,6 +255,8 @@ private fun batchToJson(batch: CloudTransferBatch): JSONObject = JSONObject().ap
     put("localFolderId", batch.destination.localFolderId ?: JSONObject.NULL)
     put("localFolderCreatedAt", batch.destination.localFolderCreatedAt ?: JSONObject.NULL)
     put("rootFolderName", batch.destination.rootFolderName ?: JSONObject.NULL)
+    put("targetFolderKey", batch.targetFolderKey ?: JSONObject.NULL)
+    put("targetFolderName", batch.targetFolderName ?: JSONObject.NULL)
     put("status", batch.status.name)
     put("attempts", batch.attempts)
     put("lastError", batch.lastError)
@@ -275,6 +284,9 @@ private fun batchFromJson(obj: JSONObject): CloudTransferBatch? {
         remoteKeys = obj.optJSONArray("remoteKeys").stringList(),
         remoteFolderKeys = obj.optJSONArray("remoteFolderKeys").stringList().toSet(),
         destination = destination,
+        // JSON قديم بلا الحقلين = لا وجهة، وهو السلوك الذي كان: الترميز لا يفرض هجرة
+        targetFolderKey = if (obj.isNull("targetFolderKey")) null else obj.optString("targetFolderKey").takeIf { it.isNotBlank() },
+        targetFolderName = if (obj.isNull("targetFolderName")) null else obj.optString("targetFolderName").takeIf { it.isNotBlank() },
         status = CloudTransferStatus.values().firstOrNull { it.name == obj.optString("status") }
             ?: CloudTransferStatus.PENDING,
         attempts = obj.optInt("attempts"),

@@ -178,6 +178,8 @@ fun FilesScreen(
     UiMessagesHost(viewModel.messenger, snackbarHostState)
 
     val currentFolder by viewModel.currentFolder.collectAsStateWithLifecycle()
+    val uploadFolders by viewModel.cloudFolders.collectAsStateWithLifecycle()
+    val uploadTargetKey by viewModel.uploadTargetKey.collectAsStateWithLifecycle()
     val folders by viewModel.folders.collectAsStateWithLifecycle()
     val files by viewModel.files.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -643,7 +645,10 @@ fun FilesScreen(
                 onPause = viewModel::pauseCloudTransfers,
                 onResume = viewModel::resumeCloudTransfers,
                 onRetryFailed = viewModel::retryCloudTransfers,
-                onDropPending = viewModel::cancelCloudQueued)
+                onDropPending = viewModel::cancelCloudQueued,
+                cloudFolders = uploadFolders,
+                targetFolderKey = uploadTargetKey,
+                onSelectTarget = viewModel::setUploadTarget)
         }
 
         if (showAddFolderSheet) {

@@ -52,8 +52,20 @@ data class CloudUploadPlan(
     val fileIds: Set<Long>,
     val folderIds: Set<Long>,
     val totalBytes: Long,
-    val missingFiles: List<String> = emptyList()
+    val missingFiles: List<String> = emptyList(),
+    /** وجهة اختيارية داخل السحابة؛ null = السلوك القديم (جذر السحابة بشجرة المجلدات) */
+    val targetFolderKey: String? = null,
+    /**
+     * اسم الوجهة كما رآه المستخدم لحظة الاختيار. يجمَّد مع الخطة لا يُقرأ من القائمة الحيّة
+     * عند العرض: الدفعة قد تُستأنف بعد إعادة فحص يكون المجلد أُعيدت تسميته أو حُذف فيه،
+     * فعبارة «إلى «X»» يجب أن تصف ما اختاره هو لا ما بقي على الخادم.
+     */
+    val targetFolderName: String? = null
 ) {
+    /** سطر الوجهة في البطاقة والإشعار — مصدر واحد لا نصان يتنافسان */
+    val destinationLabel: String
+        get() = CloudUploadTarget.labelFor(targetFolderKey, targetFolderName, CloudUploadTarget.flattens(targetFolderKey, folderIds))
+
     val summary: String get() = "${Formatters.fileCountLabel(fileIds.size)} • ${Formatters.fileSize(totalBytes)}"
 }
 

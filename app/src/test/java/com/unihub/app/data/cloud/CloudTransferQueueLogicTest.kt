@@ -379,4 +379,75 @@ class CloudTransferQueueLogicTest {
             }
         }
     }
+
+    // ─── وجهة الرفع المختارة: بصمة الدفعة والترميز الرجعي ───
+
+    private fun uploadTo(id: String, target: String?, name: String?, vararg fileIds: Long, at: Long = 0L) = CloudTransferBatch(
+        id = id,
+        kind = CloudTransferKind.UPLOAD,
+        title = "رفع المحدد",
+        fileIds = fileIds.toSet(),
+        targetFolderKey = target,
+        targetFolderName = name,
+        createdAt = at
+    )
+
+    @Test
+    fun sameFilesToDifferentFoldersAreDifferentRequests() {
+        var snapshot = CloudTransferQueueLogic.enqueue(CloudTransferQueueSnapshot(), uploadTo("a", null, null, 1, 2), now = 1L)
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, uploadTo("b", "folder:x", "الصور", 1, 2), now = 2L)
+        assertEquals("نفس الملفات إلى وجهتين = طلبان", 2, snapshot.batches.size)
+        snapshot = CloudTransferQueueLogic.enqueue(snapshot, uploadTo("c", "folder:x", "الصور", 1, 2), now = 3L)
+        assertEquals("ونفس الطلب إلى نفس الوجهة لا يُكرر وهو منتظر", 2, snapshot.batches.size)
+    }
+
+    @Test
+    fun targetSurvivesJsonRoundTripSoARestartedQueueStillKnowsItsDestination() {
+        val batch = uploadTo("a", "folder:x", "الصور", 7, 8)
+        val encoded = encodeQueueJson(CloudTransferQueueSnapshot(batches = listOf(batch)))
+        val decoded = decodeQueueJson(encoded)
+        assertEquals("folder:x", decoded.batches.single().targetFolderKey)
+        assertEquals("الصور", decoded.batches.single().targetFolderName)
+        assertEquals(batch.dedupeKey, decoded.batches.single().dedupeKey)
+    }
+
+    @Test
+    fun queueJsonWrittenBeforeThisFeatureStillDecodesAsNoTarget() {
+        // الصيغة القديمة بلا الحقلين: يجب أن تُقرأ «لا وجهة» لا أن تُرفض أو تنفجر —
+        // طوابير محفوظة على أجهزة المستخدمين قبل التحديث هذا حالها حرفيًا.
+        val legacy = """{"paused":false,"batches":[{"id":"a","kind":"UPLOAD","title":"رفع المحدد",""" +
+            """"fileIds":[7],"folderIds":[],"totalBytes":10,"remoteKeys":[],"remoteFolderKeys":[],""" +
+            """"location":"ORIGINAL_CLOUD_TREE","localFolderId":null,"localFolderCreatedAt":null,""" +
+            """"rootFolderName":null,"status":"PENDING","attempts":0,"lastError":"","createdAt":5}]}"""
+        val decoded = decodeQueueJson(legacy)
+        val batch = decoded.batches.single()
+        assertNull(batch.targetFolderKey)
+        assertNull(batch.targetFolderName)
+        assertEquals(5L, batch.createdAt)
+        assertEquals(setOf(7L), batch.fileIds)
+    }
+
+    @Test
+    fun blankTargetFieldsAreReadAsNoTargetNotAsARealFolder() {
+        // فراغ أو مساب = «لا وجهة»، لا مجلد حقيقي باسم فارغ: وإلا طُبّق مفتاح لا وجود له
+        val blank = """{"batches":[{"id":"a","kind":"UPLOAD","title":"t","fileIds":[1],"createdAt":1,""" +
+            """"targetFolderKey":"","targetFolderName":"   "}]}"""
+        val batch = decodeQueueJson(blank).batches.single()
+        assertNull(batch.targetFolderKey)
+        assertNull(batch.targetFolderName)
+        // والوجهة السليمة تمرّ كما هي
+        val good = """{"batches":[{"id":"a","kind":"UPLOAD","title":"t","fileIds":[1],"createdAt":1,""" +
+            """"targetFolderKey":"folder:x","targetFolderName":"الصور"}]}"""
+        val saved = decodeQueueJson(good).batches.single()
+        assertEquals("folder:x", saved.targetFolderKey)
+        assertEquals("الصور", saved.targetFolderName)
+    }
+
+    @Test
+    fun unreadableQueueTextBecomesAnEmptyQueueNotACrash() {
+        // نص تالف (كُتب نصفه ثم سقطت العملية): الطابور يُنهى فارغًا بدل استثناء عند الإقلاع
+        listOf("", "   ", "{not json", "[", """{"batches":"""").forEach { broken ->
+            assertTrue("انفجر على: $broken", decodeQueueJson(broken).batches.isEmpty())
+        }
+    }
 }

@@ -159,7 +159,7 @@ class CloudTransferWorker @AssistedInject constructor(
     private suspend fun runUpload(batch: CloudTransferBatch): BatchOutcome {
         // الخطة تُعاد بنيتها الآن: لو حُذف ملف محلي أثناء الانتظار تظهر في missingFiles
         // بدل أن يفشل الرفع كله، وبنية المجلدات تُحسب كما حسبها زر «رفع المحدد».
-        val plan = manager.prepareUploadPlan(batch.fileIds, batch.folderIds, batch.title)
+        val plan = manager.prepareUploadPlan(batch.fileIds, batch.folderIds, batch.title, batch.targetFolderKey, batch.targetFolderName)
         if (plan.fileIds.isEmpty()) {
             return if (plan.missingFiles.isEmpty()) BatchOutcome.Failed("لا توجد ملفات قابلة للرفع في هذا الطلب")
             else BatchOutcome.Failed("لم تعد هذه الملفات موجودة على الجهاز")

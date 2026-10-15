@@ -261,14 +261,22 @@ class CloudSyncManager @Inject constructor(
         return pushLightweightMetadata(scan)
     }
 
-    suspend fun prepareUploadPlan(fileIds: Set<Long> = emptySet(), folderIds: Set<Long> = emptySet(), title: String = "رفع المحدد"): CloudUploadPlan = withContext(Dispatchers.IO) {
+    suspend fun prepareUploadPlan(
+        fileIds: Set<Long> = emptySet(),
+        folderIds: Set<Long> = emptySet(),
+        title: String = "رفع المحدد",
+        targetFolderKey: String? = null,
+        targetFolderName: String? = null
+    ): CloudUploadPlan = withContext(Dispatchers.IO) {
         val records = backupRepository.getLocalFileRecords()
         val plan = CloudFolderTree.plan(title, records, backupRepository.getLocalFolders(), fileIds, folderIds)
         val selected = records.filter { it.id in plan.fileIds }
         val safeSelected = selected.filter { backupRepository.isManagedLocalFile(it.filePath) }
         plan.copy(
             totalBytes = safeSelected.sumOf { File(it.filePath).length() },
-            missingFiles = selected.filterNot { backupRepository.isManagedLocalFile(it.filePath) }.map { it.name }
+            missingFiles = selected.filterNot { backupRepository.isManagedLocalFile(it.filePath) }.map { it.name },
+            targetFolderKey = CloudUploadTarget.normalize(targetFolderKey),
+            targetFolderName = targetFolderName?.trim()?.takeIf { it.isNotEmpty() }
         )
     }
 
@@ -877,11 +885,28 @@ class CloudSyncManager @Inject constructor(
         val folderDescriptions = mutableListOf<RemoteCloudFolder>()
         val folderKeys = mutableMapOf<Long, String>()
         val visiting = mutableSetOf<Long>()
+        // الوجهة تُتحقَّق هنا لا في الشاشة: بين الاختيار والبدء قد يُحذف المجلد أو يُلغى
+        // فحصُ السحابة فيُصبح المفتاح ميتًا. والرفض رسالة إنسانية بلا مفتاح ولا رمز (طبيعة تطبيق.md §5).
+        val target = CloudUploadTarget.normalize(plan.targetFolderKey)
+        CloudUploadTarget.validate(target, scan.state.folders.mapTo(mutableSetOf()) { it.key })
+            ?.let { throw IOException(it) }
+        val flattenIntoTarget = CloudUploadTarget.flattens(target, plan.folderIds)
         suspend fun describeFolder(id: Long): String? {
             folderKeys[id]?.let { return it }
             if (!visiting.add(id)) return null
             val local = localFolders[id] ?: return null
-            val parent = local.parentId?.let { describeFolder(it) }
+            if (target != null && flattenIntoTarget) {
+                // ملفات مفرَدة في الوجهة: لا وصف مجلد جديد ولا رابط محلي — وإلا غيّر هذا
+                // الرفعُ لمرة واحدة وجهةَ المجلد المحلي في كل رفع قادم منه.
+                folderKeys[id] = target
+                return target
+            }
+            val derived = local.parentId?.let { describeFolder(it) }
+            val parent = CloudUploadTarget.parentFor(
+                treeRoot = local.parentId?.let { it !in plan.folderIds } ?: true,
+                target = target,
+                derivedParent = derived
+            )
             val current = catalog.snapshot(activeConnection)
             val linked = current.folderLinks.firstOrNull { it.localId == id && it.localCreatedAt == local.createdAt }
             // دمج تعليمات.md: المجلد الموجود في السحابة أولى من إنشاء هوية جديدة —

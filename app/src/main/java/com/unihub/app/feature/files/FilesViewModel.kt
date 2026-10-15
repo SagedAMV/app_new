@@ -22,6 +22,7 @@ import com.unihub.app.data.cloud.CloudTransferKind
 import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferQueueStore
 import com.unihub.app.data.cloud.CloudUploadPlan
+import com.unihub.app.data.cloud.CloudUploadTarget
 import com.unihub.app.data.cloud.RemoteCloudFile
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FolderEntity
@@ -152,7 +153,30 @@ class FilesViewModel @Inject constructor(
     private val _uploadPlan = MutableStateFlow<CloudUploadPlan?>(null)
     val uploadPlan = _uploadPlan.asStateFlow()
     val cloudUploadReport = cloudSyncManager.lastUploadReport
-    fun closeUploadPlan() { _uploadPlan.value = null }
+    val cloudFolders = cloudSyncManager.remoteFolders
+
+    /**
+     * وجهة الرفع داخل السحابة. تُحفظ في الـViewModel لا في الخطة وحدها: البطاقة تُغلق وتُفتح
+     * عند كل معاينة، ولو ضاع الاختيار لرفع المستخدم ملفاته إلى الجذر وهو يظنّه مختارًا.
+     */
+    private val _uploadTargetKey = MutableStateFlow<String?>(null)
+    val uploadTargetKey = _uploadTargetKey.asStateFlow()
+    private val _uploadTargetName = MutableStateFlow<String?>(null)
+
+    fun closeUploadPlan() {
+        _uploadPlan.value = null
+        _uploadTargetKey.value = null
+        _uploadTargetName.value = null
+    }
+
+    /** اختيار الجذر = null اسمًا، فيُصفَر الاسم معه ولا يبقى معلّقًا من مجلد سابق */
+    fun setUploadTarget(key: String?, name: String?) {
+        val normalized = CloudUploadTarget.normalize(key)
+        val trimmed = if (normalized == null) null else name?.trim()?.takeIf { it.isNotEmpty() }
+        _uploadTargetKey.value = normalized
+        _uploadTargetName.value = trimmed
+        _uploadPlan.value = _uploadPlan.value?.copy(targetFolderKey = normalized, targetFolderName = trimmed)
+    }
 
     // Planning is local/offline; CloudSyncManager re-verifies Account and server permissions when the queue runs.
     fun previewSelectedUpload(files: List<FileEntity>) {
@@ -161,7 +185,9 @@ class FilesViewModel @Inject constructor(
                 messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }
-            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(fileIds = files.mapTo(mutableSetOf()) { it.id }, title = "رفع الملفات المحددة")
+            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(
+                fileIds = files.mapTo(mutableSetOf()) { it.id }, title = "رفع الملفات المحددة",
+                targetFolderKey = _uploadTargetKey.value, targetFolderName = _uploadTargetName.value)
         }
     }
     fun previewFolderUpload(id: Long, name: String) {
@@ -170,7 +196,9 @@ class FilesViewModel @Inject constructor(
                 messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
                 return@launch
             }
-            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته")
+            _uploadPlan.value = cloudSyncManager.prepareUploadPlan(
+                folderIds = setOf(id), title = "رفع مجلد $name ومحتوياته",
+                targetFolderKey = _uploadTargetKey.value, targetFolderName = _uploadTargetName.value)
         }
     }
     /**
@@ -188,7 +216,9 @@ class FilesViewModel @Inject constructor(
                     title = plan.title,
                     fileIds = plan.fileIds,
                     folderIds = plan.folderIds,
-                    totalBytes = plan.totalBytes
+                    totalBytes = plan.totalBytes,
+                    targetFolderKey = plan.targetFolderKey,
+                    targetFolderName = plan.targetFolderName
                 ))
             } catch (cancelled: CancellationException) {
                 throw cancelled

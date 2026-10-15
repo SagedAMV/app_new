@@ -217,7 +217,12 @@ class AppwriteStorageTransportTest {
     private class Network(handler: (FakeConnection) -> Reply) {
         val authorizer = Authorizer()
         val requests = Collections.synchronizedList(arrayListOf<FakeConnection>())
-        val transport = AppwriteStorageTransport(TARGET, authorizer) { url -> FakeConnection(url, handler).also { requests += it } }
+        // الباني آخر وسائطه platformHeaders: Map، فالـlambda الخلفية غير قانونية هنا؛
+        // المصنع يُمرَّر وساطًا مُسمّى (خطأ ترجمة كان يُسقط حزمة الاختبارات كلها).
+        val transport = AppwriteStorageTransport(
+            TARGET, authorizer,
+            openConnection = { url -> FakeConnection(url, handler).also { requests += it } }
+        )
     }
     private data class Reply(val status: Int, val bytes: ByteArray, val headers: Map<String, String> = emptyMap())
     private class FakeConnection(url: URL, handler: (FakeConnection) -> Reply) : HttpURLConnection(url) {

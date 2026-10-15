@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -21,6 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.unihub.app.data.cloud.CloudUploadPlan
+import com.unihub.app.data.cloud.CloudUploadTarget
+import com.unihub.app.data.cloud.RemoteCloudFolder
 import com.unihub.app.data.cloud.CloudUploadReport
 import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferState
@@ -34,15 +39,39 @@ fun CloudUploadConfirmationSheet(
     onPause: () -> Unit = {},
     onResume: () -> Unit = {},
     onRetryFailed: () -> Unit = {},
-    onDropPending: () -> Unit = {}
+    onDropPending: () -> Unit = {},
+    /** اختيارية بقيم افتراضية: أي مستدعٍ قديم للبطاقة يبقى يترجم دون تعديل */
+    cloudFolders: List<RemoteCloudFolder> = emptyList(),
+    targetFolderKey: String? = null,
+    onSelectTarget: (key: String?, name: String?) -> Unit = { _, _ -> }
 ) {
+    val selectableFolders = cloudFolders.filter { CloudUploadTarget.isSelectable(it.key) && it.key != null }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(plan.title, style = MaterialTheme.typography.titleLarge)
             Text(plan.summary, style = MaterialTheme.typography.titleMedium)
-            Text("سيُرفع المحدد فقط مع بنية المجلدات.",
-                style = MaterialTheme.typography.bodyMedium)
+            Text(plan.destinationLabel, style = MaterialTheme.typography.bodyMedium)
+            if (selectableFolders.isNotEmpty()) {
+                Text("وجهة الرفع داخل السحابة", style = MaterialTheme.typography.labelLarge)
+                // LazyRow أفقي: قائمة منسدلة داخل ModalBottomSheet تفتح فوق حافة الشاشة وتُقطع
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = targetFolderKey == null,
+                            onClick = { onSelectTarget(null, null) },
+                            label = { Text(CloudUploadTarget.ROOT_LABEL) }
+                        )
+                    }
+                    items(selectableFolders, key = { it.key }) { folder ->
+                        FilterChip(
+                            selected = folder.key == targetFolderKey,
+                            onClick = { onSelectTarget(folder.key, folder.name) },
+                            label = { Text(folder.name) }
+                        )
+                    }
+                }
+            }
             if (plan.missingFiles.isNotEmpty()) Text("غير متاح: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             if (!isOnline) Text("لا إنترنت، سيُرفع عند العودة", style = MaterialTheme.typography.bodySmall)
