@@ -8,11 +8,18 @@ object AppwriteConfig {
     const val STORAGE_PROJECT_ID = "6acd0a6800189ccc164a"
     const val STORAGE_BUCKET_ID = "6acd11520015520ba016"
 
-    // Deploy service/appwrite/auth-bridge in the AUTH project with this explicit function ID.
+    // Deploy the bridge in the AUTH project with this explicit function ID.
     const val AUTH_BRIDGE_FUNCTION_ID = "unihub-auth-bridge"
-    const val DOWNLOAD_LABEL = "unihub_download"
-    const val UPLOAD_LABEL = "unihub_upload"
-    const val MODIFY_LABEL = "unihub_modify"
+
+    // CANONICAL label names — must stay byte-identical to (1) the deployed bridge
+    // (service/appwrite/node-bridge/src/main.js) and (2) the bucket $permissions on
+    // Appwrite Cloud. The deployed runtime uses the underscore-less form; do NOT
+    // "restore" underscores here — that drifts from the cloud and silently strips
+    // non-admin users' permissions in CloudAuthRules.fromAppwriteUser().
+    // Verified live against the bucket policy on 2026-10-15.
+    const val DOWNLOAD_LABEL = "unihubdownload"
+    const val UPLOAD_LABEL = "unihubupload"
+    const val MODIFY_LABEL = "unihubmodify"
     const val ADMIN_LABEL = "admin"
     const val STORAGE_TOKEN_TTL_SECONDS = 300L
 }

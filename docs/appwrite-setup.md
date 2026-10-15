@@ -54,13 +54,13 @@
 
 - Enabled: **true**.
 - File security: **false**؛ الصلاحيات هنا على مستوى الحاوية المشتركة، لا منح المالك التلقائية على كل ملف.
-- الصلاحيات **بالضبط**:
+- الصلاحيات **بالضبط** (تم التحقق منها حيًا على السحابة في 2026-10-15 — أسماء الوسوم الرسمية بلا شرطة سفلية، ويجب أن تطابق `service/appwrite/node-bridge/src/main.js` و`AppwriteConfig` حرفيًا):
 
 ```text
-read("label:unihub_download")
-create("label:unihub_upload")
-update("label:unihub_modify")
-delete("label:unihub_modify")
+read("label:unihubdownload")
+create("label:unihubupload")
+update("label:unihubmodify")
+delete("label:unihubmodify")
 ```
 
 لا تضف `any` أو `guests` أو `users` أو صلاحيات إضافية عامة. **الخدمة ترفض إصدار التفويض إذا اختلفت سياسة الحاوية عن هذه السياسة.**
@@ -77,14 +77,16 @@ delete("label:unihub_modify")
 | --- | --- |
 | Project | `6acd036f0022a495a9df` |
 | Function ID | `unihub-auth-bridge` |
-| Runtime | Kotlin 2.0 (`kotlin-2.0`) |
-| Root directory | `service/appwrite/auth-bridge` |
-| Entrypoint | `Index.kt` |
+| Runtime | **Node.js 22 (`node-22`)** — النسخة المنشورة فعليًا |
+| Root directory | `service/appwrite/node-bridge` |
+| Entrypoint | `src/main.js` |
 | Execute access | المستخدمون المصادق عليهم (`users`)، وليس `any` أو `guests` |
 | Dynamic API key scopes | `users.read`, `users.write` في مشروع المستخدمين |
 | Execution logging | **معطّل**؛ الرد قد يحتوي JWT والطلبات الإدارية قد تحتوي كلمة مرور جديدة |
 
-قالب Open Runtimes يجمع ملفات Kotlin في الحزمة `io.openruntimes.kotlin` ويقرأ تبعية JSON من `dependencies.gradle` داخل مجلد الدالة. **لا تسمّ ملف اعتماديات الدالة `build.gradle` أو `build.gradle.kts`، ولا تنشر جذر مستودع Android باعتباره جذر الدالة.** خطوة تحضير Runtime تنقل ملفات Gradle الخاصة بالدالة إلى مجلد بناء Runtime ثم تضيف `apply from`؛ اسم `build.gradle` يستبدل ملف بناء Runtime نفسه ويضيف إحالة دائرية إليه، فيمنع تجهيز الخدمة. ملف `service/appwrite/build.gradle.kts` مخصص للاختبارات المحلية، ويبقى خارج جذر النشر `service/appwrite/auth-bridge`.
+**لماذا Node.js وليس Kotlin؟** منطقة `nyc.cloud.appwrite.io` لا توفر runtime من نوع Kotlin/JVM للدوال (قائمة الـruntimes المتاحة لا تتضمن Kotlin أو Java — نُشرت الدالة بنسختها Node.js في 2026-10-15 بعد تحقق حي). الكود المنشور رسميًّا هو `service/appwrite/node-bridge/src/main.js` — نقل أمين (faithful port) لمرجع Kotlin الموجود في `service/appwrite/auth-bridge`، وهذا المرجع Kotlin بقي للاختبارات المحلية القابلة للنقل (`BridgeServiceTest` و`BridgePackagingTest`) وللتوثيق السلوكي فقط. **أي تعديل سلوكي على الجسر يجب أن يُطبق على النسختين معًا**، مع إبقاء ثوابت الوسوم (`unihubdownload`/`unihubupload`/`unihubmodify`/`unihubmanaged`) وصيغة `shadowId`/`sourceLabel` متطابقة حرفيًا بين النسختين وبين `AppwriteConfig` وسياسة الحاوية — الانحراف هنا يكسر صلاحيات المستخدمين غير الإداريين بصمت.
+
+ملاحظة تاريخية (لم تعد قابلة للتطبيق): قالب Open Runtimes لـKotlin كان يجمع ملفات Kotlin في الحزمة `io.openruntimes.kotlin` ويقرأ تبعية JSON من `dependencies.gradle` داخل مجلد الدالة. **لا تسمّ ملف اعتماديات الدالة `build.gradle` أو `build.gradle.kts`، ولا تنشر جذر مستودع Android باعتباره جذر الدالة.** ملف `service/appwrite/build.gradle.kts` مخصص للاختبارات المحلية، ويبقى خارج أي جذر نشر.
 
 مرجع آلية الربط: [Open Runtimes — build-prepare.sh، نسخة مثبتة](https://github.com/open-runtimes/open-runtimes/blob/da714e707c181e6e8e4ab5f1a5649d2cde8f4260/runtimes/kotlin/versions/latest/hooks/build-prepare.sh). يغطي `BridgePackagingTest` الحفاظ على بناء Runtime، وعدم الإحالة الدائرية، واستمرار اعتماد JSON؛ هذا اختبار تحضير محلي وليس إثبات نشر حي.
 
@@ -93,6 +95,8 @@ delete("label:unihub_modify")
 اضبط مهلة التنفيذ وذاكرة JVM وفق حدود الخطة؛ عمليات التهيئة الأولى تتطلب عدة طلبات بين المشروعين. الخدمة تحتاج دعم Appwrite لمسار `Users.createJWT` مع `duration`؛ اختبر ذلك عند النشر ولا تستبدله بمفتاح خادم في الهاتف إن لم يكن متاحًا.
 
 أنشئ **في مشروع الملفات** مفتاح API خادميًا بنطاقات `users.read`, `users.write`, `buckets.read` فقط. خزنه في متغير Function السري:
+
+> **ملاحظة فحص (2026-10-15):** المفتاح الخادمي الذي فُحص حيًا في مشروع الملفات يملك أيضًا نطاقات `files.read`/`files.write` (نجح عبره رفع/تنزيل/حذف ملف تشخيصي). هذا أوسع من الحد الأدنى المطلوب هنا — عند تدوير المفاتيح (وهو مطلوب لأن المفتاحين ظهرا في محادثة خارجية) أنشئ المفتاح الجديد بالنطاقات الثلاثة فقط كما في هذا الدليل.
 
 ```text
 STORAGE_API_KEY

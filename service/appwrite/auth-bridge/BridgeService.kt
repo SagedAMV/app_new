@@ -7,7 +7,16 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.UUID
 
-/** No Android dependency. These rules are exercised with a fake API by the portable tests. */
+/**
+ * No Android dependency. These rules are exercised with a fake API by the portable tests.
+ *
+ * DEPLOYMENT NOTE (2026-10-15): the function actually running on Appwrite Cloud
+ * (nyc region) is the faithful Node.js port in service/appwrite/node-bridge —
+ * this region does not offer a Kotlin/JVM function runtime. This Kotlin source is
+ * kept as the behavioural reference and for local unit tests only. Both implementations
+ * MUST share the exact constants below: the bucket $permissions, the shadow identity
+ * labels and the Android client (AppwriteConfig) are all pinned to these strings.
+ */
 object BridgeConfig {
     const val ENDPOINT = "https://nyc.cloud.appwrite.io/v1"
     const val AUTH_PROJECT = "6acd036f0022a495a9df"
@@ -15,10 +24,12 @@ object BridgeConfig {
     const val BUCKET = "6acd11520015520ba016"
     const val TOKEN_SECONDS = 300
     const val ADMIN = "admin"
-    const val READ = "unihub_download"
-    const val CREATE = "unihub_upload"
-    const val MODIFY = "unihub_modify"
-    const val MANAGED = "unihub_managed"
+    // Canonical (underscore-less) label names — identical to the deployed Node bridge
+    // and to the live bucket policy verified on 2026-10-15. Do not reintroduce underscores.
+    const val READ = "unihubdownload"
+    const val CREATE = "unihubupload"
+    const val MODIFY = "unihubmodify"
+    const val MANAGED = "unihubmanaged"
     val bucketPermissions = setOf("read(\"label:$READ\")", "create(\"label:$CREATE\")",
         "update(\"label:$MODIFY\")", "delete(\"label:$MODIFY\")")
     fun validId(id: String) = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,35}").matches(id)
@@ -26,7 +37,9 @@ object BridgeConfig {
     fun digest(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 255) }
     fun shadowId(userId: String) = "u" + digest("$AUTH_PROJECT:$userId").take(35)
-    fun sourceLabel(userId: String) = "src_" + digest("$AUTH_PROJECT:$userId").take(32)
+    // Same scheme as the deployed Node bridge ("src" + first 33 hex chars, 36 total);
+    // existing shadow identities on the storage project already carry this form.
+    fun sourceLabel(userId: String) = "src" + digest("$AUTH_PROJECT:$userId").take(33)
 }
 
 class BridgeFailure(val status: Int, val code: String) : RuntimeException(code)
