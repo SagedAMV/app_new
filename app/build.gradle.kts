@@ -191,6 +191,9 @@ dependencies {
     // اختبارات الوحدة على JVM — بدونها لا تُترجم ملفات test/ أصلاً
     // (إصلاح جلسة التحقق العميق: GalaxyGeometryTest استوردت org.junit بلا تبعية)
     testImplementation(libs.junit)
+    // التغطية الزمنية لفاحص السحابة وطابور النقل تحتاج scheduler اختباريًا؛ حُذفت مع الاختبارات في
+    // refactor Appwrite فصار «لا نهاية للدوّار» و«لا طابور مزدوج» بلا حارس.
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // Actual Compose measurement and hit-testing on an Android emulator.
     androidTestImplementation(platform(libs.androidx.compose.bom))
