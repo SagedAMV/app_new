@@ -305,7 +305,14 @@ class BridgeService {
     return id;
   }
 
-  /** Refuse to take over an existing storage identity not created/marked by this bridge. */
+  /**
+   * Refuse to take over an existing storage identity that is not a technical identity of this
+   * bridge. A shadow that exists but is missing its identity labels is a half-provisioned
+   * orphan (the label write that follows creation can be lost to a function timeout or a
+   * dropped connection) or a leftover of an older label scheme: adopting and re-labelling it
+   * in syncShadow() is what unlocks the account, while refusing it would lock the user out of
+   * storage forever with a 409 "conflict" that no retry or list refresh can ever clear.
+   */
   async shadowOrNull(userId) {
     const id = shadowId(userId);
     let user;
@@ -315,17 +322,19 @@ class BridgeService {
       if (error instanceof UpstreamFailure && error.status === 404 && error.type === "user_not_found") return null;
       throw error;
     }
-    const identityLabels = new Set([MANAGED, sourceLabel(userId)]);
-    const have = labelsOf(user);
-    const hasAll = [...identityLabels].every((l) => have.has(l));
-    if (user.$id !== id || !hasAll) {
+    if (user.$id !== id) {
       throw new BridgeFailure(409, "conflict");
     }
     if ((user.email && user.email.length > 0) || (user.phone && user.phone.length > 0)) {
       // A technical identity must never become an independently sign-in-capable account.
       await this.api.storage("PATCH", `/users/${id}/status`, { status: false });
-      await this.api.storage("PUT", `/users/${id}/labels`, { labels: [...identityLabels] });
+      await this.api.storage("PUT", `/users/${id}/labels`, { labels: [MANAGED, sourceLabel(userId)] });
       throw new BridgeFailure(409, "conflict");
+    }
+    const source = sourceLabel(userId);
+    // Already bound to a different source identity: never rebind, it may hold another user's files.
+    for (const label of labelsOf(user)) {
+      if (label.startsWith("src") && label !== source) throw new BridgeFailure(409, "conflict");
     }
     return user;
   }

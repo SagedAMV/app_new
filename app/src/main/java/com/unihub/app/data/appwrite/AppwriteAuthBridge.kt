@@ -18,7 +18,7 @@ class AppwriteBridgeException(val status: Int, val errorCode: String) : IOExcept
         "bucket_policy" -> "صلاحيات حاوية Appwrite غير مهيأة بأمان؛ راجع دليل إعداد السحابة"
         "unauthorized" -> "انتهت جلسة Appwrite؛ سجّل الدخول مجددًا"
         "forbidden" -> "لا يملك الحساب صلاحية تنفيذ هذا الإجراء"
-        "conflict" -> "الحساب موجود مسبقًا أو حدث تعارض؛ حدّث القائمة وأعد المحاولة"
+        "conflict" -> "تعذّر ربط حساب التخزين السحابي لوجود تعارض؛ أعد المحاولة، وإن تكرر يلزم تدخل المشرف من لوحة Appwrite"
         "not_found" -> "الحساب المطلوب غير موجود"
         else -> "تعذّر تشغيل خدمة ربط Appwrite؛ تحقق من نشر unihub-auth-bridge وإعداداتها"
     }

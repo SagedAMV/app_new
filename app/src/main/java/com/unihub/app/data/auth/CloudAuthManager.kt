@@ -19,9 +19,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** How long a caller waits for an in-flight auth operation before being told it is busy. */
+private const val AUTH_BUSY_WAIT_MILLIS = 15_000L
 
 /** Appwrite Account owns authentication; server-side Users owns account administration. */
 @Singleton
@@ -206,7 +210,11 @@ class CloudAuthManager @Inject constructor(
 
     private suspend fun <T> busyOperation(block: suspend () -> T): Result<T> = withContext(Dispatchers.IO) {
         initializeIfNeeded()
-        if (!mutex.tryLock()) return@withContext Result.failure(IOException("جارٍ تنفيذ عملية مصادقة أخرى"))
+        // Wait briefly for an in-flight auth operation instead of failing the caller instantly:
+        // a background scan and a user-triggered transfer legitimately overlap, and an instant
+        // "another auth operation is running" failure blocked uploads that only needed to wait.
+        val acquired = withTimeoutOrNull(AUTH_BUSY_WAIT_MILLIS) { mutex.lock(); true } == true
+        if (!acquired) return@withContext Result.failure(IOException("جارٍ تنفيذ عملية مصادقة أخرى؛ انتظر قليلًا ثم أعد المحاولة"))
         _isBusy.value = true
         try { Result.success(block()) }
         catch (cancelled: CancellationException) { throw cancelled }

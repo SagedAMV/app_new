@@ -131,21 +131,29 @@ class BridgeService(private val api: BridgeApi) {
         return id
     }
 
-    /** Refuse to take over an existing storage identity not created/marked by this bridge. */
+    /**
+     * Refuse to take over an existing storage identity that is not a technical identity of this
+     * bridge. A shadow that exists but is missing its identity labels is a half-provisioned
+     * orphan (the label write that follows creation can be lost to a function timeout or a
+     * dropped connection) or a leftover of an older label scheme: adopting and re-labelling it
+     * in syncShadow() is what unlocks the account, while refusing it would lock the user out of
+     * storage forever with a 409 "conflict" that no retry or list refresh can ever clear.
+     */
     private fun shadowOrNull(userId: String): JSONObject? {
         val id = BridgeConfig.shadowId(userId)
         val user = try { api.storage("GET", "/users/$id") }
         catch (error: UpstreamFailure) { if (error.status == 404 && error.type == "user_not_found") return null else throw error }
         val identityLabels = setOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel(userId))
-        if (user.optString("\$id") != id || !labels(user).containsAll(identityLabels)) {
-            throw BridgeFailure(409, "conflict")
-        }
+        if (user.optString("\$id") != id) throw BridgeFailure(409, "conflict")
         if (user.optString("email").isNotBlank() || user.optString("phone").isNotBlank()) {
             // A technical identity must never become an independently sign-in-capable account.
             api.storage("PATCH", "/users/$id/status", JSONObject().put("status", false))
             api.storage("PUT", "/users/$id/labels", JSONObject().put("labels", JSONArray(identityLabels)))
             throw BridgeFailure(409, "conflict")
         }
+        val source = BridgeConfig.sourceLabel(userId)
+        // Already bound to a different source identity: never rebind, it may hold another user's files.
+        if (labels(user).any { it.startsWith("src") && it != source }) throw BridgeFailure(409, "conflict")
         return user
     }
 

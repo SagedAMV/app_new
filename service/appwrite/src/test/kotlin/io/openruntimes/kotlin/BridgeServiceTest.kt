@@ -110,6 +110,36 @@ class BridgeServiceTest {
         assertFalse(BridgeConfig.READ in labels(shadow))
         assertEquals(0, api.lastJwtDuration)
     }
+    @Test fun halfProvisionedShadowIsAdoptedInsteadOfLockingTheUserOut() {
+        val api = FakeApi(actorId = "student")
+        val id = BridgeConfig.shadowId("student")
+        api.storageUsers[id] = technicalUser(id, emptyList())
+        val result = BridgeService(api).execute(JWT, request("storageToken"))
+        assertEquals("student", result.getString("authUserId"))
+        val shadow = api.storageUsers.getValue(id)
+        assertEquals(setOf(BridgeConfig.MANAGED, BridgeConfig.sourceLabel("student"), BridgeConfig.READ), labels(shadow))
+        assertTrue(shadow.getBoolean("status"))
+        assertTrue(api.lastJwtDuration > 0)
+    }
+    @Test fun legacyLabelSchemeIsRepairedOnNextStorageToken() {
+        val api = FakeApi(actorId = "student")
+        val id = BridgeConfig.shadowId("student")
+        api.storageUsers[id] = technicalUser(id, listOf("unihub_managed", "unihub_download"))
+        BridgeService(api).execute(JWT, request("storageToken"))
+        val shadow = api.storageUsers.getValue(id)
+        assertTrue(BridgeConfig.MANAGED in labels(shadow))
+        assertTrue(BridgeConfig.sourceLabel("student") in labels(shadow))
+        assertFalse("unihub_managed" in labels(shadow))
+        assertFalse("unihub_download" in labels(shadow))
+    }
+    @Test fun shadowBoundToAnotherSourceIsStillRefused() {
+        val api = FakeApi(actorId = "student")
+        val id = BridgeConfig.shadowId("student")
+        api.storageUsers[id] = technicalUser(id, listOf(BridgeConfig.MANAGED, "src" + "0".repeat(33)))
+        denied(409) { BridgeService(api).execute(JWT, request("storageToken")) }
+        assertEquals(0, api.lastJwtDuration)
+        assertTrue(api.storageRequests.none { it.startsWith("PUT") || it.startsWith("PATCH") })
+    }
     @Test fun listingUsersStripsPasswordsHashesAndPreferences() {
         val api = FakeApi()
         api.authUsers.values.forEach { it.put("password", "secret-verifier").put("hash", "server-hash").put("prefs", JSONObject().put("secret", "hidden")) }
@@ -240,6 +270,10 @@ class BridgeServiceTest {
             JSONObject().put("canDownload", read).put("canUpload", upload).put("canModify", modify)
         private fun labels(user: JSONObject): Set<String> = user.getJSONArray("labels").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
         private fun copy(json: JSONObject) = JSONObject(json.toString())
+        /** A bridge-created technical identity: never sign-in capable (no email, no phone). */
+        private fun technicalUser(id: String, labels: List<String>) = JSONObject().put("\$id", id).put("email", "")
+            .put("phone", "").put("name", "UniHub storage").put("status", true).put("labels", JSONArray(labels))
+            .put("\$createdAt", "2026-10-12T00:00:00Z").put("\$updatedAt", "2026-10-12T00:00:00Z")
         private fun user(id: String, labels: List<String>) = JSONObject().put("\$id", id).put("email", "$id@example.test")
             .put("name", id).put("status", true).put("labels", JSONArray(labels))
             .put("\$createdAt", "2026-10-12T00:00:00Z").put("\$updatedAt", "2026-10-12T00:00:00Z")
