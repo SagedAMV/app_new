@@ -1,5 +1,6 @@
 package com.unihub.app.data.cloud
 
+import com.unihub.app.data.appwrite.AppwriteConfig
 import com.unihub.app.data.appwrite.AppwriteFileProtocol
 
 import org.json.JSONArray
@@ -8,11 +9,11 @@ import org.json.JSONObject
 /** قواعد نقية يمكن اختبارها خارج أندرويد. */
 object CloudFileRules {
     /**
-     * سقف حجم الملف الواحد عند الرفع: 50 ميجابايت (بالقاسم الثنائي MiB) — ملف واحد أكبر
-     * من هذا يُتجاهل مع رسالة واضحة، وبقية الملفات المحددة تُرفع عادةً (§المطلوب: لا يوقف
-     * ملف ضخم واحد رفع عشرات الملفات الأخرى معه).
+     * سقف Appwrite Cloud الفعلي هو 50,000,000 بايت (MB عشري، وليس 50 MiB).
+     * ملف أكبر يُتجاهل برسالة واضحة، وبقية الملفات تُرفع عادةً. يجب إبقاء الحد مطابقًا
+     * لإعداد الخادم حتى لا يبدأ رفعًا سيرفضه Appwrite بعد إرسال الملف.
      */
-    const val MAX_UPLOAD_FILE_BYTES: Long = 50L * 1024 * 1024
+    const val MAX_UPLOAD_FILE_BYTES: Long = AppwriteConfig.STORAGE_MAX_FILE_SIZE_BYTES
 
     fun exceedsUploadSizeLimit(sizeBytes: Long): Boolean = sizeBytes > MAX_UPLOAD_FILE_BYTES
 

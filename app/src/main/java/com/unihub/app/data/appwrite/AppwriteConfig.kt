@@ -7,6 +7,9 @@ object AppwriteConfig {
     const val STORAGE_ENDPOINT = "https://nyc.cloud.appwrite.io/v1"
     const val STORAGE_PROJECT_ID = "6acd0a6800189ccc164a"
     const val STORAGE_BUCKET_ID = "6acd11520015520ba016"
+    // Appwrite Cloud's Storage API rejects values above 50,000,000 bytes.
+    // Keep CloudFileRules.MAX_UPLOAD_FILE_BYTES aligned with this server-side ceiling.
+    const val STORAGE_MAX_FILE_SIZE_BYTES = 50_000_000L
 
     // Deploy the bridge in the AUTH project with this explicit function ID.
     const val AUTH_BRIDGE_FUNCTION_ID = "unihub-auth-bridge"
