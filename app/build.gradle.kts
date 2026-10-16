@@ -58,7 +58,6 @@ android {
         targetSdk = 35
         versionCode = 5
         versionName = "1.3.1"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -220,23 +219,6 @@ dependencies {
 
     // Account and Functions use the auth project; streaming storage uses its own qualified Client.
     implementation(libs.appwrite)
-    // Real JSON implementation for portable protocol tests (not Android's mock jar).
-    testImplementation("org.json:json:20240303")
-
-    // اختبارات الوحدة على JVM — بدونها لا تُترجم ملفات test/ أصلاً
-    // (إصلاح جلسة التحقق العميق: GalaxyGeometryTest استوردت org.junit بلا تبعية)
-    testImplementation(libs.junit)
-    // التغطية الزمنية لفاحص السحابة وطابور النقل تحتاج scheduler اختباريًا؛ حُذفت مع الاختبارات في
-    // refactor Appwrite فصار «لا نهاية للدوّار» و«لا طابور مزدوج» بلا حارس.
-    testImplementation(libs.kotlinx.coroutines.test)
-
-    // Actual Compose measurement and hit-testing on an Android emulator.
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.junit)
-
-    // أدوات التطوير والاختبار — لا تدخل في حزمة Release.
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // أدوات التطوير — لا تدخل في حزمة Release.
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

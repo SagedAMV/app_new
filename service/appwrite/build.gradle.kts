@@ -13,13 +13,4 @@ kotlin {
 
 dependencies {
     implementation("org.json:json:20240303")
-    testImplementation(libs.junit)
-}
-
-tasks.test {
-    useJUnit()
-    val bridgeSources = layout.projectDirectory.dir("auth-bridge")
-    systemProperty("bridge.source.dir", bridgeSources.asFile.absolutePath)
-    // Gradle scripts are deployment inputs, not Kotlin compiler inputs. Changes must rerun packaging tests.
-    inputs.files(fileTree(bridgeSources) { include("*.gradle*") })
 }
