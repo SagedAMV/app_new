@@ -206,6 +206,15 @@ class AndroidCiTest(unittest.TestCase):
             ("Signer #1 certificate DN: CN=UniHub\nSigner #1 certificate SHA-256 digest:\n"
              "  " + bare + "\nSigner #1 public key SHA-256 digest: " + "f" * 64, ""),
             ("Signer #1 certificate SHA-256 digest: 73:6a:66:fc:" + "0" * 56, ""),
+            # التقرير الحقيقي لنسخة تجريبية موقّعة بـ v2 فقط (كما ظهر في CI فعلاً):
+            ("V2 Signer: certificate DN: CN=UniHub Test Debug, OU=UniHub, O=UniHub, C=US\n"
+             "V2 Signer: certificate SHA-256 digest: " + bare + "\n"
+             "V2 Signer: certificate SHA-1 digest: " + "a" * 40 + "\n"
+             "V2 Signer: certificate MD5 digest: " + "b" * 32 + "\n", ""),
+            # بصمة المفتاح العام تُذكر قبل بصمة الشهادة: لا يجوز اختيار الأولى.
+            ("V2 Signer: public key SHA-256 digest: " + "e" * 64 + "\n"
+             "V3 Signer: certificate DN: CN=UniHub Test Debug\n"
+             "V3 Signer: certificate SHA-256 digest: " + bare + "\n", ""),
         ]
         with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
             for stdout, stderr in reports:

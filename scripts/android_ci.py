@@ -67,14 +67,45 @@ def normalize_digest(value):
     return "".join(character for character in str(value).lower() if character in "0123456789abcdef")
 
 
-# "Signer #1 certificate SHA-256 digest: <hex>" across build-tools spellings: the separator
-# (colon, equals, spaces), the hyphen in SHA-256, and the stream all vary between releases,
-# so the digest is captured as the longest hex-ish run after the label and canonicalised.
-DIGEST_LINE = re.compile(
-    r"Signer #1[\s\S]{0,120}?\bcertificate\b[\s\S]{0,120}?\bSHA[-_ ]?256\b[\s\S]{0,60}?"
+# apksigner writes the same certificate under several labels depending on the build-tools
+# release and the signature scheme found in the APK: "Signer #1 certificate SHA-256 digest: …"
+# for v1, but "V2 Signer: certificate SHA-256 digest: …" for v2/v3 — and a report also lists
+# public-key and source-stamp digests, which Android never checks at install time. Only the
+# certificate line identifies the key, so it is matched by the "certificate … SHA-256" pair
+# and canonicalised instead of by one fixed label.
+CERTIFICATE_DIGEST = re.compile(r"\bSHA[-_ ]?256\b[^\n]{0,20}?([0-9a-fA-F:]{60,100})", re.IGNORECASE)
+# احتياط: بعض الإصدارات تكسر السطر بعد الوسم وتُدرج البصمة في السطر التالي.
+WRAPPED_DIGEST = re.compile(
+    r"(?:Signer #\d+|V\d+ Signer)[\s\S]{0,120}?\bcertificate\b[\s\S]{0,120}?\bSHA[-_ ]?256\b[\s\S]{0,60}?"
     r"([0-9a-fA-F:]{60,100})",
     re.IGNORECASE,
 )
+
+
+def certificate_digest_from_report(report):
+    """SHA-256 of the signing certificate named by apksigner, or None when unreported."""
+    standalone = None
+    for line in report.splitlines():
+        folded = line.lower()
+        if "certificate" not in folded or "public key" in folded or "source stamp" in folded:
+            continue
+        match = CERTIFICATE_DIGEST.search(line)
+        if match is None:
+            continue
+        digest = normalize_digest(match.group(1))
+        if len(digest) != 64:
+            continue
+        if "signer" in folded:
+            return digest
+        standalone = standalone or digest
+    if standalone is not None:
+        return standalone
+    match = WRAPPED_DIGEST.search(report)
+    if match is not None:
+        digest = normalize_digest(match.group(1))
+        if len(digest) == 64:
+            return digest
+    return None
 
 
 def apk_signer_digest(apksigner, apk):
@@ -90,14 +121,13 @@ def apk_signer_digest(apksigner, apk):
     report = "\n".join(
         part for part in (completed.stdout, completed.stderr) if isinstance(part, str) and part
     )
-    for match in DIGEST_LINE.finditer(report):
-        digest = normalize_digest(match.group(1))
-        if len(digest) == 64:
-            return digest
-    raise ValueError(
-        "apksigner did not report a SHA-256 certificate digest for signer #1. "
-        f"Report was: {report.strip()[:800] or '(empty)'}"
-    )
+    digest = certificate_digest_from_report(report)
+    if digest is None:
+        raise ValueError(
+            "apksigner did not report a SHA-256 certificate digest for signer #1. "
+            f"Report was: {report.strip()[:800] or '(empty)'}"
+        )
+    return digest
 
 
 def require_expected_signer(apksigner, apk, expected):
