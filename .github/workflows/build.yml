@@ -44,13 +44,19 @@ jobs:
           cache-read-only: false
 
       - name: Check build verification helpers
-        run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
+        run: python3 -m unittest discover -s verification -p 'test_*.py' -v
 
       # حارس نصوص الواجهة: كل تسمية ظاهرة أو رسالة خطأ للمستخدم ≤ 3 كلمات (اختصار يمنع
       # تجاوز النص في RTL). كان هذا الفحص موجوداً لكنه غير موصول بالبناء، فانحرفت نصوص
       # الإنتاج عن توقّعات الاختبارات ثلاث مرات دون أن يوقفه شيء.
       - name: Check UI label and error copy lengths
         run: python3 verification/check_ui_label_lengths.py
+
+      # حارس توقّعات اختبارات الجهاز: كل توقّع إيجابي (assertIsDisplayed/assertExists)
+      # يجب أن يكون نصّه موجوداً فعلاً في كود التطبيق. بدون ذلك لا يظهر انحراف النص إلا
+      # بعد إقلاع المحاكي (دقائق في CI) برسالة لا تسمّي النصّ المفقود إطلاقاً.
+      - name: Check device-test expectations against the shipped copy
+        run: python3 verification/check_device_test_expectations.py
 
       - name: Check Appwrite project boundaries
         run: python3 scripts/check_appwrite_migration.py
