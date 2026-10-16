@@ -61,7 +61,10 @@ class UserInputRulesTest {
     @Test
     fun lectureFormCatchesMissingStartAndReversedRange() {
         assertEquals("اسم المادة مطلوب", UserInputRules.lectureFormError(" ", "08:00", null))
-        assertEquals("حدد وقت بداية المحاضرة", UserInputRules.lectureFormError("Math", null, "10:00"))
+        // النصّ المعتمد في الإنتاج هو «حدد وقت البداية» (ثلاث كلمات) التزاماً بقاعدة
+        // اختصار نصوص الواجهة وأخطاء المستخدم في verification/check_ui_label_lengths.py؛
+        // كان الاختبار يطالب بصيغة أطول لم تعد موجودة، فأسقط خطوة اختبارات الوحدة كاملة.
+        assertEquals("حدد وقت البداية", UserInputRules.lectureFormError("Math", null, "10:00"))
         assertEquals(
             "وقت غير صالح",
             UserInputRules.lectureFormError("Math", "10:00", "08:00")
