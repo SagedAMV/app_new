@@ -91,8 +91,12 @@ class AppwriteStorageTransportTest {
         var listTimeout = -1
         var uploadTimeout = -1
         val network = Network { request ->
-            when (request.requestMethod) {
-                "GET" -> { listTimeout = request.readTimeout; json(JSONObject().put("files", JSONArray())) }
+            when {
+                // uploadFile يتحقق أولًا من وجود الملف عبر GET بلا معاملات استعلام (مسار
+                // "/files/{id}" مباشرة)؛ هذا طلب خفيف منفصل عن استعراض الصفحات، ويجب أن
+                // يُحاكى بردّ «غير موجود» (404) لا بقائمة ملفات فارغة لها بنية مختلفة.
+                request.requestMethod == "GET" && request.url.query.isNullOrEmpty() -> missing()
+                request.requestMethod == "GET" -> { listTimeout = request.readTimeout; json(JSONObject().put("files", JSONArray())) }
                 else -> { uploadTimeout = request.readTimeout
                     json(metadata(AppwriteFileProtocol.fileId("files/big.bin"), AppwriteFileProtocol.uploadName("files/big.bin"), big.size.toLong()), 201) }
             }
@@ -185,7 +189,12 @@ class AppwriteStorageTransportTest {
             }.exceptionOrNull()
             assertTrue(error is CancellationException)
             assertTrue(part.length() in 1..100_000)
-            assertTrue(network.requests.all { it.disconnected })
+            // طلب بحث الملف الأول اكتمل بنجاح كامل قبل الإلغاء (مجرد استعلام بيانات وصفية)،
+            // فيبقى مفتوحًا لإعادة الاستخدام (keep-alive) كبقية الطلبات الناجحة في هذا
+            // الملف. الطلب المُلغى فعليًا هو طلب التنزيل نفسه (الأخير) — ووحده يجب أن
+            // يُغلق قسرًا لأن قراءته توقفت في المنتصف بحالة غير معروفة للمقبس.
+            assertFalse(network.requests.dropLast(1).any { it.disconnected })
+            assertTrue(network.requests.last().disconnected)
         } finally { part.delete() }
     }
     @Test fun bucket404IsNotSilentlyTreatedAsAMissingFile() = runBlocking {
