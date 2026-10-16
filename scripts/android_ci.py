@@ -62,29 +62,74 @@ def annotation(level, title, message):
     print(f"::{level} title={escape(title).replace(',', '%2C')}::{escape(message)}")
 
 
-def verify(variant, require_signed=False, root=ROOT):
+def normalize_digest(value):
+    """Accept a SHA-256 digest with or without separators; compare one canonical form."""
+    return "".join(character for character in str(value).lower() if character in "0123456789abcdef")
+
+
+def apk_signer_digest(apksigner, apk):
+    """SHA-256 of the APK signing certificate, read from apksigner's own report."""
+    completed = subprocess.run(
+        [str(apksigner), "verify", "--print-certs", str(apk)], check=True, capture_output=True, text=True
+    )
+    match = re.search(r"Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F:]{64,95})", completed.stdout or "")
+    if match is None:
+        raise ValueError("apksigner did not report a SHA-256 certificate digest for signer #1")
+    digest = normalize_digest(match.group(1))
+    if len(digest) != 64:
+        raise ValueError("apksigner reported a malformed SHA-256 certificate digest")
+    return digest
+
+
+def require_expected_signer(apksigner, apk, expected):
+    """Fail loudly when the signing key slipped back to an ephemeral machine key.
+
+    Every GitHub Actions runner used to generate its own ~/.android/debug.keystore, so each
+    test APK was signed by a different certificate and Android refused to install it over the
+    previous one (INSTALL_FAILED_UPDATE_INCOMPATIBLE). Pinning the digest in CI keeps that
+    user-visible failure from shipping again.
+    """
+    wanted = normalize_digest(expected)
+    if len(wanted) != 64:
+        raise ValueError("The expected signer digest must be a SHA-256 certificate digest")
+    actual = apk_signer_digest(apksigner, apk)
+    if actual != wanted:
+        raise ValueError(
+            "The test APK was signed by a different key than the one committed in the repository"
+            f" (expected {wanted}, found {actual}). Devices cannot install an APK signed by a new"
+            " key over an installed one; check app/keystore/unihub-test.jks and its Gradle signing config."
+        )
+    return actual
+
+
+def verify(variant, require_signed=False, require_signer=None, root=ROOT):
     if variant not in ("debug", "release", "releaseFull"):
         raise ValueError(f"Unsupported build variant: {variant}")
     apk, version = apk_from_metadata(root / "app/build/outputs/apk" / variant)
     unsigned = apk.name.endswith("-unsigned.apk")
     if require_signed and unsigned:
         raise ValueError("Release APK is unsigned. Configure keystore.properties before building a signed release.")
+    if require_signer and unsigned:
+        raise ValueError("An unsigned APK has no signing certificate to verify")
     tools = build_tools(sdk_directory(root))
     subprocess.run([str(tools / "zipalign"), "-c", "4", str(apk)], check=True)
     if not unsigned:
         # A file with a signed name but a bad/missing signature must fail, not fall back.
         subprocess.run([str(tools / "apksigner"), "verify", str(apk)], check=True)
+    signer = require_expected_signer(tools / "apksigner", apk, require_signer) if require_signer else ""
     digest = hashlib.sha256()
     with apk.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     status = "unsigned (sign before installing)" if unsigned else "signed and verified"
-    print(f"APK: {apk.relative_to(root)}\nVersion: {version}\nStatus: {status}\nSHA-256: {digest.hexdigest()}")
-    annotation("notice", f"{variant} APK", status)
+    print(f"APK: {apk.relative_to(root)}\nVersion: {version}\nStatus: {status}\nSHA-256: {digest.hexdigest()}"
+          + (f"\nSigner certificate SHA-256: {signer}" if signer else ""))
+    annotation("notice", f"{variant} APK", f"{status} (signer {signer})" if signer else status)
     outputs = os.environ.get("GITHUB_OUTPUT")
     if outputs:
         with Path(outputs).open("a", encoding="utf-8") as stream:
-            stream.write(f"path={apk.relative_to(root)}\nsigned={str(not unsigned).lower()}\nsha256={digest.hexdigest()}\n")
+            stream.write(f"path={apk.relative_to(root)}\nsigned={str(not unsigned).lower()}\n"
+                         f"sha256={digest.hexdigest()}\nsigner={signer}\n")
     return apk
 
 
@@ -213,13 +258,15 @@ def main():
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("variant", choices=("debug", "release", "releaseFull"))
     verify_parser.add_argument("--require-signed", action="store_true")
+    verify_parser.add_argument("--require-signer", default=None, metavar="SHA256",
+                               help="Fail unless the APK signer certificate digest matches this value")
     report_parser = commands.add_parser("report")
     report_parser.add_argument("--instrumentation", action="store_true")
     report_parser.add_argument("--minimum-tests", type=int, default=1)
     args = parser.parse_args()
     try:
         if args.command == "verify":
-            verify(args.variant, args.require_signed)
+            verify(args.variant, args.require_signed, args.require_signer)
         else:
             report(instrumentation=args.instrumentation, minimum_tests=args.minimum_tests)
     except (ValueError, OSError, ET.ParseError, subprocess.CalledProcessError) as error:

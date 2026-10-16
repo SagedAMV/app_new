@@ -4,11 +4,14 @@ set -euo pipefail
 
 adb_timeout="${ANDROID_UI_ADB_TIMEOUT_SECONDS:-20}"
 test_timeout="${ANDROID_UI_TEST_TIMEOUT_SECONDS:-480}"
-# Grace period between the launcher smoke start and the "still alive" check, and the
+# Grace period between the launcher smoke start and the "still alive" check, plus the
 # number of liveness probes after it (the app must survive a cold start, not just start).
-smoke_grace="${ANDROID_UI_SMOKE_GRACE_SECONDS:-8}"
-smoke_probes="${ANDROID_UI_SMOKE_PROBES:-3}"
-for duration in "$adb_timeout" "$test_timeout" "$smoke_grace" "$smoke_probes"; do
+# Defaults stay short so this script's own regression tests remain fast; real runs still
+# require the process to be alive seconds after the system launched it.
+smoke_grace="${ANDROID_UI_SMOKE_GRACE_SECONDS:-3}"
+smoke_probes="${ANDROID_UI_SMOKE_PROBES:-2}"
+smoke_interval="${ANDROID_UI_SMOKE_PROBE_SECONDS:-1}"
+for duration in "$adb_timeout" "$test_timeout" "$smoke_grace" "$smoke_probes" "$smoke_interval"; do
   if [[ ! "$duration" =~ ^[1-9][0-9]*$ ]]; then
     echo "::error title=Android UI configuration::Timeouts must be positive integer seconds"
     exit 2
@@ -43,6 +46,21 @@ fi
 launch_status=0
 echo "::notice title=Android launch smoke::Starting the installed build from the system launcher"
 : > ui-launch-smoke.log
+# نُثبّت الملف نفسه الذي سيُنشر (app-debug.apk من مخرجات البناء) ثم نفتحه: تثبيتٌ يفشل
+# أو عملية تموت بعد الإقلاع = النسخة التي ستنزل للمستخدم لا تعمل، فلا يُنشر شيء.
+debug_apk="$(python3 - <<'PY' 2>/dev/null || true
+import json, pathlib
+meta = pathlib.Path("app/build/outputs/apk/debug/output-metadata.json")
+print(meta.parent / json.loads(meta.read_text(encoding="utf-8"))["elements"][0]["outputFile"])
+PY
+)"
+if [[ -z "$debug_apk" || ! -f "$debug_apk" ]]; then
+  echo "::error title=Android launch smoke::The debug APK to publish was not found in the build outputs" | tee -a ui-launch-smoke.log
+  launch_status=1
+elif ! timeout --kill-after=5s "${adb_timeout}s" adb install -r -t "$debug_apk" >>ui-launch-smoke.log 2>&1; then
+  echo "::error title=Android launch smoke::The publishable APK ($debug_apk) could not be installed on the device" | tee -a ui-launch-smoke.log
+  launch_status=1
+fi
 timeout --kill-after=5s "${adb_timeout}s" adb logcat -c >/dev/null 2>&1 || true
 timeout --kill-after=5s "${adb_timeout}s" adb shell am force-stop com.unihub.app >>ui-launch-smoke.log 2>&1 || true
 if ! timeout --kill-after=5s "${adb_timeout}s" adb shell am start -W -n com.unihub.app/.MainActivity >>ui-launch-smoke.log 2>&1; then
@@ -56,7 +74,7 @@ for _ in $(seq 1 "${smoke_probes}"); do
     break
   fi
   alive=""
-  sleep 2
+  sleep "${smoke_interval}"
 done
 if [[ -z "$alive" ]]; then
   echo "::error title=Android launch smoke::The installed build is not running after its cold start; the APK does not work on a device" | tee -a ui-launch-smoke.log
