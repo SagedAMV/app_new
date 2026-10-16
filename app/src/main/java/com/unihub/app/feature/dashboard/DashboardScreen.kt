@@ -253,7 +253,7 @@ fun DashboardScreen(
                     EmptyState(
                         compact = true,
                         icon = Icons.Outlined.CheckCircle,
-                        title = "لا مهام مستحقة الآن",
+                        title = "لا مهام اليوم",
                         subtitle = "كل شيء تحت السيطرة — أضف مهمة جديدة من تبويب المهام"
                     )
                 } else {

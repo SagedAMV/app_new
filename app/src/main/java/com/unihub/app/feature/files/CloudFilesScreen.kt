@@ -385,7 +385,7 @@ fun CloudFilesScreen(
     }
     if (newFolderOpen) {
         CloudRenameSheet(
-            title = if (newFolderParent == null) "مجلد جديد في السحابة" else "مجلد فرعي جديد",
+            title = if (newFolderParent == null) "مجلد جديد" else "مجلد فرعي",
             initialName = "",
             fieldLabel = "اسم المجلد",
             // إصلاح: اللوح كان يُغلق قبل رد الخادم؛ عند الفشل (انقطاع/اسم مكرر) يضيع الإدخال
@@ -401,7 +401,7 @@ fun CloudFilesScreen(
         CloudRenameSheet(
             title = "إعادة تسمية الملف",
             initialName = file.fullDisplayName,
-            fieldLabel = "الاسم الجديد (مع الامتداد)",
+            fieldLabel = "الاسم الجديد",
             onSave = { newName, reportError ->
                 viewModel.renameFile(file.remoteKey, newName) { error ->
                     if (error == null) renameFileTarget = null else reportError(error)
@@ -445,7 +445,7 @@ fun CloudFilesScreen(
     }
     deleteFolderTarget?.let { folder ->
         ConfirmDialog(
-            title = "حذف المجلد من السحابة؟",
+            title = "حذف المجلد؟",
             message = "سيُحذف المجلد «${folder.name}» من السحابة. النسخ المحلية ستبقى.",
             confirmLabel = "حذف المجلد",
             onConfirm = { viewModel.deleteFolder(folder); deleteFolderTarget = null },
@@ -501,13 +501,13 @@ fun CloudFilesScreen(
                     if (!canModifyPerm) add("التعديل/الحذف")
                 }.joinToString(" و")
                 Text(
-                    "تنبيه صلاحيات الحساب: ($blockedLabels) موقوف حالياً من قِبل المشرف",
+                    "صلاحيات موقوفة: $blockedLabels",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
             if (scanState.phase == CloudScanPhase.SCANNING) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (localVerification.active) Text("جارٍ التحقق من النسخ المحلية (${localVerification.completed}/${localVerification.total}): ${localVerification.fileName}",
+            if (localVerification.active) Text("فحص محلي ${localVerification.completed}/${localVerification.total}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             localVerification.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             AnimatedVisibility(
@@ -623,13 +623,13 @@ fun CloudFilesScreen(
                             contentDescription = null, modifier = Modifier.size(34.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(when {
-                            missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "لا توجد ملفات للتنزيل — كل المحتوى على جهازك"
-                            levelKey != null -> "لا توجد ملفات ضمن هذا العرض"
-                            scanState.phase == CloudScanPhase.SCANNING -> "جارٍ التحقق من محتويات الخادم…"
-                            scanState.phase == CloudScanPhase.EMPTY -> "لا توجد ملفات أو مجلدات في السحابة"
-                            scanState.phase == CloudScanPhase.ERROR -> "تعذّر التحقق — ليس معنى ذلك أن السحابة فارغة"
-                            scanState.phase == CloudScanPhase.BUSY -> "النقل جارٍ؛ يمكنك تصفح القائمة المحفوظة أو إيقاف النقل"
-                            else -> "لا توجد قائمة محفوظة؛ اضغط فحص"
+                            missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "كل الملفات محلية"
+                            levelKey != null -> "لا ملفات هنا"
+                            scanState.phase == CloudScanPhase.SCANNING -> "جارٍ فحص السحابة"
+                            scanState.phase == CloudScanPhase.EMPTY -> "السحابة فارغة"
+                            scanState.phase == CloudScanPhase.ERROR -> "تعذّر فحص السحابة"
+                            scanState.phase == CloudScanPhase.BUSY -> "النقل جارٍ بالخلفية"
+                            else -> "اضغط للفحص"
                         }, style = MaterialTheme.typography.bodyMedium)
                         if (scanState.phase == CloudScanPhase.ERROR || scanState.phase == CloudScanPhase.IDLE) {
                             TextButton(onClick = onRefresh, enabled = isOnline) { Text("إعادة المحاولة") }
@@ -676,9 +676,9 @@ fun CloudFilesScreen(
                             Icon(Icons.Filled.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 6.dp)) {
                                 Text(folder.name, fontWeight = FontWeight.SemiBold)
-                                Text("${all.size} ملف • ${Formatters.fileSize(all.sumOf { it.size })} • ${pending.size} غير منزَّل" + if (verifying > 0) " • $verifying قيد المقارنة" else "",
+                                Text("${all.size} ملف • ${pending.size} غير منزَّل" + if (verifying > 0) " • $verifying قيد المقارنة" else "",
                                     style = MaterialTheme.typography.bodySmall)
-                                Text("افتح المجلد للاختيار والتنزيل", style = MaterialTheme.typography.labelSmall)
+                                Text("افتح للتنزيل", style = MaterialTheme.typography.labelSmall)
                             }
                             // أيقونة إجراءات موحّدة مع صفوف الملفات: ثلاث نقاط بدل قلم رصاص
                             IconButton(onClick = { folderMenu = folder }) {
@@ -756,7 +756,7 @@ fun CloudFilesScreen(
                 Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.End) {
                     Button(onClick = { requestFiles = selected }, enabled = isOnline && canChoose && canDownloadPerm) {
                         Icon(Icons.Filled.CloudDownload, contentDescription = null)
-                        Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد (${selected.size})")
+                        Spacer(Modifier.width(8.dp)); Text("تنزيل المحدد")
                     }
                 }
             }
@@ -827,12 +827,12 @@ private fun CloudFolderMenuSheet(
         actions = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            CloudMenuActionRow(icon = Icons.Filled.CreateNewFolder, text = "إنشاء مجلد فرعي هنا", enabled = canRename, onClick = onCreateSubfolder)
-            CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل المجلد إلى الجهاز", enabled = canDownload, onClick = onDownload)
+            CloudMenuActionRow(icon = Icons.Filled.CreateNewFolder, text = "مجلد فرعي", enabled = canRename, onClick = onCreateSubfolder)
+            CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل المجلد", enabled = canDownload, onClick = onDownload)
             CloudMenuActionRow(icon = Icons.Filled.Edit, text = "إعادة تسمية المجلد", enabled = canRename, onClick = onRename)
-            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد من السحابة", enabled = deleteBlockReason == null && canModify, danger = true, onClick = onDelete)
+            CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف المجلد", enabled = deleteBlockReason == null && canModify, danger = true, onClick = onDelete)
             if (!folder.key.startsWith("folder:")) Text(
-                "هذا المجلد مبني على مسار التخزين أو على مجلد محلي؛ إعادة التسمية متاحة للمجلدات التي أنشأها التطبيق في السحابة",
+                "مجلد محلي",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp)
@@ -989,19 +989,19 @@ private fun CloudMoveSheet(
         }
         when {
             onLegacyLevel -> Text(
-                "مجلد مرتبط بالمكتبة المحلية؛ لا يُستخدم وجهةً للنقل داخل السحابة",
+                "مجلد محلي",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )
             sameAsCurrent -> Text(
-                "الملفات موجودة في هذا المجلد بالفعل",
+                "الملفات موجودة هنا",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (children.isEmpty()) {
             Text(
-                "لا مجلدات فرعية هنا",
+                "لا مجلدات فرعية",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 6.dp)
@@ -1029,7 +1029,7 @@ private fun CloudMoveSheet(
                         Column(Modifier.weight(1f)) {
                             Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (folder.key.startsWith("legacy:")) Text(
-                                "مرتبط بمجلد محلي — للملاحة فقط",
+                                "للملاحة فقط",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1096,12 +1096,12 @@ fun CloudTransferProgressCard(
                 if (state.bytesTotal > 0) Text("${Formatters.fileSize(state.bytesDone)} / ${Formatters.fileSize(state.bytesTotal)}",
                     style = MaterialTheme.typography.bodySmall)
             } else if (hasQueue) {
-                Text("النقل في الخلفية مستمر — يمكنك إغلاق التطبيق", style = MaterialTheme.typography.bodyMedium)
+                Text("النقل مستمر بالخلفية", style = MaterialTheme.typography.bodyMedium)
             }
             if (hasQueue) {
                 Text(queue.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 if (!online && queue.pending.isNotEmpty()) {
-                    Text("بانتظار عودة الشبكة — سيستأنف النظام من حيث توقف دون إعادة ما اكتمل",
+                    Text("بانتظار الشبكة",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
                 queue.pending.forEach { batch ->
@@ -1109,13 +1109,13 @@ fun CloudTransferProgressCard(
                     Text("$verb • ${batch.title} (${batch.itemCount})", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (batch.lastError.isNotBlank()) {
-                        Text("سبب الانتظار: ${batch.lastError}", style = MaterialTheme.typography.bodySmall,
+                        Text("الانتظار: ${batch.lastError}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
                     }
                 }
                 queue.failed.forEach { batch ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("تعذّر: ${batch.title} — ${batch.lastError}", style = MaterialTheme.typography.bodySmall,
+                        Text("فشل النقل", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                         // استثناء يقبله المستخدم يُخفى بيدِه، فلا يبقى يعاد ولا يُنسى خِفية
                         TextButton(onClick = { onDismissFailed(batch.id) }) { Text("إخفاء") }
@@ -1128,7 +1128,7 @@ fun CloudTransferProgressCard(
                 if (hasQueue) {
                     if (queue.paused) TextButton(onClick = onResume) { Text("استئناف") }
                     else TextButton(onClick = onPause) { Text("إيقاف مؤقت") }
-                    if (queue.pending.isNotEmpty()) TextButton(onClick = onDropPending) { Text("إلغاء ما لم يبدأ") }
+                    if (queue.pending.isNotEmpty()) TextButton(onClick = onDropPending) { Text("إلغاء الانتظار") }
                     if (queue.failed.isNotEmpty()) TextButton(onClick = onRetryFailed) { Text("إعادة المحاولة") }
                 }
             }

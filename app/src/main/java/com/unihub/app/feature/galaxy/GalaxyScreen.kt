@@ -118,7 +118,7 @@ internal fun GalaxyContent(
                 Text("جارٍ تحميل المجلدات…", color = Color(0xFFE0E5E1))
             }
             GalaxyUiState.Error -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("تعذّر تحميل مجلدات المجرة", color = Color(0xFFE0E5E1), textAlign = TextAlign.Center)
+                Text("تعذّر تحميل المجلدات", color = Color(0xFFE0E5E1), textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = onRetry) { Text("إعادة المحاولة") }
             }
@@ -126,7 +126,7 @@ internal fun GalaxyContent(
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     SolarCore(pulse = { sunPulse(backgroundClock.value) })
                     Spacer(Modifier.height(20.dp))
-                    Text("لا توجد مجلدات بعد", color = Color(0xFFE0E5E1), style = MaterialTheme.typography.titleMedium)
+                    Text("لا مجلدات بعد", color = Color(0xFFE0E5E1), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(6.dp))
                     Text("أنشئ مجلدات لموادك من شاشة الملفات، وستظهر ككواكب حول جامعتي.",
                         color = Color(0xFFA9B4AD), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
@@ -220,7 +220,7 @@ internal fun GalaxyUniverse(
                     )
                 }, contentAlignment = AbsoluteAlignment.TopLeft) {
                 Canvas(Modifier.matchParentSize().testTag("galaxy-canvas").semantics {
-                    contentDescription = "خريطة المجلدات، ${scene.nodes.size} مجلد"
+                    contentDescription = "خريطة المجلدات"
                 }) {
                     val projection = viewport.projection(orbitRadians(clock.value))
                     val sun = projection.project(GalaxyPoint.ZERO).offset()
@@ -366,7 +366,7 @@ private fun GalaxyFolderPicker(nodes: List<GalaxySceneNode>, onDismiss: () -> Un
                         modifier = Modifier.clickable { onOpen(node.placement.folder.folderId) })
                 }
             }
-            if (matches.isEmpty()) Text("لا توجد مجلدات مطابقة", Modifier.padding(top = 12.dp))
+            if (matches.isEmpty()) Text("لا نتائج", Modifier.padding(top = 12.dp))
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
 }

@@ -104,7 +104,7 @@ private fun NotificationPermissionExplanation(onRequest: () -> Unit) {
     val dismiss = { preferences.edit().putBoolean("notifications_explained", true).apply(); show = false }
     if (show) AlertDialog(
         onDismissRequest = dismiss,
-        title = { Text("هل تريد تنبيهات التطبيق؟") },
+        title = { Text("التنبيهات؟") },
         text = { Text("الإشعارات تفيد في التذكيرات وتقدم نقل الملفات. يمكنك رفضها والاستمرار، أو تفعيلها لاحقًا من إعدادات النظام.") },
         confirmButton = { TextButton(onClick = { dismiss(); onRequest() }) { Text("السماح بالإشعارات") } },
         dismissButton = { TextButton(onClick = dismiss) { Text("لاحقًا") } }

@@ -205,7 +205,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp),
-                    placeholder = { Text("ابحث في الملاحظات، البطاقات، الجداول…") },
+                    placeholder = { Text("ابحث في الملاحظات…") },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     trailingIcon = if (searchQuery.isNotEmpty()) {
                         {
@@ -1217,7 +1217,7 @@ private fun NoteWorkspaceDialog(
                                                 decorationBox = { inner ->
                                                     if (summary.isEmpty()) {
                                                         Text(
-                                                            "خلاصة الملاحظة في جملتين…",
+                                                            "خلاصة بجملتين…",
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             color = Color(0xFF94A3B8)
                                                         )

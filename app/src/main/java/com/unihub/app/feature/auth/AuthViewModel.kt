@@ -40,12 +40,12 @@ class AuthViewModel @Inject constructor(private val authManager: CloudAuthManage
         viewModelScope.launch {
             try {
                 authManager.login(email, password).onFailure {
-                    _errorMessage.value = it.message ?: "تعذّر تسجيل الدخول إلى Appwrite"
+                    _errorMessage.value = "تعذّر تسجيل الدخول"
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _errorMessage.value = "تعذّر الاتصال بمشروع المستخدمين"
+                _errorMessage.value = "تعذّر اتصال المستخدمين"
             } finally { submitting.value = false }
         }
     }

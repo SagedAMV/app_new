@@ -20,7 +20,7 @@ enum class SettingsCategory(
 ) {
     USER_MANAGEMENT(
         id = "USER_MANAGEMENT",
-        title = "إعدادات المستخدمين وطلبات الأجهزة (للمشرف)",
+        title = "إدارة المستخدمين",
         defaultSubtitle = "الحساب الحالي، إدارة المستخدمين، الصلاحيات، وطلبات الأجهزة"
     ),
     APPEARANCE(

@@ -63,7 +63,7 @@ class CloudFileNotificationHelper @Inject constructor(
         val expandedLines: List<String>
 
         if (files.size == 1) {
-            title = "ملف جديد متاح على الخادم"
+            title = "ملف سحابي جديد"
             shortText = "${first.fullDisplayName} (${firstSize})"
             expandedLines = listOf(
                 "الاسم: ${first.fullDisplayName}",
@@ -74,7 +74,7 @@ class CloudFileNotificationHelper @Inject constructor(
             val totalBytes = files.sumOf { it.size }
             val totalFormatted = Formatters.fileSize(totalBytes)
             val othersCount = files.size - 1
-            title = "توجد ${Formatters.fileCountLabel(files.size)} جديدة على الخادم ($totalFormatted)"
+            title = "${Formatters.fileCountLabel(files.size)} جديدة"
             shortText = "${first.fullDisplayName} ($firstSize) و $othersCount أخرى"
             expandedLines = files.take(6).map { file ->
                 "• ${file.fullDisplayName} — ${Formatters.fileSize(file.size)}"

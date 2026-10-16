@@ -88,7 +88,7 @@ class ShareInbox @Inject constructor(
         }
         val remainingSlots = (MAX_INCOMING_FILES - existingItems.size).coerceAtLeast(0)
         if (uris.size > remainingSlots) {
-            rejectedMessages += "يمكن الاحتفاظ بما يصل إلى $MAX_INCOMING_FILES ملفًا في صندوق المشاركة؛ ضع الملفات الحالية أو احذفها أولًا"
+            rejectedMessages += "حد الملفات مكتمل"
         }
 
         uris.take(remainingSlots).forEach { uri ->
@@ -96,7 +96,7 @@ class ShareInbox @Inject constructor(
                 val imported = fileStorage.import(uri, "*/*")
                 if (acceptedBytes > MAX_INCOMING_TOTAL_BYTES - imported.size) {
                     fileStorage.delete(imported.absolutePath)
-                    throw IOException("تجاوزت الملفات المشتركة الحد الإجمالي البالغ 512 م.ب")
+                    throw IOException("تجاوز حجم الملفات")
                 }
                 val item = InboxItem(
                     id = java.util.UUID.randomUUID().toString(),
@@ -113,13 +113,13 @@ class ShareInbox @Inject constructor(
             }.onFailure { error ->
                 rejectedMessages += when (error) {
                     is InputValidationException -> error.error.message
-                    is SecurityException -> "انتهى إذن الوصول لأحد الملفات — أعد مشاركته"
-                    is IOException -> if (error.message?.startsWith("تجاوزت الملفات المشتركة") == true) {
-                        error.message ?: "تجاوزت الملفات المشتركة الحد الإجمالي"
+                    is SecurityException -> "أعد مشاركة الملف"
+                    is IOException -> if (error.message?.startsWith("تجاوز حجم الملفات") == true) {
+                        "تجاوز حجم الملفات"
                     } else {
-                        "تعذّرت قراءة أحد الملفات المشتركة"
+                        "تعذّرت قراءة الملف"
                     }
-                    else -> "تعذّر حفظ أحد الملفات المشتركة"
+                    else -> "تعذّر حفظ الملف"
                 }
                 Log.w(TAG, "رفض ملف وارد من المشاركة", error)
             }

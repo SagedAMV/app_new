@@ -24,8 +24,8 @@ import javax.net.ssl.SSLException
 object CloudFailureMessages {
 
     // ── المعجم المعتمد: كل ما يجوز أن يراه المستخدم عند العطل ──
-    const val GENERIC = "تعذّر الإتمام، تحقق من الاتصال"
-    const val OFFLINE = "لا إنترنت، سيُستأنف تلقائياً"
+    const val GENERIC = "تعذّر الاتصال"
+    const val OFFLINE = "لا إنترنت"
     const val INTERRUPTED = "توقف، سيُستأنف"
     const val UNREACHABLE = "تعذّر الوصول للسحابة"
     const val TIMEOUT = "انتهت المهلة"
@@ -35,8 +35,8 @@ object CloudFailureMessages {
     const val FOLDER_ACCESS = "تعذّر الوصول للمجلد"
     const val NO_SPACE = "المساحة غير كافية"
     const val SESSION = "انتهت الصلاحية"
-    const val PERMISSION_DENIED = "ليست لديك صلاحية لهذه العملية"
-    const val GONE_REMOTE = "الملف غير موجود بالسحابة"
+    const val PERMISSION_DENIED = "إجراء غير مسموح"
+    const val GONE_REMOTE = "الملف غير موجود"
     const val CONFLICT = "تعارض البيانات"
     const val TOO_BIG = "الملف كبير جداً"
     const val THROTTLED = "محاولات كثيرة، انتظر"

@@ -48,8 +48,8 @@ class CloudScanController<T>(
                             _state.value = CloudScanState(
                                 phase = if (files == 0 && folders == 0) CloudScanPhase.EMPTY else CloudScanPhase.READY,
                                 checkedAt = System.currentTimeMillis(), serverFileCount = files, serverFolderCount = folders,
-                                message = if (files == 0 && folders == 0) "لا توجد ملفات أو مجلدات في السحابة"
-                                    else "$folders مجلد • $files ملف على الخادم"
+                                message = if (files == 0 && folders == 0) "السحابة فارغة"
+                                    else "$folders مجلد • $files ملف"
                             )
                         },
                         onFailure = { error ->
@@ -63,7 +63,7 @@ class CloudScanController<T>(
                 } finally {
                     // الإلغاء أو أي استثناء غير متوقع لا يترك شاشة في SCANNING.
                     if (_state.value.phase == CloudScanPhase.SCANNING) {
-                        _state.value = before.copy(phase = CloudScanPhase.ERROR, message = "أُوقف الفحص؛ يمكنك إعادة المحاولة")
+                        _state.value = before.copy(phase = CloudScanPhase.ERROR, message = "الفحص متوقف")
                     }
                 }
             }.also { active = it }

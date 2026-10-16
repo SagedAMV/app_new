@@ -63,11 +63,11 @@ class UserInputRulesTest {
         assertEquals("اسم المادة مطلوب", UserInputRules.lectureFormError(" ", "08:00", null))
         assertEquals("حدد وقت بداية المحاضرة", UserInputRules.lectureFormError("Math", null, "10:00"))
         assertEquals(
-            "وقت النهاية يجب أن يكون بعد وقت البداية",
+            "وقت غير صالح",
             UserInputRules.lectureFormError("Math", "10:00", "08:00")
         )
         assertEquals(
-            "وقت النهاية يجب أن يكون بعد وقت البداية",
+            "وقت غير صالح",
             UserInputRules.lectureFormError("Math", "10:00", "10:00")
         )
         assertNull(UserInputRules.lectureFormError("Math", "08:00", "10:00"))

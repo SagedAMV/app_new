@@ -488,7 +488,7 @@ private fun CaptureContent(
             }) {
                 Icon(
                     Icons.Filled.FlipCameraAndroid,
-                    contentDescription = "تبديل الكاميرا الأمامية/الخلفية",
+                    contentDescription = "تبديل الكاميرا",
                     tint = Color.White
                 )
             }
@@ -710,7 +710,7 @@ private fun ReviewCapturesContent(
                     )
                 }
                 Text(
-                    text = "مراجعة الصور (${shots.size})",
+                    text = "مراجعة الصور",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
@@ -836,7 +836,7 @@ private fun ReviewCapturesContent(
                     ) {
                         Text(
                             if (shots.size == 1) "إضافة المرفق"
-                            else "إضافة المرفقات (${shots.size})"
+                            else "إضافة مرفقات"
                         )
                     }
                 }

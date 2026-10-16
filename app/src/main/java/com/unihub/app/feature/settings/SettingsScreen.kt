@@ -820,7 +820,7 @@ private fun AutoBackupCategoryContent(
                             if (customDays != null) {
                                 viewModel.setIntervalDays(customDays)
                             } else {
-                                viewModel.messenger.notifyError("اكتب عدد الأيام في الخانة أولاً (1-365)")
+                                viewModel.messenger.notifyError("أدخل عدد الأيام")
                             }
                         }
                     }
@@ -833,7 +833,7 @@ private fun AutoBackupCategoryContent(
                 exit = shrinkVertically(tween(200)) + fadeOut(tween(200))
             ) {
                 Field(
-                    label = "عدد الأيام المخصص (1-365)",
+                    label = "أيام مخصصة",
                     value = autoBackup?.customDaysInput.orEmpty(),
                     onValueChange = viewModel::setCustomDaysInput,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)

@@ -95,11 +95,8 @@ class ShareReceiverActivity : ComponentActivity() {
             try {
                 val result = shareInbox.ingest(uris)
                 if (result.rejectedMessages.isNotEmpty()) {
-                    val summary = buildString {
-                        if (result.accepted > 0) append("تم حفظ ${result.accepted} ملف. ")
-                        append(result.rejectedMessages.distinct().take(2).joinToString("؛ "))
-                        if (result.rejectedMessages.size > 2) append("؛ وبعض الملفات الأخرى لم تُقبل")
-                    }
+                    val summary = if (result.accepted > 0) "استيراد جزئي"
+                    else result.rejectedMessages.firstOrNull() ?: "تعذّر الاستيراد"
                     Toast.makeText(this@ShareReceiverActivity, summary, Toast.LENGTH_LONG).show()
                 } else if (result.accepted > 0) {
                     Toast.makeText(this@ShareReceiverActivity, "تمت إضافة ${result.accepted} ملف إلى صندوق المشاركة", Toast.LENGTH_SHORT).show()
@@ -125,7 +122,7 @@ class ShareReceiverActivity : ComponentActivity() {
 
                 AlertDialog(
                     onDismissRequest = { finish() },
-                    title = { Text("هل تريد استيراد نسخة؟") },
+                    title = { Text("استيراد نسخة؟") },
                     text = {
                         when (val current = phase) {
                             ImportPhase.Asking -> Text(

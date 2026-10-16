@@ -123,12 +123,12 @@ class CloudFilesViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                messenger.notifyError("تعذّر حفظ طلب النقل؛ لم يبدأ النقل")
+                messenger.notifyError("تعذّر حفظ النقل")
                 return@launch
             }
 
             if (!scheduler.enqueueTransfers()) {
-                messenger.notifyError("حُفظ طلب النقل، لكن تعذّر تشغيله الآن؛ افتح شاشة السحابة لإعادة المحاولة")
+                messenger.notifyError("تعذّر بدء النقل")
                 return@launch
             }
             // تعذّر نشر إشعار النظام لا يلغي النقل المحفوظ أو العامل المجدول.

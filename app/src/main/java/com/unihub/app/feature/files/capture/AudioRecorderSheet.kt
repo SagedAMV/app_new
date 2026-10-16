@@ -524,7 +524,7 @@ private fun RecordingControls(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Stop,
-                        contentDescription = "إنهاء التسجيل والانتقال للمعاينة",
+                        contentDescription = "إنهاء التسجيل",
                         tint = MaterialTheme.colorScheme.onError,
                         modifier = Modifier.size(36.dp)
                     )

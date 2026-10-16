@@ -367,7 +367,7 @@ fun FilesScreen(
                             if (currentFolder != null) IconButton(onClick = {
                                 currentFolder?.let { viewModel.previewFolderUpload(it.id, it.name) }
                             }, enabled = !cloudTransfer.active) {
-                                Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المجلد إلى السحابة")
+                                Icon(Icons.Filled.CloudUpload, contentDescription = "رفع للسحابة")
                             }
                             GlowingCloudTopBarButton(
                                 newFilesCount = availableRemoteFiles.size,
@@ -443,7 +443,7 @@ fun FilesScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
-                            placeholder = { Text("ابحث في هذا المجلد…") },
+                            placeholder = { Text("ابحث هنا…") },
                             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                             singleLine = true,
                             shape = MaterialTheme.shapes.small
@@ -809,7 +809,7 @@ private fun FilesFloatingActions(
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.DriveFileMove,
-                                contentDescription = "الملفات الواردة عبر المشاركة"
+                                contentDescription = "ملفات واردة"
                             )
                         }
                     }
@@ -860,7 +860,7 @@ private fun InboxPlacementBanner(
                 modifier = Modifier.weight(1f)
             )
             FilledTonalButton(onClick = onPlace) {
-                Text("نقل إلى هذا المجلد")
+                Text("نقل للمجلد")
             }
         }
     }
@@ -896,7 +896,7 @@ private fun InboxSheet(
     onRemove: (InboxItem) -> Unit
 ) {
     AppSheet(
-        title = "الملفات الواردة عبر المشاركة",
+        title = "ملفات واردة",
         onDismiss = onDismiss,
         actions = {
             TextButton(onClick = onDismiss) { Text("إغلاق") }
@@ -1378,7 +1378,7 @@ private fun SelectionBar(
                 }
             }
             IconButton(onClick = onUpload, enabled = uploadEnabled) {
-                Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المحدد إلى السحابة", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Filled.CloudUpload, contentDescription = "رفع المحدد", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onShare) {
                 Icon(
@@ -1455,7 +1455,7 @@ private fun FolderContextMenu(
                         .fillMaxWidth()
                         .reveal("menu_upload", 1, null, RevealStyle.File)
                 ) {
-                    Text("رفع المجلد إلى السحابة")
+                    Text("رفع للسحابة")
                 }
                 TextButton(
                     onClick = { onRename(folder) },
@@ -1552,12 +1552,12 @@ private fun MoveToFolderSheet(
 
         when {
             onBlockedLevel -> Text(
-                "لا يمكن نقل المجلد داخل نفسه أو داخل أحد فروعه",
+                "نقل غير مسموح",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )
             sameAsSource -> Text(
-                "العناصر موجودة في هذا المجلد بالفعل",
+                "العناصر موجودة هنا",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1584,7 +1584,7 @@ private fun MoveToFolderSheet(
             }
             if (children.isEmpty()) {
                 Text(
-                    "لا مجلدات فرعية هنا",
+                    "لا مجلدات فرعية",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 6.dp)

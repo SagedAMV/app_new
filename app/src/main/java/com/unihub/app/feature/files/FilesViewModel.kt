@@ -182,7 +182,7 @@ class FilesViewModel @Inject constructor(
     fun previewSelectedUpload(files: List<FileEntity>) {
         viewModelScope.launch {
             CloudAuthRules.checkPermission(authManager.currentAuthenticatedUser(), AuthPermission.UPLOAD).onFailure {
-                messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
+                messenger.notifyError(CloudFailureMessages.or(it, "رفع غير مسموح"))
                 return@launch
             }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(
@@ -193,7 +193,7 @@ class FilesViewModel @Inject constructor(
     fun previewFolderUpload(id: Long, name: String) {
         viewModelScope.launch {
             CloudAuthRules.checkPermission(authManager.currentAuthenticatedUser(), AuthPermission.UPLOAD).onFailure {
-                messenger.notifyError(CloudFailureMessages.or(it, "ليس لديك صلاحية الرفع إلى السحابة"))
+                messenger.notifyError(CloudFailureMessages.or(it, "رفع غير مسموح"))
                 return@launch
             }
             _uploadPlan.value = cloudSyncManager.prepareUploadPlan(
@@ -223,13 +223,13 @@ class FilesViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                messenger.notifyError("تعذّر حفظ طلب الرفع؛ لم يبدأ النقل")
+                messenger.notifyError("تعذّر حفظ الرفع")
                 return@launch
             }
 
             clearSelection()
             if (!cloudTransferScheduler.enqueueTransfers()) {
-                messenger.notifyError("حُفظ طلب الرفع، لكن تعذّر تشغيله الآن؛ افتح شاشة السحابة لإعادة المحاولة")
+                messenger.notifyError("تعذّر بدء الرفع")
                 return@launch
             }
             // فشل إشعار النظام لا ينبغي أن يُظهر الرفع كأنه فشل بعد حفظه وجدولته.
@@ -263,7 +263,7 @@ class FilesViewModel @Inject constructor(
         viewModelScope.launch {
             val placedIds = runCatching { shareInbox.placeAll(folderId) }
                 .getOrElse {
-                    messenger.notifyError("تعذّر وضع الملفات المشتركة")
+                    messenger.notifyError("تعذّر نقل الملفات")
                     return@launch
                 }
             if (placedIds.isEmpty()) return@launch
@@ -284,7 +284,7 @@ class FilesViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { shareInbox.remove(item) }
                 .onSuccess { messenger.notify("أُهمل الملف المشترك") }
-                .onFailure { messenger.notifyError("تعذّر حذف الملف المشترك") }
+                .onFailure { messenger.notifyError("تعذّر الحذف") }
         }
     }
 
@@ -374,7 +374,7 @@ class FilesViewModel @Inject constructor(
             _selection.value = emptySet()
             when {
                 failed == 0 -> messenger.notify("حُذف " + Formatters.fileCountLabel(ok))
-                ok > 0 -> messenger.notifyError("حُذف $ok وبقي $failed تعذّر حذفه")
+                ok > 0 -> messenger.notifyError("حذف جزئي")
                 else -> messenger.notifyError("تعذّر حذف الملفات")
             }
         }
@@ -418,7 +418,7 @@ class FilesViewModel @Inject constructor(
             if (failed == 0) {
                 messenger.notify(if (target) "أُضيفت للمفضلة" else "أُزيلت من المفضلة")
             } else {
-                messenger.notifyError("تعذّر تحديث المفضلة لبعض الملفات")
+                messenger.notifyError("تعذّر تحديث المفضلة")
             }
         }
     }
@@ -431,7 +431,7 @@ class FilesViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { fileRepository.deleteRecord(file) }
                 .onSuccess { messenger.notify("حُذف سجل الملف المفقود من القائمة") }
-                .onFailure { messenger.notifyError("تعذّر تنظيف سجل الملف المفقود") }
+                .onFailure { messenger.notifyError("تعذّر حذف السجل") }
             _selection.value = _selection.value - file.id
         }
     }
@@ -530,9 +530,9 @@ class FilesViewModel @Inject constructor(
                 FolderRepository.MoveResult.SAME_PLACE ->
                     messenger.notify("المجلد موجود هنا بالفعل")
                 FolderRepository.MoveResult.CYCLE ->
-                    messenger.notifyError("لا يمكن النقل داخل مجلد فرعي")
+                    messenger.notifyError("نقل غير ممكن")
                 FolderRepository.MoveResult.MISSING_PARENT ->
-                    messenger.notifyError("المجلد الهدف لم يعد موجوداً")
+                    messenger.notifyError("المجلد غير موجود")
             }
             if (result == FolderRepository.MoveResult.MOVED && folder.id == folderId) {
                 folderVersion.value++
@@ -635,7 +635,7 @@ class FilesViewModel @Inject constructor(
                     if (ok == 1) "أُضيفت الصورة إلى الملفات" else "أُضيفت $ok صور إلى الملفات"
                 )
                 ok > 0 -> messenger.notifyError("حُفظت $ok صور، فشل $failed")
-                else -> messenger.notifyError("تعذّر حفظ الصور الملتقطة")
+                else -> messenger.notifyError("تعذّر حفظ الصور")
             }
         }
     }
@@ -647,7 +647,7 @@ class FilesViewModel @Inject constructor(
             runCatching { fileRepository.saveAudioRecording(file, name, folderId) }
                 .onSuccess { messenger.notify("تم حفظ التسجيل الصوتي") }
                 .onFailure {
-                    messenger.notifyError("تعذّر حفظ التسجيل الصوتي")
+                    messenger.notifyError("تعذّر حفظ التسجيل")
                     runCatching { file.delete() }
                 }
             importing.value = false

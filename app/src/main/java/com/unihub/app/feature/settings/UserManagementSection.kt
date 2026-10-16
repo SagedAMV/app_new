@@ -183,7 +183,7 @@ fun UserManagementSection(
                 ) {
                     Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("تغيير الرمز الخاص بي")
+                    Text("تغيير الرمز")
                 }
 
                 OutlinedButton(
@@ -244,7 +244,7 @@ fun UserManagementSection(
     }
 
     if (isAdmin) {
-        SectionHeader(title = "مستخدمو Appwrite وصلاحياتهم (للمشرف)")
+        SectionHeader(title = "المستخدمون")
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large
@@ -321,7 +321,7 @@ fun UserManagementSection(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text("طي الكل (${cardsState.expandedUsernames.size})")
+                            Text("طي الكل")
                         }
                     }
                 }
@@ -335,7 +335,7 @@ fun UserManagementSection(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        label = { Text("ابحث بالبريد الإلكتروني أو الاسم…") },
+                        label = { Text("ابحث عن مستخدم…") },
                         leadingIcon = {
                             Icon(Icons.Outlined.Search, contentDescription = null)
                         },
@@ -426,7 +426,7 @@ fun UserManagementSection(
 
     passwordTargetUser?.let { target ->
         AdminChangePasswordDialog(
-            title = "إعادة تعيين كلمة مرور «${target.username}»",
+            title = "تغيير كلمة المرور",
             onConfirm = { newPass ->
                 viewModel.adminChangeUserPassword(target.username, newPass)
                 passwordTargetUser = null
@@ -447,7 +447,7 @@ fun UserManagementSection(
 
     deleteTargetUser?.let { target ->
         ConfirmDialog(
-            title = "حذف المستخدم «${target.username}»؟",
+            title = "حذف المستخدم؟",
             message = "سيُحذف حساب «${target.username}» من السحابة.",
             confirmLabel = "حذف المستخدم",
             onConfirm = {
@@ -738,7 +738,7 @@ private fun AdminUserAccountCard(
 
                         val perms = account.permissions
                         PermissionToggleRow(
-                            label = "السماح بالسحب والتنزيل من السحابة",
+                            label = "تنزيل الملفات",
                             checked = perms.canDownload,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
@@ -746,7 +746,7 @@ private fun AdminUserAccountCard(
                             }
                         )
                         PermissionToggleRow(
-                            label = "السماح بالرفع (يشمل قراءة الفهرس والملفات)",
+                            label = "رفع الملفات",
                             checked = perms.canUpload,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
@@ -754,7 +754,7 @@ private fun AdminUserAccountCard(
                             }
                         )
                         PermissionToggleRow(
-                            label = "السماح بالتعديل والحذف (يشمل القراءة والرفع)",
+                            label = "تعديل وحذف",
                             checked = perms.canModify,
                             enabled = !busy && account.isActive,
                             onCheckedChange = { checked ->
@@ -872,7 +872,7 @@ private fun UserChangeOwnPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تغيير الرمز الخاص بك ($username)") },
+        title = { Text("تغيير الرمز") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -966,7 +966,7 @@ private fun AddUserDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إضافة مستخدم سحابي جديد") },
+        title = { Text("مستخدم جديد") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -979,7 +979,7 @@ private fun AddUserDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("رمز الدخول (كلمة المرور)") },
+                    label = { Text("كلمة المرور") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -991,7 +991,7 @@ private fun AddUserDialog(
                     fontWeight = FontWeight.SemiBold
                 )
                 PermissionToggleRow(
-                    label = "السحب والتنزيل من السحابة",
+                    label = "تنزيل الملفات",
                     checked = canDownload,
                     enabled = true,
                     onCheckedChange = { canDownload = it }
@@ -1003,7 +1003,7 @@ private fun AddUserDialog(
                     onCheckedChange = { canUpload = it }
                 )
                 PermissionToggleRow(
-                    label = "التعديل أو الحذف في الحساب السحابي",
+                    label = "تعديل وحذف",
                     checked = canModify,
                     enabled = true,
                     onCheckedChange = { canModify = it }

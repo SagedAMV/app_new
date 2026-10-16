@@ -97,11 +97,11 @@ object CloudDeleteRules {
         folders: List<RemoteCloudFolder>
     ): String? {
         if (!folder.key.startsWith("folder:")) {
-            return "هذا المجلد مرتبط بمسار التخزين أو بمكتبة جهازك؛ لا يُحذف من السحابة"
+            return "مجلد محلي"
         }
         val within = CloudFolderTree.filesWithin(files, folders, folder.key)
         if (within.isNotEmpty()) {
-            return "المجلد غير فارغ (${within.size} ملف)؛ انقل ما فيه أو احذفه أولاً"
+            return "المجلد غير فارغ"
         }
         return null
     }
@@ -153,7 +153,7 @@ object CloudManifestTools {
     }
 
     fun requireUnchangedLocalMetadata(expected: JSONObject, current: JSONObject) {
-        if (!metadataEqual(expected, current)) throw java.io.IOException("تغيرت البيانات المحلية أثناء الفحص؛ لم نستبدلها. أعد الفحص والمحاولة")
+        if (!metadataEqual(expected, current)) throw java.io.IOException("تغيّرت البيانات")
     }
 
     /** الحفاظ على كل الملفات غير المختارة عند رفع تحديث من جهاز يحوي جزءاً من المكتبة. */

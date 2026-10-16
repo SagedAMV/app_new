@@ -90,8 +90,7 @@ class SettingsViewModel @Inject constructor(
                 messenger.notify("تم تحديد مجلد نسخ الاحتياطية ✓")
                 if (!persisted) {
                     messenger.notifyError(
-                        "تنبيه: النظام رفض تثبيت الإذن الدائم — قد يتوقف النسخ التلقائي " +
-                            "بعد إعادة تشغيل الجهاز. جرّب اختيار مجلد في التخزين الداخلي"
+                        "اختر مجلدًا داخليًا"
                     )
                 }
                 // إن كان خيار «نسخة بعد كل تعديل» مفعلاً فنجرب فوراً حتى يرى
@@ -102,7 +101,7 @@ class SettingsViewModel @Inject constructor(
             } else {
                 autoBackupPreferences.setTreeUri(null)
                 autoBackupScheduler.cancelPeriodic()
-                messenger.notifyError("لم يتم تحديد مجلد نسخ الاحتياطية — تعذّر الوصول للمجلد المختار")
+                messenger.notifyError("النسخ غير متاح")
             }
         }
     }
@@ -152,7 +151,7 @@ class SettingsViewModel @Inject constructor(
                     autoBackupScheduler.enqueueOnceLatest()
                     messenger.notify("فُعّل النسخ بعد كل تعديل — تجربة نسخة الآن للتحقق")
                 } else {
-                    messenger.notifyError("حدد مجلد النسخ الاحتياطية أولاً")
+                    messenger.notifyError("حدد مجلد النسخ")
                 }
             }
         }
@@ -163,7 +162,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val settings = autoBackupPreferences.snapshot()
             if (!settings.isFolderConfigured) {
-                messenger.notifyError("لم يتم تحديد مجلد نسخ الاحتياطية")
+                messenger.notifyError("لا مجلد للنسخ")
                 return@launch
             }
             autoBackupScheduler.enqueueOnceLatest()
@@ -183,7 +182,7 @@ class SettingsViewModel @Inject constructor(
 
     fun refreshAuthRegistry() {
         viewModelScope.launch {
-            authManager.verifyActiveSessionWithCloud().onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث مستخدمي Appwrite") }
+            authManager.verifyActiveSessionWithCloud().onFailure { messenger.notifyError("تعذّر التحقق") }
         }
     }
 
@@ -197,7 +196,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.userChangeOwnPassword(currentPassword, newPassword)
                 .onSuccess { messenger.notify("تم تحديث كلمة المرور في السحابة بنجاح ✓") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر تغيير كلمة المرور") }
+                .onFailure { messenger.notifyError("تعذّر تغييرها") }
         }
     }
 
@@ -205,7 +204,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.addUser(username, password, permissions)
                 .onSuccess { messenger.notify("تمت إضافة المستخدم «$username» في السحابة ✓") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّرت إضافة المستخدم") }
+                .onFailure { messenger.notifyError("تعذّرت إضافة المستخدم") }
         }
     }
 
@@ -213,7 +212,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.deleteUser(username)
                 .onSuccess { messenger.notify("حُذف المستخدم «$username» من السحابة") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر حذف المستخدم") }
+                .onFailure { messenger.notifyError("تعذّر حذف المستخدم") }
         }
     }
 
@@ -223,7 +222,7 @@ class SettingsViewModel @Inject constructor(
                 .onSuccess {
                     messenger.notify(if (active) "تم تفعيل المستخدم «$username»" else "تم إيقاف المستخدم «$username»")
                 }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث حالة المستخدم") }
+                .onFailure { messenger.notifyError("تعذّر تحديث الحالة") }
         }
     }
 
@@ -231,7 +230,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.updateUserPermissions(username, permissions)
                 .onSuccess { messenger.notify("تم تحديث صلاحيات «$username» في السحابة") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر تحديث الصلاحيات") }
+                .onFailure { messenger.notifyError("تعذّر تحديث الصلاحيات") }
         }
     }
 
@@ -239,7 +238,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.adminChangeUserPassword(username, newPassword)
                 .onSuccess { messenger.notify("تم تغيير رمز المستخدم «$username» في السحابة ✓") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر تغيير رمز المستخدم") }
+                .onFailure { messenger.notifyError("تعذّر تغيير الرمز") }
         }
     }
 
@@ -247,7 +246,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             authManager.revokeUserSessions(username)
                 .onSuccess { messenger.notify("أُلغيت جلسات Appwrite للمستخدم «$username»؛ يلزمه تسجيل الدخول مجددًا") }
-                .onFailure { messenger.notifyError(it.message ?: "تعذّر إلغاء جلسات Appwrite") }
+                .onFailure { messenger.notifyError("تعذّر إلغاء الجلسات") }
         }
     }
 

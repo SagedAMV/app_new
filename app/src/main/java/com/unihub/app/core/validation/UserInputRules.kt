@@ -95,10 +95,10 @@ object UserInputRules {
      */
     fun lectureFormError(subject: String, timeFrom: String?, timeTo: String?): String? {
         if (subject.isBlank()) return "اسم المادة مطلوب"
-        if (timeFrom.isNullOrBlank()) return "حدد وقت بداية المحاضرة"
-        val from = DateFormats.parseTimeOrNull(timeFrom) ?: return "وقت البداية غير صالح"
+        if (timeFrom.isNullOrBlank()) return "حدد وقت البداية"
+        val from = DateFormats.parseTimeOrNull(timeFrom) ?: return "وقت غير صالح"
         val to = DateFormats.parseTimeOrNull(timeTo)
-        if (to != null && !to.isAfter(from)) return "وقت النهاية يجب أن يكون بعد وقت البداية"
+        if (to != null && !to.isAfter(from)) return "وقت غير صالح"
         return null
     }
 

@@ -120,14 +120,14 @@ fun BackupScreen(
         ) {
             FeatureHeroCard(
                 title = "حماية بياناتك",
-                subtitle = "إدارة النسخ الاحتياطي المحلي ومزامنة السحابة من مكان واحد.",
+                subtitle = "النسخ والمزامنة",
                 icon = Icons.Outlined.CloudSync,
                 badge = if (isOnline) "متصل" else "دون اتصال",
                 modifier = Modifier.padding(top = 8.dp)
             )
             Spacer(Modifier.height(8.dp))
             // ─── قسم خادم Appwrite (أونلاين / أوفلاين + سحب اختياري) ────
-            SectionHeader(title = "خادم Appwrite (أونلاين / أوفلاين)")
+            SectionHeader(title = "سحابة Appwrite")
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium
@@ -157,7 +157,7 @@ fun BackupScreen(
                     if (cloudSettings?.pendingUpload == true) {
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "• توجد تعديلات محلية محفوظة بانتظار الإرسال للخادم",
+                            text = "تعديلات بانتظار الرفع",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary
                         )
@@ -286,7 +286,7 @@ fun BackupScreen(
                     ) {
                         Icon(Icons.Outlined.FileUpload, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("اختيار ملف نسخة واستيرادها")
+                        Text("استيراد نسخة")
                     }
                 }
             }

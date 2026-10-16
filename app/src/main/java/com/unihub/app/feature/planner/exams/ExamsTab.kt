@@ -350,7 +350,7 @@ private fun ExamSheet(
             )
         }
         TimeField(
-            label = "الوقت (اختياري — يُفترض 9:00)",
+            label = "الوقت (اختياري)",
             value = time,
             onPick = { time = it },
             onClear = { time = null }

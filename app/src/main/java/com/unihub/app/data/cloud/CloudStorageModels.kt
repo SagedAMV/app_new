@@ -62,7 +62,7 @@ data class CloudObjectSummary(
 
 data class CloudUploadedObject(val etag: String, val size: Long)
 data class CloudTextObject(val text: String, val etag: String, val notModified: Boolean = false)
-class CloudConflictException : IOException("تغيّرت النسخة على الخادم أثناء العملية؛ أعد الفحص والمحاولة")
+class CloudConflictException : IOException("تغيّرت النسخة")
 
 internal suspend fun <T> cloudAttempt(block: suspend () -> T): Result<T> = try {
     Result.success(block())

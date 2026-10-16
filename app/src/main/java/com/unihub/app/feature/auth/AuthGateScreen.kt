@@ -92,7 +92,7 @@ fun AuthGateScreen(viewModel: AuthViewModel = hiltViewModel(), content: @Composa
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(14.dp))
-                        Text("جارٍ التحقق من جلسة Appwrite…")
+                        Text("جارٍ التحقق")
                     }
                 }
             }
@@ -154,7 +154,7 @@ internal fun CloudLoginScreen(
                 }) {
                     Text("UniHub", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Text("سجّل دخولك للمتابعة", style = MaterialTheme.typography.bodyLarge,
+                    Text("تسجيل الدخول", style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(28.dp))

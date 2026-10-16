@@ -53,7 +53,7 @@ fun CloudUploadConfirmationSheet(
             Text(plan.summary, style = MaterialTheme.typography.titleMedium)
             Text(plan.destinationLabel, style = MaterialTheme.typography.bodyMedium)
             if (selectableFolders.isNotEmpty()) {
-                Text("وجهة الرفع داخل السحابة", style = MaterialTheme.typography.labelLarge)
+                Text("وجهة الرفع", style = MaterialTheme.typography.labelLarge)
                 // LazyRow أفقي: قائمة منسدلة داخل ModalBottomSheet تفتح فوق حافة الشاشة وتُقطع
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
@@ -75,10 +75,10 @@ fun CloudUploadConfirmationSheet(
             if (plan.missingFiles.isNotEmpty()) Text("غير متاح: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             if (plan.oversizedFiles.isNotEmpty()) Text(
-                "تجاوز 50 ميجابايت وسيُتجاهل: ${plan.oversizedFiles.take(4).joinToString("، ")}",
+                "تجاوز 50 ميجابايت: ${plan.oversizedFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall
             )
-            if (!isOnline) Text("لا إنترنت، سيُرفع عند العودة", style = MaterialTheme.typography.bodySmall)
+            if (!isOnline) Text("بانتظار الإنترنت", style = MaterialTheme.typography.bodySmall)
             CloudTransferProgressCard(
                 state = transfer,
                 queue = queue,

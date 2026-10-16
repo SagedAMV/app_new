@@ -56,14 +56,14 @@ fun CloudDownloadDestinationDialog(
     var rootName by remember { mutableStateOf(cloudFolderName.orEmpty()) }
     var expandedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val selected = folders.firstOrNull { it.id == selectedId }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("أين تريد حفظ التنزيل؟") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("مكان التنزيل") }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DestinationModeRow("سحب ملفات فقط", mode == CloudDownloadLocation.LOCAL_FOLDER) { mode = CloudDownloadLocation.LOCAL_FOLDER }
             if (cloudFolderName != null) DestinationModeRow("سحب مجلد كامل", mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL) { mode = CloudDownloadLocation.FOLDER_INSIDE_LOCAL }
-            DestinationModeRow("ترتيب تلقائي — موصى به", mode == CloudDownloadLocation.ORIGINAL_CLOUD_TREE) { mode = CloudDownloadLocation.ORIGINAL_CLOUD_TREE }
+            DestinationModeRow("ترتيب تلقائي", mode == CloudDownloadLocation.ORIGINAL_CLOUD_TREE) { mode = CloudDownloadLocation.ORIGINAL_CLOUD_TREE }
             if (mode != CloudDownloadLocation.ORIGINAL_CLOUD_TREE) {
-                Text("اختر وجهة في هاتفك:", style = MaterialTheme.typography.titleSmall)
+                Text("اختر مجلدًا", style = MaterialTheme.typography.titleSmall)
                 DestinationModeRow("الرئيسية (مكتبة التطبيق)", selectedId == null) { selectedId = null }
                 DestinationFolderTree.rows(folders, expandedIds, selectedId).forEach { row ->
                     DestinationFolderTreeRow(

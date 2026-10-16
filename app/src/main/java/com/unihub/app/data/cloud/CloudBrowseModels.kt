@@ -10,11 +10,11 @@ data class CloudScanState(
     val checkedAt: Long = 0L,
     val serverFileCount: Int = 0,
     val serverFolderCount: Int = 0,
-    val message: String = "اضغط فحص للتحقق من محتويات السحابة"
+    val message: String = "اضغط للفحص"
 )
 
-class CloudBusyException : IOException("توجد عملية نقل جارية؛ القائمة المحفوظة متاحة، ويمكن الفحص بعد انتهائها")
-class CloudScanTimeoutException : IOException("انتهت مهلة فحص السحابة؛ تحقق من الاتصال ثم اضغط إعادة المحاولة")
+class CloudBusyException : IOException("النقل جارٍ")
+class CloudScanTimeoutException : IOException("انتهت مهلة الفحص")
 
 enum class CloudTransferKind { NONE, UPLOAD, DOWNLOAD }
 data class CloudTransferState(

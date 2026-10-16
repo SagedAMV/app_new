@@ -22,9 +22,9 @@ sealed interface FileOpResult {
     /** رسالة عربية جاهزة للعرض — null عند النجاح */
     fun errorMessage(): String? = when (this) {
         Success -> null
-        MissingFile -> "الملف غير موجود في التخزين — ربما حُذف خارج التطبيق"
-        NoApp -> "لا يوجد تطبيق على جهازك يفتح هذا النوع من الملفات"
-        Failed -> "تعذّرت العملية، حاول مجدداً"
+        MissingFile -> "الملف غير موجود"
+        NoApp -> "لا تطبيق للفتح"
+        Failed -> "تعذّرت العملية"
     }
 }
 

@@ -26,22 +26,22 @@ object InputValidator {
 
     sealed interface InputError {
         val message: String
-        data object Empty : InputError { override val message = "هذا الحقل مطلوب" }
+        data object Empty : InputError { override val message = "حقل مطلوب" }
         data class TooLong(val max: Int) : InputError {
-            override val message = "النص أطول من المسموح ($max حرفاً)"
+            override val message = "نص طويل"
         }
         data object InvalidChars : InputError {
-            override val message = "الاسم يحتوي على رموز غير مسموحة (/ \\ : * ? \" < > |)"
+            override val message = "رموز غير مسموحة"
         }
         data object UnsupportedExtension : InputError {
-            override val message = "نوع الملف غير مدعوم"
+            override val message = "نوع غير مدعوم"
         }
         data object FileTooLarge : InputError {
-            override val message = "الملف أكبر من الحد المسموح (200 م.ب)"
+            override val message = "الملف كبير"
         }
         data object InvalidDate : InputError { override val message = "تاريخ غير صالح" }
         data object InvalidTimeRange : InputError {
-            override val message = "وقت النهاية يجب أن يكون بعد وقت البداية"
+            override val message = "وقت غير صالح"
         }
     }
 

@@ -72,7 +72,7 @@ class NotesViewModel @Inject constructor(
         val hasTitle = title.isNotBlank()
         val hasContent = document.hasMeaningfulContent()
         if (!hasTitle && !hasContent) {
-            messenger.notifyError("اكتب عنواناً أو أضف محتوى للملاحظة أولاً")
+            messenger.notifyError("الملاحظة فارغة")
             return false
         }
 
