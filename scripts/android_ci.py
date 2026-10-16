@@ -67,18 +67,37 @@ def normalize_digest(value):
     return "".join(character for character in str(value).lower() if character in "0123456789abcdef")
 
 
+# "Signer #1 certificate SHA-256 digest: <hex>" across build-tools spellings: the separator
+# (colon, equals, spaces), the hyphen in SHA-256, and the stream all vary between releases,
+# so the digest is captured as the longest hex-ish run after the label and canonicalised.
+DIGEST_LINE = re.compile(
+    r"Signer #1[\s\S]{0,120}?\bcertificate\b[\s\S]{0,120}?\bSHA[-_ ]?256\b[\s\S]{0,60}?"
+    r"([0-9a-fA-F:]{60,100})",
+    re.IGNORECASE,
+)
+
+
 def apk_signer_digest(apksigner, apk):
-    """SHA-256 of the APK signing certificate, read from apksigner's own report."""
+    """SHA-256 of the APK signing certificate, read from apksigner's own report.
+
+    The report is read from both streams and matched case-insensitively: the exact spelling
+    ("SHA-256" vs "SHA256"), the stream, and the separator style differ between
+    build-tools releases, and a mismatch there must not be mistaken for a wrong key.
+    """
     completed = subprocess.run(
         [str(apksigner), "verify", "--print-certs", str(apk)], check=True, capture_output=True, text=True
     )
-    match = re.search(r"Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F:]{64,95})", completed.stdout or "")
-    if match is None:
-        raise ValueError("apksigner did not report a SHA-256 certificate digest for signer #1")
-    digest = normalize_digest(match.group(1))
-    if len(digest) != 64:
-        raise ValueError("apksigner reported a malformed SHA-256 certificate digest")
-    return digest
+    report = "\n".join(
+        part for part in (completed.stdout, completed.stderr) if isinstance(part, str) and part
+    )
+    for match in DIGEST_LINE.finditer(report):
+        digest = normalize_digest(match.group(1))
+        if len(digest) == 64:
+            return digest
+    raise ValueError(
+        "apksigner did not report a SHA-256 certificate digest for signer #1. "
+        f"Report was: {report.strip()[:800] or '(empty)'}"
+    )
 
 
 def require_expected_signer(apksigner, apk, expected):

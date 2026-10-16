@@ -192,6 +192,35 @@ class AndroidCiTest(unittest.TestCase):
 
     @patch.dict(os.environ, {}, clear=True)
     @patch("scripts.android_ci.subprocess.run")
+    def test_signer_report_is_read_regardless_of_case_spacing_and_stream(self, run):
+        # صيغة تقرير apksigner تتغيّر بين إصدارات build-tools؛ الاختلاف الشكلي لا يجوز
+        # أن يُقرأ «مفتاحاً خاطئاً». كل الأشكال التالية تصف البصمة نفسها:
+        self.apk("app-debug.apk")
+        self.tools()
+        bare = "73" + "6a66fc" + "0" * 56
+        coloned = ":".join(bare[index:index + 2] for index in range(0, 64, 2))
+        reports = [
+            ("Signer #1 certificate SHA-256 digest: " + bare, ""),
+            ("", "Signer #1 certificate SHA256 DIGEST = " + bare.upper()),
+            ("", "Signer #1 certificate sha-256 digest:  " + coloned.upper()),
+            ("Signer #1 certificate DN: CN=UniHub\nSigner #1 certificate SHA-256 digest:\n"
+             "  " + bare + "\nSigner #1 public key SHA-256 digest: " + "f" * 64, ""),
+            ("Signer #1 certificate SHA-256 digest: 73:6a:66:fc:" + "0" * 56, ""),
+        ]
+        with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
+            for stdout, stderr in reports:
+                run.return_value.stdout, run.return_value.stderr = stdout, stderr
+                self.assertEqual(bare, android_ci.apk_signer_digest(self.root / "apksigner", self.root / "a.apk"))
+
+    def test_signer_report_without_a_certificate_digest_is_rejected_with_evidence(self):
+        with patch("scripts.android_ci.subprocess.run") as run:
+            run.return_value.stdout = "Verifies\nNumber of signers: 1\n"
+            run.return_value.stderr = ""
+            with self.assertRaisesRegex(ValueError, "Number of signers"):
+                android_ci.apk_signer_digest(self.root / "apksigner", self.root / "a.apk")
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("scripts.android_ci.subprocess.run")
     def test_ephemeral_signing_key_is_rejected_instead_of_shipping(self, run):
         # كان كل runner يولّد مفتاح debug عابراً: الشهادة تختلف كل بناء فترفض الأجهزة التثبيت.
         self.apk("app-debug.apk")
