@@ -87,6 +87,28 @@ jobs:
           emulator-options: -no-window -no-snapshot -gpu swangle_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none -camera-front none -memory 2048 -cores 2 > ui-emulator.log 2>&1
           script: bash scripts/run_android_ui_tests.sh
 
+      # Verify the exact distributable APK after UI testing: install it on the
+      # emulator, launch the package, and ensure the process remains alive.
+      # A successful Gradle task or ZIP check alone is not sufficient proof that
+      # the APK can be installed and started on Android.
+      - name: Install and smoke-test the exact test APK
+        env:
+          APK_PATH: app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          set -euo pipefail
+          test -s "$APK_PATH"
+          adb install -r "$APK_PATH"
+          adb shell am force-stop com.unihub.app
+          adb shell monkey -p com.unihub.app -c android.intent.category.LAUNCHER 1
+          sleep 8
+          if ! adb shell pidof com.unihub.app >/dev/null; then
+            echo "The installed test APK did not remain running after launch."
+            adb logcat -d -t 500
+            exit 1
+          fi
+          echo "Installed and launched: $APK_PATH"
+          sha256sum "$APK_PATH"
+
       - name: Build Release Full APK
         run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
 
