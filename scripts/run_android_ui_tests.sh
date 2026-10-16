@@ -23,7 +23,7 @@ if [[ "$status" == 124 || "$status" == 137 ]]; then
   echo "::error title=Android UI timeout::Device tests exceeded their deadline; Galaxy is NOT device-verified"
 fi
 
-if [[ "$status" == 0 ]]; then
+if [[ "$status" == 0 && "${GITHUB_ACTIONS:-false}" == true ]]; then
   apk="app/build/outputs/apk/debug/app-debug.apk"
   echo "::notice title=Android APK smoke test::Installing the exact distributable APK on the running emulator"
   test -s "$apk"
