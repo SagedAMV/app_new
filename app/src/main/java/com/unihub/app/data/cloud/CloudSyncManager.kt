@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -937,6 +938,8 @@ class CloudSyncManager @Inject constructor(
         val base = scan.state.metadataBaseline?.let(::JSONObject)
         var published = scan.remoteManifest
         var etag = scan.manifestEtag
+        var publishedDescriptionCount = 0
+        var folderDescriptionsPublished = false
         suspend fun publish() {
             // تعارض النصوص لا يوقف إرسال الملفات المستقلة ولا يبرر استبدال النص البعيد.
             val root = if (scan.metadataConflicts.isEmpty()) CloudManifestTools.mergeMetadata(snapshot, published, base)
@@ -954,19 +957,22 @@ class CloudSyncManager @Inject constructor(
                 metadataBaseline = if (scan.metadataConflicts.isEmpty()) text else it.metadataBaseline,
                 metadataEtag = if (scan.metadataConflicts.isEmpty()) etag else "",
                 notifiedVersions = it.notifiedVersions + descriptions.map { item -> item.notificationToken }) }
+            publishedDescriptionCount = descriptions.size
+            folderDescriptionsPublished = true
             refreshAvailable(catalog.snapshot(activeConnection))
         }
         _lastUploadReport.value = null
         val ctx = currentCoroutineContext()
         var uploaded = 0; var present = 0
         val failed = mutableListOf<String>()
-        val batchBytesTotal = plan.fileIds.sumOf { id ->
+        val batchBytesTotal = CloudFileRules.uploadBatchBytes(plan.fileIds.mapNotNull { id ->
             records[id]?.takeIf { backupRepository.isManagedLocalFile(it.filePath) }
-                ?.let { record -> File(record.filePath).length() } ?: 0L
-        }
+                ?.let { record -> File(record.filePath).length() }
+        })
         var bytesCompletedBeforeCurrentFile = 0L
-        // نشر المجلدات حتى عندما تكون فارغة، قبل بدء الملفات الكبيرة.
-        if (folderDescriptions.isNotEmpty()) publish()
+        // المجلد الفارغ يُنشر فوراً؛ وإن احتوى ملفات ندمج وصفه مع أول checkpoint.
+        if (folderDescriptions.isNotEmpty() && plan.fileIds.isEmpty()) publish()
+        try {
         for ((index, id) in plan.fileIds.withIndex()) {
             val file = records[id]
             if (file == null) { failed += "ملف محلي غير متاح ($id)"; continue }
@@ -1039,7 +1045,12 @@ class CloudSyncManager @Inject constructor(
                 catalog.update(activeConnection) { it.copy(links = it.links.filterNot { oldLink -> oldLink.localId == id } + link) }
                 // لا نحتسب الملف السابق في مقام الدفعة إلا بعد اكتمال رفعه/تجاوزه وحفظ رابط البيان.
                 _transferState.value = _transferState.value.copy(bytesDone = length, bytesTotal = length)
-                publish()
+                val pendingDescriptions = descriptions.size - publishedDescriptionCount
+                if (CloudUploadManifestPolicy.shouldPublish(pendingDescriptions)) {
+                    _transferState.value = _transferState.value.copy(phase = "حفظ قائمة الملفات")
+                    publish()
+                    _transferState.value = _transferState.value.copy(phase = "")
+                }
                 bytesCompletedBeforeCurrentFile = (bytesCompletedBeforeCurrentFile + length).coerceAtMost(batchBytesTotal)
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) {
@@ -1047,6 +1058,27 @@ class CloudSyncManager @Inject constructor(
                 failed += file.name
                 if (!checkIsOnline()) { failed += plan.fileIds.drop(index + 1).map { records[it]?.name ?: "ملف غير متاح" }; break }
             }
+        }
+        } catch (cancelled: CancellationException) {
+            val hasPendingMetadata = descriptions.size > publishedDescriptionCount ||
+                (folderDescriptions.isNotEmpty() && !folderDescriptionsPublished)
+            if (hasPendingMetadata) {
+                try {
+                    withContext(NonCancellable) {
+                        withTimeout(CANCELLATION_MANIFEST_FLUSH_TIMEOUT_MS) { publish() }
+                    }
+                } catch (flushError: Exception) {
+                    Log.w(TAG, "تعذّر نشر الملفات المكتملة قبل إيقاف الدفعة", flushError)
+                }
+            }
+            throw cancelled
+        }
+        val pendingDescriptions = descriptions.size - publishedDescriptionCount
+        if (CloudUploadManifestPolicy.shouldPublish(pendingDescriptions, isFinal = true) ||
+            (folderDescriptions.isNotEmpty() && !folderDescriptionsPublished)) {
+            _transferState.value = _transferState.value.copy(phase = "حفظ قائمة الملفات")
+            publish()
+            _transferState.value = _transferState.value.copy(phase = "")
         }
         val report = CloudUploadReport(uploaded, present, folderDescriptions.size, failed)
         _lastUploadReport.value = report
@@ -1282,6 +1314,7 @@ class CloudSyncManager @Inject constructor(
         // مهلة القراءة الافتراضية الجديدة في طبقة النقل (راجع AppwriteStorageTransport).
         private const val SCAN_TIMEOUT_MS = 45_000L
         private const val METADATA_EDIT_TIMEOUT_MS = 60_000L
+        private const val CANCELLATION_MANIFEST_FLUSH_TIMEOUT_MS = 15_000L
         private const val RESERVE_BYTES = 16L * 1024 * 1024
     }
 }

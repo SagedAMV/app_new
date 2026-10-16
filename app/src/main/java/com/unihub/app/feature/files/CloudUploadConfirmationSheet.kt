@@ -45,7 +45,7 @@ fun CloudUploadConfirmationSheet(
     targetFolderKey: String? = null,
     onSelectTarget: (key: String?, name: String?) -> Unit = { _, _ -> }
 ) {
-    val selectableFolders = cloudFolders.filter { CloudUploadTarget.isSelectable(it.key) && it.key != null }
+    val selectableFolders = cloudFolders.filter { CloudUploadTarget.isSelectable(it.key) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {

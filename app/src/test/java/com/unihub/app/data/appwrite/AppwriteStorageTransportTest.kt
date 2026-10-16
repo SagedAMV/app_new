@@ -3,6 +3,7 @@ package com.unihub.app.data.appwrite
 import com.unihub.app.data.cloud.CloudConflictException
 import com.unihub.app.data.cloud.CloudStorageConfig
 import com.unihub.app.data.cloud.CloudStorageConnection
+import com.unihub.app.data.cloud.CloudUploadManifestPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -19,6 +20,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
+import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -107,6 +109,115 @@ class AppwriteStorageTransportTest {
             assertTrue(listTimeout in 1..uploadTimeout)
             assertTrue(uploadTimeout > 30_000)
         } finally { file.delete() }
+    }
+    @Test fun exactFiftyMebibyteUploadUsesTenCompleteChunks() = runBlocking {
+        val size = 50L * 1024 * 1024
+        val file = temp().also { java.io.RandomAccessFile(it, "rw").use { output -> output.setLength(size) } }
+        val id = AppwriteFileProtocol.fileId("files/max.bin")
+        val name = AppwriteFileProtocol.uploadName("files/max.bin")
+        val uploadCount = AtomicInteger()
+        val network = Network { request ->
+            if (request.requestMethod == "GET") missing()
+            else {
+                val index = uploadCount.getAndIncrement()
+                val from = index.toLong() * AppwriteFileProtocol.CHUNK_BYTES
+                val length = minOf(AppwriteFileProtocol.CHUNK_BYTES.toLong(), size - from)
+                assertEquals("bytes $from-${from + length - 1}/$size", request.getRequestProperty("Content-Range"))
+                assertEquals(length.toInt(), request.fileBytes().size)
+                json(metadata(id, name, size).put("chunksTotal", 10).put("chunksUploaded", index + 1), 201)
+            }
+        }
+        try {
+            val result = network.transport.uploadFile(TARGET, "files/max.bin", file).getOrThrow()
+            assertEquals(size, result.size)
+            assertEquals(10, uploadCount.get())
+            assertEquals(11, network.requests.size) // initial metadata lookup + ten chunks
+        } finally { file.delete() }
+    }
+    @Test fun twoMegabyteFolderRoundTripsBeforeAndAfterManifestBatching() = runBlocking {
+        val directory = Files.createTempDirectory("unihub-upload-benchmark").toFile()
+        val files = (0 until 20).map { index ->
+            File(directory, "item-$index.bin").apply { writeBytes(ByteArray(102_400) { (it + index).toByte() }) }
+        }
+
+        suspend fun sample(manifestBatchSize: Int, publishFolderUpfront: Boolean): Pair<Long, Int> {
+            val stored = linkedMapOf<String, JSONObject>()
+            val network = Network(delayMillis = 15) { request ->
+                when {
+                    request.requestMethod == "GET" && request.url.path.endsWith("/files") ->
+                        json(JSONObject().put("files", JSONArray(stored.values.toList())))
+                    request.requestMethod == "GET" ->
+                        stored[request.url.path.substringAfterLast('/')]?.let { json(it) } ?: missing()
+                    else -> {
+                        val id = request.fileId()
+                        val objectName = request.fileName()
+                        val body = request.fileBytes()
+                        val row = metadata(id, objectName, body.size.toLong())
+                        stored[id] = row
+                        json(row, 201)
+                    }
+                }
+            }
+            val started = System.nanoTime()
+            var manifestEtag: String? = null
+            val publishedKeys = mutableListOf<String>()
+            var pendingDescriptions = 0
+            suspend fun publishManifest() {
+                val text = JSONObject()
+                    .put("cloudFolders", JSONArray(listOf(JSONObject().put("key", "folder:benchmark"))))
+                    .put("files", JSONArray(publishedKeys))
+                    .toString()
+                manifestEtag = network.transport.uploadText(
+                    TARGET,
+                    CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY,
+                    text,
+                    ifMatch = manifestEtag,
+                    ifNoneMatch = manifestEtag == null
+                ).getOrThrow().etag
+            }
+            if (publishFolderUpfront) publishManifest()
+            for ((index, file) in files.withIndex()) {
+                network.transport.sha256Hex(file)
+                val key = "files/benchmark-$index.bin"
+                network.transport.uploadFile(TARGET, key, file).getOrThrow()
+                publishedKeys += key
+                pendingDescriptions++
+                val checkpointReached = if (manifestBatchSize == 1) {
+                    true // current production behavior before batching: publish after every file
+                } else {
+                    CloudUploadManifestPolicy.shouldPublish(pendingDescriptions)
+                }
+                if (checkpointReached) {
+                    publishManifest()
+                    pendingDescriptions = 0
+                }
+            }
+            if (pendingDescriptions > 0 &&
+                CloudUploadManifestPolicy.shouldPublish(pendingDescriptions, isFinal = true)) publishManifest()
+            val elapsedMillis = (System.nanoTime() - started) / 1_000_000
+            return elapsedMillis to network.requests.size
+        }
+
+        fun median(values: List<Long>) = values.sorted()[values.size / 2]
+        try {
+            val before = (1..3).map { sample(manifestBatchSize = 1, publishFolderUpfront = true) }
+            val after = (1..3).map {
+                sample(CloudUploadManifestPolicy.CHECKPOINT_FILE_COUNT, publishFolderUpfront = false)
+            }
+            val beforeMillis = median(before.map { it.first })
+            val afterMillis = median(after.map { it.first })
+            assertTrue(before.all { it.second == 82 })
+            assertTrue(after.all { it.second == 48 })
+            println(
+                "UPLOAD_BENCH bytes=2048000 files=20 delay_per_http_request_ms=15 " +
+                    "before_median_ms=$beforeMillis before_requests=82 " +
+                    "after_median_ms=$afterMillis after_requests=48 " +
+                    "speedup=${"%.2f".format(beforeMillis.toDouble() / afterMillis)}x"
+            )
+        } finally {
+            files.forEach { it.delete() }
+            directory.delete()
+        }
     }
     @Test fun emptyFileIsUploadedOnceWithoutAnInvalidRange() = runBlocking {
         val file = temp()
@@ -248,20 +359,23 @@ class AppwriteStorageTransportTest {
         override fun requireCurrent(grant: StorageGrant) { if (!active) throw IOException("signed out") }
         override fun clear() = Unit
     }
-    private class Network(handler: (FakeConnection) -> Reply) {
+    private class Network(private val delayMillis: Long = 0, handler: (FakeConnection) -> Reply) {
         val authorizer = Authorizer()
         val requests = Collections.synchronizedList(arrayListOf<FakeConnection>())
         // الباني آخر وسائطه platformHeaders: Map، فالـlambda الخلفية غير قانونية هنا؛
         // المصنع يُمرَّر وساطًا مُسمّى (خطأ ترجمة كان يُسقط حزمة الاختبارات كلها).
         val transport = AppwriteStorageTransport(
             TARGET, authorizer,
-            openConnection = { url -> FakeConnection(url, handler).also { requests += it } }
+            openConnection = { url -> FakeConnection(url, handler, delayMillis).also { requests += it } }
         )
     }
     private data class Reply(val status: Int, val bytes: ByteArray, val headers: Map<String, String> = emptyMap())
-    private class FakeConnection(url: URL, handler: (FakeConnection) -> Reply) : HttpURLConnection(url) {
+    private class FakeConnection(url: URL, handler: (FakeConnection) -> Reply, private val delayMillis: Long = 0) : HttpURLConnection(url) {
         private val output = ByteArrayOutputStream()
-        private val reply by lazy { handler(this) }
+        private val reply by lazy {
+            if (delayMillis > 0) Thread.sleep(delayMillis)
+            handler(this)
+        }
         var disconnected = false
         override fun connect() = Unit
         override fun disconnect() { disconnected = true }
@@ -273,6 +387,7 @@ class AppwriteStorageTransportTest {
         override fun getContentLengthLong() = reply.headers["Content-Length"]?.toLong() ?: reply.bytes.size.toLong()
         override fun getHeaderField(name: String) = reply.headers[name]
         fun fileId(): String = output.toString("UTF-8").substringAfter("name=\"fileId\"\r\n\r\n").substringBefore("\r\n")
+        fun fileName(): String = output.toString("UTF-8").substringAfter("filename=\"").substringBefore('"')
         fun fileBytes(): ByteArray {
             val raw = output.toByteArray()
             val prefix = raw.copyOfRange(0, minOf(raw.size, 1024)).toString(Charsets.UTF_8)

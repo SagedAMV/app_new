@@ -16,6 +16,14 @@ object CloudFileRules {
 
     fun exceedsUploadSizeLimit(sizeBytes: Long): Boolean = sizeBytes > MAX_UPLOAD_FILE_BYTES
 
+    /** Bytes included in batch progress; an oversized file is skipped and must not inflate its denominator. */
+    fun uploadBatchBytes(fileSizes: Iterable<Long>): Long =
+        fileSizes.fold(0L) { total, size ->
+            if (size < 0L || exceedsUploadSizeLimit(size)) total
+            else if (Long.MAX_VALUE - total < size) Long.MAX_VALUE
+            else total + size
+        }
+
     fun isDownloaded(
         remote: RemoteCloudFile,
         link: CloudFileLink?,
@@ -37,6 +45,17 @@ object CloudFileRules {
         val suffix = if (identity.isEmpty()) "" else "_$identity"
         return "${CloudStorageConfig.REMOTE_FILES_PREFIX}$sha256$suffix.$safeExt"
     }
+}
+
+/**
+ * Bounds manifest-write overhead for multi-file uploads while committing partial progress
+ * regularly. Remaining descriptions are flushed when the batch completes.
+ */
+object CloudUploadManifestPolicy {
+    const val CHECKPOINT_FILE_COUNT: Int = 5
+
+    fun shouldPublish(pendingDescriptions: Int, isFinal: Boolean = false): Boolean =
+        pendingDescriptions > 0 && (isFinal || pendingDescriptions >= CHECKPOINT_FILE_COUNT)
 }
 
 /**
