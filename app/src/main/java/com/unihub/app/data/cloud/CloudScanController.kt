@@ -48,7 +48,7 @@ class CloudScanController<T>(
                             _state.value = CloudScanState(
                                 phase = if (files == 0 && folders == 0) CloudScanPhase.EMPTY else CloudScanPhase.READY,
                                 checkedAt = System.currentTimeMillis(), serverFileCount = files, serverFolderCount = folders,
-                                message = if (files == 0 && folders == 0) "السحابة فارغة"
+                                message = if (files == 0 && folders == 0) CloudScanState.EMPTY_MESSAGE
                                     else "$folders مجلد • $files ملف"
                             )
                         },

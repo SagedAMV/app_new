@@ -174,6 +174,82 @@ class AndroidCiTest(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 android_ci.verify("releaseFull", root=self.root)
 
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("scripts.android_ci.subprocess.run")
+    def test_committed_test_signing_key_is_required(self, run):
+        # النسخة الموقّعة بمفتاح متوقع: تُقبل وتُطبع بصمتها، وتُكتب في مخرجات الخطوة.
+        self.apk("app-debug.apk")
+        self.tools()
+        run.return_value.stdout = "Signer #1 certificate SHA-256 digest: 73:6a:66:fc:" + "0" * 56
+        outputs = self.root / "github_output"
+        with patch.dict(os.environ, {"GITHUB_OUTPUT": str(outputs)}):
+            with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    android_ci.verify("releaseFull", require_signed=True,
+                                      require_signer="736A66FC" + "0" * 56, root=self.root)
+        self.assertIn("Signer certificate SHA-256: 736a66fc" + "0" * 56, output.getvalue())
+        self.assertIn("signer=736a66fc" + "0" * 56, outputs.read_text())
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("scripts.android_ci.subprocess.run")
+    def test_signer_report_is_read_regardless_of_case_spacing_and_stream(self, run):
+        # صيغة تقرير apksigner تتغيّر بين إصدارات build-tools؛ الاختلاف الشكلي لا يجوز
+        # أن يُقرأ «مفتاحاً خاطئاً». كل الأشكال التالية تصف البصمة نفسها:
+        self.apk("app-debug.apk")
+        self.tools()
+        bare = "73" + "6a66fc" + "0" * 56
+        coloned = ":".join(bare[index:index + 2] for index in range(0, 64, 2))
+        reports = [
+            ("Signer #1 certificate SHA-256 digest: " + bare, ""),
+            ("", "Signer #1 certificate SHA256 DIGEST = " + bare.upper()),
+            ("", "Signer #1 certificate sha-256 digest:  " + coloned.upper()),
+            ("Signer #1 certificate DN: CN=UniHub\nSigner #1 certificate SHA-256 digest:\n"
+             "  " + bare + "\nSigner #1 public key SHA-256 digest: " + "f" * 64, ""),
+            ("Signer #1 certificate SHA-256 digest: 73:6a:66:fc:" + "0" * 56, ""),
+            # التقرير الحقيقي لنسخة تجريبية موقّعة بـ v2 فقط (كما ظهر في CI فعلاً):
+            ("V2 Signer: certificate DN: CN=UniHub Test Debug, OU=UniHub, O=UniHub, C=US\n"
+             "V2 Signer: certificate SHA-256 digest: " + bare + "\n"
+             "V2 Signer: certificate SHA-1 digest: " + "a" * 40 + "\n"
+             "V2 Signer: certificate MD5 digest: " + "b" * 32 + "\n", ""),
+            # بصمة المفتاح العام تُذكر قبل بصمة الشهادة: لا يجوز اختيار الأولى.
+            ("V2 Signer: public key SHA-256 digest: " + "e" * 64 + "\n"
+             "V3 Signer: certificate DN: CN=UniHub Test Debug\n"
+             "V3 Signer: certificate SHA-256 digest: " + bare + "\n", ""),
+        ]
+        with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
+            for stdout, stderr in reports:
+                run.return_value.stdout, run.return_value.stderr = stdout, stderr
+                self.assertEqual(bare, android_ci.apk_signer_digest(self.root / "apksigner", self.root / "a.apk"))
+
+    def test_signer_report_without_a_certificate_digest_is_rejected_with_evidence(self):
+        with patch("scripts.android_ci.subprocess.run") as run:
+            run.return_value.stdout = "Verifies\nNumber of signers: 1\n"
+            run.return_value.stderr = ""
+            with self.assertRaisesRegex(ValueError, "Number of signers"):
+                android_ci.apk_signer_digest(self.root / "apksigner", self.root / "a.apk")
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("scripts.android_ci.subprocess.run")
+    def test_ephemeral_signing_key_is_rejected_instead_of_shipping(self, run):
+        # كان كل runner يولّد مفتاح debug عابراً: الشهادة تختلف كل بناء فترفض الأجهزة التثبيت.
+        self.apk("app-debug.apk")
+        self.tools()
+        run.return_value.stdout = "Signer #1 certificate SHA-256 digest: " + "a" * 64
+        with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
+            with self.assertRaisesRegex(ValueError, "different key than the one committed"):
+                android_ci.verify("releaseFull", require_signed=True, require_signer="b" * 64, root=self.root)
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("scripts.android_ci.subprocess.run")
+    def test_unreadable_signer_report_is_not_treated_as_a_match(self, run):
+        # تقرير apksigner بلا بصمة صالحة لا يجوز أن يُمرَّر كنجاح.
+        self.apk("app-debug.apk")
+        self.tools()
+        run.return_value.stdout = "Signer #1 certificate DN: CN=Unreported\n"
+        with patch("scripts.android_ci.sdk_directory", return_value=self.root / "sdk"):
+            with self.assertRaisesRegex(ValueError, "did not report a SHA-256 certificate digest"):
+                android_ci.verify("releaseFull", require_signed=True, require_signer="c" * 64, root=self.root)
+
     def test_selects_newest_complete_stable_build_tools_numerically(self):
         self.tools("9.0.0")
         expected = self.tools("35.0.0")
@@ -276,38 +352,84 @@ class AndroidCiTest(unittest.TestCase):
         self.assertIn("Android process crash", output.getvalue())
         self.assertIn("native crash fixture", output.getvalue())
 
-    def test_device_script_preserves_gradle_status_when_logcat_succeeds_or_fails(self):
-        script = Path(android_ci.__file__).with_name("run_android_ui_tests.sh")
+    def device_double(self, gradle_status=0, logcat_status=0, app_alive=True, apk=True, extra_adb_body=""):
+        """Fake `gradlew`/`adb` and the debug APK metadata the launcher smoke reads.
+
+        The smoke phase answers three adb calls: `install` (must succeed), `shell am start`
+        (must succeed) and `shell pidof com.unihub.app` (the liveness evidence). Fixtures
+        therefore have to answer all three instead of only logcat.
+        """
         binary = self.root / "bin"
-        binary.mkdir()
+        binary.mkdir(exist_ok=True)
         adb = binary / "adb"
         gradle = self.root / "gradlew"
-        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}", GITHUB_ACTIONS="false")
+        alive_body = 'if [[ "${2:-}" == "pidof" ]]; then echo 4242; exit 0; fi\n' if app_alive else \
+            'if [[ "${2:-}" == "pidof" ]]; then exit 1; fi\n'
+        adb.write_text(
+            "#!/usr/bin/env bash\n"
+            + alive_body
+            + extra_adb_body
+            + f'if [[ "${{2:-}}" == "-d" ]]; then echo "native logcat fixture"; exit {logcat_status}; fi\n'
+            + "exit 0\n"
+        )
+        gradle.write_text(f'#!/usr/bin/env bash\necho "device test fixture"\nexit {gradle_status}\n')
+        adb.chmod(0o700)
+        gradle.chmod(0o700)
+        folder = self.root / "app/build/outputs/apk/debug"
+        if apk:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "app-debug.apk").write_bytes(b"APK fixture")
+            (folder / "output-metadata.json").write_text(json.dumps({"elements": [{"outputFile": "app-debug.apk"}]}))
+        elif folder.exists():
+            for leftover in folder.iterdir():
+                leftover.unlink()
+        return dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}", GITHUB_ACTIONS="false",
+                    ANDROID_UI_SMOKE_GRACE_SECONDS="1", ANDROID_UI_SMOKE_PROBES="1", ANDROID_UI_SMOKE_PROBE_SECONDS="1")
+
+    def run_device_script(self, environment, timeout=15):
+        return subprocess.run(["bash", str(Path(android_ci.__file__).with_name("run_android_ui_tests.sh"))],
+                              cwd=self.root, env=environment, capture_output=True, text=True, timeout=timeout)
+
+    def test_device_script_preserves_gradle_status_when_logcat_succeeds_or_fails(self):
         for gradle_status in (0, 7):
             for logcat_status in (0, 23):
                 with self.subTest(gradle_status=gradle_status, logcat_status=logcat_status):
-                    adb.write_text(f'#!/usr/bin/env bash\nif [[ "${{2:-}}" == "-d" ]]; then echo "native logcat fixture"; exit {logcat_status}; fi\nexit 0\n')
-                    gradle.write_text(f'#!/usr/bin/env bash\necho "device test fixture"\nexit {gradle_status}\n')
-                    adb.chmod(0o700)
-                    gradle.chmod(0o700)
-                    result = subprocess.run(["bash", str(script)], cwd=self.root, env=environment, capture_output=True, text=True)
+                    environment = self.device_double(gradle_status=gradle_status, logcat_status=logcat_status)
+                    result = self.run_device_script(environment)
                     self.assertEqual(gradle_status, result.returncode, result.stderr)
                     self.assertIn("device test fixture", (self.root / "ui-tests.log").read_text())
                     self.assertIn("native logcat fixture", (self.root / "ui-logcat.log").read_text())
 
+    def test_launch_smoke_verifies_the_publishable_apk_and_keeps_a_passing_status(self):
+        # النسخة التي ستُنشر تُثبَّت فعلياً ثم تُفتح بنيّة النظام؛ نجاح ذلك لا يغيّر رمز الخروج.
+        result = self.run_device_script(self.device_double(app_alive=True))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Starting the installed build from the system launcher", result.stdout)
+        self.assertIn("Process 4242 is still alive", result.stdout)
+        self.assertIn("Process 4242 is still alive", (self.root / "ui-launch-smoke.log").read_text())
+
+    def test_launch_smoke_fails_the_gate_when_the_installed_build_dies_after_start(self):
+        # «تُثبَّت ثم لا تعمل» يجب أن يكون فشلاً ظاهراً لا منصة خضراء.
+        result = self.run_device_script(self.device_double(app_alive=False))
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("is not running after its cold start", result.stdout)
+
+    def test_launch_smoke_fails_when_the_apk_to_publish_is_missing(self):
+        result = self.run_device_script(self.device_double(apk=False))
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assertIn("was not found in the build outputs", result.stdout)
+
+    def test_launch_smoke_does_not_mask_a_failing_device_test_run(self):
+        result = self.run_device_script(self.device_double(gradle_status=7, app_alive=False))
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("is not running after its cold start", result.stdout)
+
     def run_deadline_fixture(self, gradle_body, adb_body, test_timeout="5"):
-        binary = self.root / "bin"
-        binary.mkdir()
-        adb = binary / "adb"
-        gradle = self.root / "gradlew"
-        adb.write_text("#!/usr/bin/env bash\n" + adb_body + "\n")
-        gradle.write_text("#!/usr/bin/env bash\n" + gradle_body + "\n")
-        adb.chmod(0o700)
-        gradle.chmod(0o700)
-        environment = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}", GITHUB_ACTIONS="false",
-                           ANDROID_UI_ADB_TIMEOUT_SECONDS="1", ANDROID_UI_TEST_TIMEOUT_SECONDS=test_timeout)
-        return subprocess.run(["bash", str(Path(android_ci.__file__).with_name("run_android_ui_tests.sh"))],
-                              cwd=self.root, env=environment, capture_output=True, text=True, timeout=10)
+        environment = self.device_double(gradle_status=0, extra_adb_body=adb_body + "\n")
+        (self.root / "gradlew").write_text("#!/usr/bin/env bash\n" + gradle_body + "\n")
+        (self.root / "gradlew").chmod(0o700)
+        environment.update(ANDROID_UI_ADB_TIMEOUT_SECONDS="1", ANDROID_UI_TEST_TIMEOUT_SECONDS=test_timeout)
+        return self.run_device_script(environment)
 
     def test_device_test_timeout_stops_the_pipeline_and_captures_diagnostics(self):
         result = self.run_deadline_fixture(

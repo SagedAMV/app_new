@@ -24,6 +24,28 @@ val releaseKeyPassword = signingProperties.getProperty("keyPassword").orEmpty()
 val releaseSigningReady = releaseStoreFile?.isFile == true && releaseStorePassword.isNotBlank() &&
     releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
 
+// ── مفتاح نسخة الاختبار الثابت ────────────────────────────────────────────────
+// السبب الجذري لعطل «النسخة التي نزلت لا تعمل»: كان بناء Debug يوقَّع بمفتاح
+// ~/.android/debug.keystore، وكل runner في GitHub Actions يبدأ فارغاً فيولّد مفتاحاً
+// جديداً عشوائياً — فتختلف شهادة كل بناء اختبار عن الذي قبله، ويرفض أندرويد تثبيت
+// النسخة الجديدة فوق المثبَّتة (INSTALL_FAILED_UPDATE_INCOMPATIBLE / «لم يُثبَّت
+// التطبيق»)، ولا سبيل إلا بحذف التطبيق وفقدان بياناته.
+//
+// الإصلاح: مفتاح اختبار واحد مُلتزَم في المستودع (بلا أسرار: كلمة السر «android»
+// المعروفة، ولا يصلح للنشر على Google Play) يُستخدم لكل بناء اختبار، فتصير كل النسخ
+// موقّعة بنفس الشهادة وتُثبَّت التحديثات فوق بعضها. وفحص البناء يتحقق من بصمة الشهادة
+// في CI، فأي انزلاق إلى مفتاح عابر جديد يفشل البناء بدل أن يصل للمستخدم.
+val testKeyStoreFile = rootProject.file("app/keystore/unihub-test.jks")
+val testKeyStorePassword = "android"
+val testKeyAlias = "androiddebugkey"
+val testSigningReady = testKeyStoreFile.isFile
+if (!testSigningReady) {
+    logger.warn(
+        "app/keystore/unihub-test.jks مفقود: سيعود بناء Debug إلى مفتاح الجهاز العابر، " +
+            "وسيرفض فحص CI بصمة شهادة التوقيع"
+    )
+}
+
 
 
 android {
@@ -42,6 +64,16 @@ android {
     }
 
     signingConfigs {
+        // مفتاح نسخة الاختبار الثابت — راجع تعليق testKeyStoreFile أعلاه قبل أي تعديل.
+        if (testSigningReady) {
+            create("testDebug") {
+                storeFile = testKeyStoreFile
+                storePassword = testKeyStorePassword
+                keyAlias = testKeyAlias
+                keyPassword = testKeyStorePassword
+                storeType = "JKS"
+            }
+        }
         if (releaseSigningReady) {
             create("release") {
                 storeFile = requireNotNull(releaseStoreFile)
@@ -83,6 +115,9 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            // توقيع بمفتاح الاختبار الثابت بدل مفتاح الجهاز العابر — راجع تعليق
+            // testKeyStoreFile في أعلى الملف: بدونه لا تُثبَّت نسخة اختبار فوق أخرى.
+            if (testSigningReady) signingConfig = signingConfigs.getByName("testDebug")
         }
 
         // النسخة الكاملة (غير المصغّرة): جودة Release نفسها (موقَّعة بمفتاح

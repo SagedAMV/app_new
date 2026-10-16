@@ -113,6 +113,7 @@ import com.unihub.app.data.cloud.CloudDownloadDestination
 import com.unihub.app.data.cloud.CloudFolderTree
 import com.unihub.app.data.cloud.CloudPresenceMatcher
 import com.unihub.app.data.cloud.CloudScanPhase
+import com.unihub.app.data.cloud.CloudScanState
 import com.unihub.app.data.cloud.CloudTransferKind
 import com.unihub.app.data.cloud.CloudTransferQueueSnapshot
 import com.unihub.app.data.cloud.CloudTransferState
@@ -626,7 +627,7 @@ fun CloudFilesScreen(
                             missingOnly && scanState.phase == CloudScanPhase.READY && verifyingKeys.isEmpty() -> "كل الملفات محلية"
                             levelKey != null -> "لا ملفات هنا"
                             scanState.phase == CloudScanPhase.SCANNING -> "جارٍ فحص السحابة"
-                            scanState.phase == CloudScanPhase.EMPTY -> "السحابة فارغة"
+                            scanState.phase == CloudScanPhase.EMPTY -> CloudScanState.EMPTY_MESSAGE
                             scanState.phase == CloudScanPhase.ERROR -> "تعذّر فحص السحابة"
                             scanState.phase == CloudScanPhase.BUSY -> "النقل جارٍ بالخلفية"
                             else -> "اضغط للفحص"

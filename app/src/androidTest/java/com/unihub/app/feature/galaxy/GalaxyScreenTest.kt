@@ -123,14 +123,14 @@ class GalaxyScreenTest {
     fun loadingDoesNotClaimThatTheDatabaseHasNoFolders() {
         compose.setContent { MaterialTheme { GalaxyContent(GalaxyUiState.Loading, {}, {}, motionEnabled = false) } }
         compose.onNodeWithTag("galaxy-loading").assertIsDisplayed()
-        compose.onNodeWithText("لا توجد مجلدات بعد").assertDoesNotExist()
+        compose.onNodeWithText("لا مجلدات بعد").assertDoesNotExist()
     }
 
     @Test
     fun errorStateOffersAWorkingRetryInsteadOfAnEmptyGalaxy() {
         var retries = 0
         compose.setContent { MaterialTheme { GalaxyContent(GalaxyUiState.Error, {}, { retries++ }, motionEnabled = false) } }
-        compose.onNodeWithText("لا توجد مجلدات بعد").assertDoesNotExist()
+        compose.onNodeWithText("لا مجلدات بعد").assertDoesNotExist()
         compose.onNodeWithText("إعادة المحاولة").performClick()
         compose.runOnIdle { assertEquals(1, retries) }
     }
@@ -138,7 +138,7 @@ class GalaxyScreenTest {
     @Test
     fun completedEmptyQueryShowsTheRealEmptyState() {
         compose.setContent { MaterialTheme { GalaxyContent(GalaxyUiState.Ready(emptyList()), {}, {}, motionEnabled = false) } }
-        compose.onNodeWithText("لا توجد مجلدات بعد").assertIsDisplayed()
+        compose.onNodeWithText("لا مجلدات بعد").assertIsDisplayed()
         compose.onNodeWithTag("galaxy-loading").assertDoesNotExist()
     }
 

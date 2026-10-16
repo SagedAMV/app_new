@@ -44,7 +44,19 @@ jobs:
           cache-read-only: false
 
       - name: Check build verification helpers
-        run: python3 -m unittest discover -s verification -p 'test_android_ci.py' -v
+        run: python3 -m unittest discover -s verification -p 'test_*.py' -v
+
+      # حارس نصوص الواجهة: كل تسمية ظاهرة أو رسالة خطأ للمستخدم ≤ 3 كلمات (اختصار يمنع
+      # تجاوز النص في RTL). كان هذا الفحص موجوداً لكنه غير موصول بالبناء، فانحرفت نصوص
+      # الإنتاج عن توقّعات الاختبارات ثلاث مرات دون أن يوقفه شيء.
+      - name: Check UI label and error copy lengths
+        run: python3 verification/check_ui_label_lengths.py
+
+      # حارس توقّعات اختبارات الجهاز: كل توقّع إيجابي (assertIsDisplayed/assertExists)
+      # يجب أن يكون نصّه موجوداً فعلاً في كود التطبيق. بدون ذلك لا يظهر انحراف النص إلا
+      # بعد إقلاع المحاكي (دقائق في CI) برسالة لا تسمّي النصّ المفقود إطلاقاً.
+      - name: Check device-test expectations against the shipped copy
+        run: python3 verification/check_device_test_expectations.py
 
       - name: Check Appwrite project boundaries
         run: python3 scripts/check_appwrite_migration.py
@@ -70,7 +82,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Test Galaxy and authentication UI on Android 35
+      - name: Test Galaxy, authentication, and launch on Android 35
         timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
         with:
@@ -90,9 +102,18 @@ jobs:
       - name: Build Release Full APK
         run: ./gradlew assembleReleaseFull --no-daemon --build-cache --stacktrace --console=plain 2>&1 | tee release-build.log
 
-      - name: Verify Debug APK alignment and signature
+      # البصمة أدناه هي شهادة مفتاح نسخة الاختبار المُلتَزَم في المستودع
+      # (app/keystore/unihub-test.jks). كان كل runner يبني بمفتاح ~/.android/debug.keystore
+      # العابر الخاص به، فتختلف الشهادة بين بناء وبناء ويرفض أندرويد تثبيت نسخة الاختبار
+      # الجديدة فوق السابقة — وهذا سبب «النسخة نزلت ولا تعمل». هذا الفحص يجعل أي انزلاق
+      # إلى مفتاح عابر فشلاً ظاهراً قبل النشر. عند تغيير المفتاح عمداً حدِّث البصمة معه.
+      - name: Verify Debug APK alignment, signature, and stable signing key
         id: debug-apk
-        run: python3 scripts/android_ci.py verify debug --require-signed
+        env:
+          UNIHUB_TEST_SIGNER_SHA256: "73:6A:66:FC:99:89:E7:58:F8:FA:C9:D9:FE:73:25:FA:CC:FB:BE:3F:57:CB:A8:07:F3:94:10:9B:5B:1C:92:77"
+        run: |
+          python3 scripts/android_ci.py verify debug --require-signed \
+            --require-signer "$UNIHUB_TEST_SIGNER_SHA256"
 
       # Publish the test build as soon as it is verified, not at the end of the
       # job: the emulator suite and the release build run after this point, and
@@ -104,6 +125,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APK_PATH: ${{ steps.debug-apk.outputs.path }}
           APK_SHA256: ${{ steps.debug-apk.outputs.sha256 }}
+          APK_SIGNER: ${{ steps.debug-apk.outputs.signer }}
         run: |
           set -euo pipefail
           TAG="test-latest"
@@ -127,7 +149,8 @@ jobs:
             --title "نسخة الاختبار — UniHub v${VERSION}" \
             --notes "نسخة اختبار قابلة للتثبيت مباشرة (Debug)، مبنية تلقائياً من \`$GITHUB_REF_NAME\`.
           - الإصدار: v${VERSION}
-          - نوع البناء: Debug (غير مصغّر، موقّع بمفتاح التصحيح)
+          - نوع البناء: Debug (غير مصغّر، موقّع بمفتاح الاختبار الثابت)
+          - شهادة التوقيع: \`${APK_SIGNER}\` — ثابتة في كل بناء، فتُثبَّت النسخة الجديدة فوق المثبَّتة بلا حذف ولا فقدان بيانات
           - SHA-256: \`${APK_SHA256}\`
 
           هذه **نسخة اختبار** وليست النسخة الكاملة. الرابط ثابت ويشير دائماً إلى أحدث بناء اختبار ناجح."
@@ -165,7 +188,10 @@ jobs:
 
       - name: Summarize Android UI test results
         if: always()
-        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 16
+        # الوحدات الموجودة فعلاً: GalaxyScreenTest (11) + CloudLoginScreenTest (6) +
+        # AppwriteClientsTest (2) + AppLaunchSmokeTest (1) = 20. الحدّ يمنع تمرير تشغيل
+        # لم تُشغَّل فيه وحدة كاملة، والزيادة عليه مقبولة عند إضافة اختبارات جديدة.
+        run: python3 scripts/android_ci.py report --instrumentation --minimum-tests 20
 
       - name: Upload diagnostic reports
         if: always()
@@ -183,6 +209,9 @@ jobs:
             ui-emulator.log
             ui-emulator-status.log
             ui-logcat.log
+            ui-launch-smoke.log
+            ui-launch-logcat.log
+            ui-crash-buffer.log
             ui-device-status.log
             ui-host-memory.log
             ui-host-kernel.log
