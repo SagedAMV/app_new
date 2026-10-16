@@ -404,7 +404,7 @@ fun FilesScreen(
                 item(key = "files_overview") {
                     FeatureHeroCard(
                         title = "مكتبتك الجامعية",
-                        subtitle = "ملفاتك ومجلداتك مرتبة محلياً، مع إمكانية الوصول إلى السحابة.",
+                        subtitle = "ملفاتك المحلية والسحابية",
                         icon = Icons.Filled.Folder,
                         badge = if (isOnline) "${files.size} ملف" else "دون اتصال",
                         modifier = Modifier
@@ -524,9 +524,9 @@ fun FilesScreen(
                         icon = Icons.Filled.Folder,
                         title = if (favoritesOnly) "لا ملفات مفضلة هنا" else "المجلد فارغ",
                         subtitle = if (favoritesOnly) {
-                            "اضغط النجمة أعلاه لعرض كل الملفات"
+                            "عرض كل الملفات"
                         } else {
-                            "أنشئ مجلداً لمادة دراسية أو ارفع ملفاتك من زر الإضافة"
+                            "أضف ملفاتك"
                         },
                         modifier = Modifier.reveal("empty_$favoritesOnly", 0, played, RevealStyle.Hero)
                     )
@@ -698,7 +698,7 @@ fun FilesScreen(
         deleteFolderTarget?.let { folder ->
             ConfirmDialog(
                 title = "حذف المجلد؟",
-                message = "سيُحذف المجلد «${folder.name}» وكل محتوياته.",
+                message = "حذف المجلد ومحتوياته؟",
                 onConfirm = {
                     viewModel.deleteFolder(folder)
                     deleteFolderTarget = null
@@ -712,7 +712,7 @@ fun FilesScreen(
             ConfirmDialog(
                 title = if (selectedFiles.size == 1) "حذف الملف؟"
                 else "حذف " + Formatters.fileCountLabel(selectedFiles.size) + "؟",
-                message = "ستُحذف الملفات المحددة نهائياً.",
+                message = "حذف الملفات المحددة؟",
                 onConfirm = {
                     viewModel.deleteFiles(selectedFiles)
                     confirmBulkDelete = false
@@ -904,13 +904,13 @@ private fun InboxSheet(
         content = {
             if (items.isEmpty()) {
                 Text(
-                    "لا ملفات واردة حالياً — شارك ملفات من أي تطبيق وستظهر هنا.",
+                    "لا ملفات واردة",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 Text(
-                    "ادخل المجلد الذي تريده واضغط «نقل إلى هذا المجلد» — أو أهمل ما لا تريده.",
+                    "اختر مجلد الوجهة",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -82,7 +82,7 @@ fun CloudDownloadDestinationDialog(
                 if (mode == CloudDownloadLocation.FOLDER_INSIDE_LOCAL && rootName.isBlank()) Text(
                     "أدخل اسماً للمجلد",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لن تتغير المجلدات أو الاسم."
+                Text(if (mode == CloudDownloadLocation.LOCAL_FOLDER) "لا يتغير المصدر"
                     else "سيُحفظ المحدد فقط.", style = MaterialTheme.typography.bodySmall)
             }
         }

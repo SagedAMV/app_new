@@ -111,7 +111,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                 EmptyState(
                     icon = Icons.AutoMirrored.Outlined.MenuBook,
                     title = "جدولك فارغ",
-                    subtitle = "أضف محاضراتك الأسبوعية لتظهر هنا وفي الرئيسية حسب اليوم"
+                    subtitle = "أضف محاضرات أسبوعية"
                 )
             }
         } else if (showGrid) {
@@ -134,7 +134,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                 Spacer(Modifier.height(8.dp))
                 FeatureHeroCard(
                     title = "مخطط الأسبوع",
-                    subtitle = "نظرة مرتبة على المحاضرات ومواعيدها حسب اليوم.",
+                    subtitle = "مواعيد المحاضرات",
                     icon = Icons.AutoMirrored.Outlined.MenuBook,
                     badge = "${lectures.size} محاضرة"
                 )
@@ -192,7 +192,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
         deleteTarget?.let { lecture ->
             ConfirmDialog(
                 title = "حذف المحاضرة؟",
-                message = "ستُحذف محاضرة \"${lecture.subject}\" من الجدول.",
+                message = "حذف المحاضرة؟",
                 onConfirm = {
                     viewModel.delete(lecture)
                     deleteTarget = null

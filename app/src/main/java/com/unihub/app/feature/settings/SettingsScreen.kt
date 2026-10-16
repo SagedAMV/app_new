@@ -257,7 +257,7 @@ fun SettingsScreen(
         if (showClearConfirm) {
             ConfirmDialog(
                 title = "مسح جميع البيانات؟",
-                message = "سيُحذف كل شيء نهائياً. لا يمكن التراجع.",
+                message = "لا يمكن التراجع",
                 confirmLabel = "مسح الكل",
                 onConfirm = {
                     viewModel.clearAllData()
@@ -309,12 +309,12 @@ private fun SettingsCategoriesHome(
     ) {
         FeatureHeroCard(
             title = "مركز إعدادات UniHub",
-            subtitle = "خصّص المظهر، النسخ الاحتياطي، البيانات وإدارة الحساب.",
+            subtitle = "المظهر والبيانات والحساب",
             icon = Icons.Outlined.Info,
             badge = "${categories.size} فئات"
         )
         Text(
-            text = "اختر الصنف لعرض وضبط إعداداته الخاصة",
+            text = "اختر صنفًا",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -648,7 +648,7 @@ private fun AppearanceCategoryContent(
                         }
                     }
                     Text(
-                        "ألوان هادئة وتباين واضح للقراءة الطويلة.",
+                        "ألوان واضحة للقراءة",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -717,7 +717,7 @@ private fun AppearanceCategoryContent(
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "ألوان Material You الديناميكية",
+                            text = "ألوان Material You",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
@@ -725,9 +725,9 @@ private fun AppearanceCategoryContent(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            "استخدم ألواناً مشتقة من خلفية جهازك (أندرويد 12+)"
+                            "ألوان الجهاز"
                         } else {
-                            "متوفرة على أندرويد 12 فما فوق فقط"
+                            "أندرويد 12+"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -772,9 +772,9 @@ private fun AutoBackupCategoryContent(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = if (autoBackup?.isFolderConfigured == true) {
-                            "تم تحديد مجلد نسخ الاحتياطية ✓"
+                            "مجلد النسخ محدد ✓"
                         } else {
-                            "لم يتم تحديد مجلد نسخ الاحتياطية"
+                            "اختر مجلد النسخ"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (autoBackup?.isFolderConfigured == true) {
@@ -799,7 +799,7 @@ private fun AutoBackupCategoryContent(
             val chipIndex = SettingsCatalogRules.computeBackupChipIndex(intervalDays)
 
             Text(
-                text = "كل كم يُعمل النسخ التلقائي؟",
+                text = "دورية النسخ",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
@@ -848,12 +848,12 @@ private fun AutoBackupCategoryContent(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "نسخة بعد كل عملية تعديل",
+                        text = "نسخة لكل تعديل",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "للتجربة: تُحدَّث نسخة «آخر حفظ» بعد أي تعديل على بياناتك",
+                        text = "نسخة تلقائية للتعديلات",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -929,7 +929,7 @@ private fun DataCategoryContent(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "تصدير بياناتك إلى أرشيف نسخة احتياطية أو استعادتها",
+                            text = "تصدير أو استعادة",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -971,7 +971,7 @@ private fun DataCategoryContent(
                             color = MaterialTheme.colorScheme.error
                         )
                         Text(
-                            text = "يحذف كل المجلدات والملفات والمهام والملاحظات نهائياً",
+                            text = "حذف البيانات نهائيًا",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

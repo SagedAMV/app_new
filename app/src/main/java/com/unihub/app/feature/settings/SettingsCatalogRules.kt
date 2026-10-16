@@ -21,27 +21,27 @@ enum class SettingsCategory(
     USER_MANAGEMENT(
         id = "USER_MANAGEMENT",
         title = "إدارة المستخدمين",
-        defaultSubtitle = "الحساب الحالي، إدارة المستخدمين، الصلاحيات، وطلبات الأجهزة"
+        defaultSubtitle = "حسابات وصلاحيات"
     ),
     APPEARANCE(
         id = "APPEARANCE",
         title = "المظهر",
-        defaultSubtitle = "الوضع الفاتح والداكن وألوان Material You الديناميكية"
+        defaultSubtitle = "المظهر والألوان"
     ),
     AUTO_BACKUP(
         id = "AUTO_BACKUP",
         title = "النسخ الاحتياطي التلقائي",
-        defaultSubtitle = "جدولة النسخ التلقائي الدوري وحفظ التعديلات"
+        defaultSubtitle = "نسخ تلقائي"
     ),
     DATA(
         id = "DATA",
         title = "البيانات",
-        defaultSubtitle = "تصدير واستعادة النسخ الاحتياطية أو مسح البيانات"
+        defaultSubtitle = "إدارة النسخ والبيانات"
     ),
     ABOUT(
         id = "ABOUT",
         title = "حول التطبيق",
-        defaultSubtitle = "معلومات UniHub وإصدار التطبيق"
+        defaultSubtitle = "معلومات التطبيق"
     );
 
     companion object {
@@ -245,24 +245,24 @@ object SettingsCatalogRules {
     ): String = when (category) {
         SettingsCategory.USER_MANAGEMENT -> {
             if (isAdmin) {
-                "$totalUsersCount مستخدم مسجل في Appwrite"
+                "$totalUsersCount مستخدمون"
             } else {
                 val userLabel = currentUsername?.takeIf { it.isNotBlank() } ?: "مستخدم سحابي"
-                "الحساب الحالي: $userLabel • إعدادات الحساب والجهاز"
+                "الحساب: $userLabel"
             }
         }
         SettingsCategory.APPEARANCE -> {
             val modeLabel = when (themeMode) {
-                ThemeMode.SYSTEM -> "تلقائي (حسب النظام)"
-                ThemeMode.LIGHT -> "الوضع الفاتح"
-                ThemeMode.DARK -> "الوضع الداكن"
+                ThemeMode.SYSTEM -> "تلقائي"
+                ThemeMode.LIGHT -> "فاتح"
+                ThemeMode.DARK -> "داكن"
             }
-            val dynamicLabel = if (useDynamicColor) " • ألوان ديناميكية مفعّلة" else ""
+            val dynamicLabel = if (useDynamicColor) " • ألوان ديناميكية" else ""
             "$modeLabel$dynamicLabel"
         }
         SettingsCategory.AUTO_BACKUP -> {
             if (!isBackupFolderConfigured) {
-                "غير مفعّل — لم يتم تحديد مجلد النسخ الاحتياطي بعد"
+                "غير مفعّل"
             } else {
                 val intervalLabel = when (backupIntervalDays) {
                     1 -> "يومياً"
@@ -271,11 +271,11 @@ object SettingsCatalogRules {
                     30 -> "شهرياً"
                     else -> "كل $backupIntervalDays يوم"
                 }
-                "مفعّل ✓ • الجدولة: $intervalLabel"
+                "$intervalLabel ✓"
             }
         }
         SettingsCategory.DATA -> category.defaultSubtitle
-        SettingsCategory.ABOUT -> "UniHub — الإصدار $appVersion"
+        SettingsCategory.ABOUT -> "UniHub $appVersion"
     }
 
     /** حساب مؤشر الشريحة المختارة لفاصل النسخ الاحتياطي التلقائي. */

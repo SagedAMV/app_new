@@ -19,24 +19,24 @@ object NotificationChannels {
 
         manager.createNotificationChannel(
             NotificationChannel(EXAMS, "تذكير بالامتحانات", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "إشعارات قبل الامتحانات القادمة"
+                description = "إشعار الامتحانات"
             }
         )
         manager.createNotificationChannel(
             NotificationChannel(TASKS, "تذكير بالمهام", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "إشعارات مواعيد استحقاق المهام"
+                description = "إشعار المهام"
             }
         )
         manager.createNotificationChannel(
             NotificationChannel(CLOUD_FILES, "ملفات سحابية جديدة", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "إشعارات عند توفر ملفات جديدة على خادم Appwrite مع أسمائها وأحجامها"
+                description = "ملفات سحابية"
             }
         )
 
         // قناة النقل: IMPORTANCE_LOW لأن الإشعار مستمر/Ticker ولا يجوز أن يرنّ كل تقدّم
         manager.createNotificationChannel(
-            NotificationChannel(CLOUD_TRANSFERS, "نقل الملفات في الخلفية", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "تقدّم الرفع والتنزيل في الخلفية مع أزرار الإيقاف المؤقت والإلغاء"
+            NotificationChannel(CLOUD_TRANSFERS, "نقل الملفات", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "حالة نقل الملفات"
                 setShowBadge(false)
             }
         )

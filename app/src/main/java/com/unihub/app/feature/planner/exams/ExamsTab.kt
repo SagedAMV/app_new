@@ -99,10 +99,10 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
                 title = "العدّ التنازلي للامتحانات",
                 subtitle = nextExam?.let { exam ->
                     val days = exam.daysRemaining
-                    if (days == 0L) "الامتحان القادم اليوم: ${exam.subject}"
-                    else if (days != null && days > 0) "أقرب امتحان: ${exam.subject} • متبقٍ ${days} يوم"
-                    else "تابع مواعيد امتحاناتك واستعد مبكراً."
-                } ?: "سجّل مواعيد امتحاناتك لتتابع الاستعداد والوقت المتبقي.",
+                    if (days == 0L) "اليوم: ${exam.subject}"
+                    else if (days != null && days > 0) "الأقرب: ${exam.subject} • ${days} يوم"
+                    else "امتحانات قادمة"
+                } ?: "مواعيد الامتحانات",
                 icon = Icons.Outlined.School,
                 badge = upcoming.size.toString() + " قادمة"
             )
@@ -111,7 +111,7 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
                 EmptyState(
                     icon = Icons.Outlined.School,
                     title = "لا امتحانات مسجلة",
-                    subtitle = "أضف امتحاناتك وستصلك تذكيرات قبلها بيوم وساعة وعند البدء"
+                    subtitle = "أضف امتحانًا"
                 )
             } else {
                 if (upcoming.isNotEmpty()) {
@@ -168,7 +168,7 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
         deleteTarget?.let { exam ->
             ConfirmDialog(
                 title = "حذف الامتحان؟",
-                message = "سيُحذف امتحان \"${exam.subject}\" وتُلغى كل تذكيراته.",
+                message = "حذف الامتحان وتذكيراته؟",
                 onConfirm = {
                     viewModel.delete(exam)
                     deleteTarget = null
@@ -314,7 +314,7 @@ private fun ExamSheet(
                         }
                     }
                 }
-            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ على أي حال" else "حفظ") }
+            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ رغم ذلك" else "حفظ") }
         }
     ) {
         Field(
@@ -345,8 +345,8 @@ private fun ExamSheet(
         )
         if (isPastDate) {
             FormWarningText(
-                if (pastDateConfirmed) "تاريخ الامتحان في الماضي ولن تصلك تذكيرات — اضغط «حفظ على أي حال» للتأكيد"
-                else "تاريخ الامتحان المختار قد مضى — تأكد من اليوم والشهر والسنة"
+                if (pastDateConfirmed) "لن تصلك تذكيرات"
+                else "تاريخ الامتحان ماضٍ"
             )
         }
         TimeField(

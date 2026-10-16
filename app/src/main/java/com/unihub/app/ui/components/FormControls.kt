@@ -78,7 +78,7 @@ fun AppSheet(
         if (askDiscard) {
             ConfirmDialog(
                 title = "تجاهل التغييرات؟",
-                message = "لم تُحفظ البيانات التي أدخلتها بعد. هل تريد الخروج دون حفظ؟",
+                message = "تغييرات غير محفوظة",
                 confirmLabel = "تجاهل",
                 onConfirm = {
                     askDiscard = false

@@ -98,7 +98,7 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
             Spacer(Modifier.height(10.dp))
             FeatureHeroCard(
                 title = "لوحة الأولويات",
-                subtitle = "رتّب يومك، تابع الإنجاز، ولا تفوّت المهام المتأخرة.",
+                subtitle = "تابع مهامك اليومية",
                 icon = Icons.Outlined.AddTask,
                 badge = tasks.size.toString() + " ظاهرة"
             )
@@ -137,9 +137,9 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
                         TaskFilter.ALL -> "لا مهام بعد"
                     },
                     subtitle = if (searchQuery.trim().isNotBlank()) {
-                        "جرّب كلمات بحث أخرى أو غيّر المرشح"
+                        "غيّر كلمات البحث"
                     } else {
-                        "أضف مهمة من زر + وحدد أولويتها وموعد استحقاقها"
+                        "أضف مهمة"
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -186,7 +186,7 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
         deleteTarget?.let { task ->
             ConfirmDialog(
                 title = "حذف المهمة؟",
-                message = "ستُحذف \"${task.title}\" مع تذكيرها المجدول.",
+                message = "حذف المهمة وتذكيرها؟",
                 onConfirm = {
                     viewModel.delete(task)
                     deleteTarget = null
@@ -325,7 +325,7 @@ private fun TaskSheet(
                         }
                     }
                 }
-            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ على أي حال" else "حفظ") }
+            }) { Text(if (isPastDate && pastDateConfirmed) "حفظ رغم ذلك" else "حفظ") }
         }
     ) {
         Field(
@@ -362,8 +362,8 @@ private fun TaskSheet(
         )
         if (isPastDate) {
             FormWarningText(
-                if (pastDateConfirmed) "تنبيه: موعد الاستحقاق في الماضي — اضغط «حفظ على أي حال» للتأكيد"
-                else "موعد الاستحقاق المختار قد مضى"
+                if (pastDateConfirmed) "موعد الاستحقاق ماضٍ"
+                else "موعد ماضٍ"
             )
         }
         FormErrorText(formError)

@@ -192,7 +192,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
             item {
                 FeatureHeroCard(
                     title = "مساحة العمل",
-                    subtitle = "ملاحظات وملخصات وبطاقات أفكار وجداول في مكان واحد.",
+                    subtitle = "ملاحظات وأفكار",
                     icon = Icons.AutoMirrored.Outlined.StickyNote2,
                     badge = notes.size.toString() + " ملاحظة",
                     modifier = Modifier.padding(top = 10.dp)
@@ -285,9 +285,9 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                             else -> "لا ملاحظات بعد"
                         },
                         subtitle = when {
-                            hasSearch -> "جرّب كلمات بحث أخرى أو غيّر المرشح"
-                            currentFilter != NoteFilter.ALL -> "اختر «الكل» أو أنشئ ملاحظة جديدة من الشريط العلوي"
-                            else -> "أنشئ ملاحظة نصية أو لوحة ترتيب أفكار أو جدولاً منظماً أو رسماً توضيحياً"
+                            hasSearch -> "غيّر كلمات البحث"
+                            currentFilter != NoteFilter.ALL -> "اختر الكل"
+                            else -> "أضف ملاحظة"
                         }
                     )
                 }
@@ -340,7 +340,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
         deleteTarget?.let { note ->
             ConfirmDialog(
                 title = "حذف الملاحظة؟",
-                message = "ستُحذف «${note.title}» نهائياً بكل محتوياتها.",
+                message = "حذف الملاحظة ومحتواها؟",
                 onConfirm = {
                     viewModel.delete(note)
                     deleteTarget = null
@@ -1345,7 +1345,7 @@ private fun NoteWorkspaceDialog(
         if (showDiscardDialog) {
             ConfirmDialog(
                 title = "تجاهل التعديلات؟",
-                message = "محتوى غير محفوظ، هل تريد الإغلاق؟",
+                message = "تغييرات غير محفوظة",
                 confirmLabel = "تجاهل",
                 onConfirm = {
                     showDiscardDialog = false

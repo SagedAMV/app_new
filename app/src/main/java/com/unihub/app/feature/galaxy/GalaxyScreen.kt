@@ -128,7 +128,7 @@ internal fun GalaxyContent(
                     Spacer(Modifier.height(20.dp))
                     Text("لا مجلدات بعد", color = Color(0xFFE0E5E1), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(6.dp))
-                    Text("أنشئ مجلدات لموادك من شاشة الملفات، وستظهر ككواكب حول جامعتي.",
+                    Text("أنشئ مجلدًا أولًا",
                         color = Color(0xFFA9B4AD), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
                     Icon(Icons.Outlined.Public, contentDescription = null, tint = Color(0xFFA9B4AD),
                         modifier = Modifier.padding(top = 16.dp).size(24.dp))
@@ -285,8 +285,8 @@ internal fun GalaxyUniverse(
                     Icon(Icons.Outlined.FormatListBulleted, "قائمة المجلدات والبحث", tint = SUN_GOLD)
                 }
             }
-            Text(if (showLabels) "اسحب للتنقل · اضغط المجلد لفتحه · زر العرض الشامل يعيد التمركز"
-                else "عرض شامل · اضغط كوكبًا لتقريبه أو اختر مجلدًا من القائمة",
+            Text(if (showLabels) "اسحب أو اضغط"
+                else "اختر مجلدًا",
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), color = Color(0xFFA9B4AD),
                 style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
         }

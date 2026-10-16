@@ -144,7 +144,7 @@ fun UserManagementSection(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isAdmin) "الصلاحية: مشرف عام (تحكم كامل)" else "الصلاحية: مستخدم سحابي",
+                        text = if (isAdmin) "مشرف عام" else "مستخدم سحابي",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -155,7 +155,7 @@ fun UserManagementSection(
             }
 
             Text(
-                text = "الحساب موثق بجلسة Appwrite؛ الكاش المحلي خاص بهذا الجهاز",
+                text = "جلسة سحابية موثقة",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -220,7 +220,7 @@ fun UserManagementSection(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "صلاحية المسؤول غير مفعّلة لهذا الحساب",
+                        text = "صلاحية المشرف موقوفة",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -262,12 +262,12 @@ fun UserManagementSection(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = "إدارة الحسابات والصلاحيات في السحابة",
+                            text = "حسابات وصلاحيات",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "انقر على أي مستخدم لتوسيع بطاقته وعرض خيارات التحكم الخاصة به",
+                            text = "اضغط لخيارات المستخدم",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -366,7 +366,7 @@ fun UserManagementSection(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "لا يوجد مستخدم يطابق «${cardsState.searchQuery}»",
+                                text = "لا مستخدم يطابق «${cardsState.searchQuery}»",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -448,7 +448,7 @@ fun UserManagementSection(
     deleteTargetUser?.let { target ->
         ConfirmDialog(
             title = "حذف المستخدم؟",
-            message = "سيُحذف حساب «${target.username}» من السحابة.",
+            message = "حذف الحساب السحابي",
             confirmLabel = "حذف المستخدم",
             onConfirm = {
                 viewModel.deleteUser(target.username)
@@ -644,7 +644,7 @@ private fun AdminUserAccountCard(
 
                     // تفاصيل الجهاز المرتبط الكاملة
                     Text(
-                        text = "تُدار جلسات هذا الحساب على خادم Appwrite",
+                        text = "جلسات عبر Appwrite",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -680,9 +680,9 @@ private fun AdminUserAccountCard(
                                     )
                                     Text(
                                         text = if (account.isActive) {
-                                            "يُسمح للمستخدم بتسجيل الدخول واستخدام السحابة"
+                                            "دخول وسحابة مسموح"
                                         } else {
-                                            "الحساب موقوف حالياً ولن يتمكن من الدخول"
+                                            "الحساب موقوف"
                                         },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -717,7 +717,7 @@ private fun AdminUserAccountCard(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "كلمة المرور محمية ولا يمكن عرضها",
+                                text = "كلمة المرور محمية",
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f)
                             )
@@ -730,7 +730,7 @@ private fun AdminUserAccountCard(
                     // صلاحيات المستخدم في السحابة
                     if (SettingsCatalogRules.canShowDestructiveControlsForUser(account)) {
                         Text(
-                            text = "صلاحيات المستخدم في السحابة:",
+                            text = "صلاحيات المستخدم:",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

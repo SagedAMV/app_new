@@ -61,7 +61,7 @@ fun AddMenuSheet(
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp)
             )
             Text(
-                text = "اختر ما تريد إضافته إلى هذا المجلد",
+                text = "إضافة إلى المجلد",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
@@ -71,35 +71,35 @@ fun AddMenuSheet(
                 icon = Icons.Filled.UploadFile,
                 tint = MaterialTheme.colorScheme.primary,
                 title = "رفع ملف",
-                subtitle = "اختيار ملفات من تخزين الجهاز",
+                subtitle = "ملفات الجهاز",
                 onClick = onImportFiles
             )
             AddMenuItem(
                 icon = Icons.Filled.FolderOpen,
                 tint = MaterialTheme.colorScheme.primary,
                 title = "رفع مجلد",
-                subtitle = "نسخ مجلد بمحتوياته من الجهاز",
+                subtitle = "مجلد بمحتوياته",
                 onClick = onImportFolder
             )
             AddMenuItem(
                 icon = Icons.Filled.CreateNewFolder,
                 tint = MaterialTheme.colorScheme.tertiary,
                 title = "إنشاء مجلد",
-                subtitle = "مجلد فرعي جديد داخل هذا المجلد",
+                subtitle = "داخل المجلد",
                 onClick = onNewFolder
             )
             AddMenuItem(
                 icon = Icons.Filled.CameraAlt,
                 tint = MaterialTheme.colorScheme.secondary,
                 title = "التقاط صورة",
-                subtitle = "بالكاميرا مباشرة — عدة صور في جلسة واحدة",
+                subtitle = "صور متعددة",
                 onClick = onCapturePhoto
             )
             AddMenuItem(
                 icon = Icons.Filled.Mic,
                 tint = MaterialTheme.colorScheme.error,
                 title = "تسجيل صوتي",
-                subtitle = "سجّل محاضرة أو ملاحظة بصوتك",
+                subtitle = "تسجيل المحاضرات",
                 onClick = onRecordAudio
             )
         }

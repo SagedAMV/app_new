@@ -405,7 +405,7 @@ private fun IdleRecorder(onStart: () -> Unit) {
             style = MaterialTheme.typography.titleSmall
         )
         Text(
-            text = "يمكنك الإيقاف المؤقت والاستئناف أثناء التسجيل",
+            text = "إيقاف واستئناف مؤقت",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -533,7 +533,7 @@ private fun RecordingControls(
         }
 
         Text(
-            text = "الموجة تعكس مستوى صوتك الحقيقي من الميكروفون",
+            text = "موجة صوتية حية",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -593,7 +593,7 @@ private fun PreviewPlayer(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "اضغط على الموجة للانتقال لأي موضع",
+                        text = "اضغط للتنقل",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -700,7 +700,7 @@ private fun MicPermissionContent(
             textAlign = TextAlign.Center
         )
         Text(
-            text = "رفضت الوصول للميكروفون، ولن يعمل التسجيل الصوتي بدون هذا الإذن.",
+            text = "فعّل إذن الميكروفون",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

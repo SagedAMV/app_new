@@ -116,7 +116,7 @@ fun WeeklyTimetableGrid(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "أضف محاضرات بأوقات بداية ونهاية ليُبنى الجدول الزمني عليها",
+                "أضف أوقات المحاضرات",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

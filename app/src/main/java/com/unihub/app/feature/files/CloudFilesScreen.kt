@@ -438,7 +438,7 @@ fun CloudFilesScreen(
         val label = if (targets.size == 1) "«${targets.first().fullDisplayName}»" else Formatters.fileCountLabel(targets.size)
         ConfirmDialog(
             title = "حذف من السحابة؟",
-            message = "سيُحذف $label من السحابة نهائياً. النسخ المحلية ستبقى.",
+            message = "$label — المحلي يبقى",
             confirmLabel = "حذف من السحابة",
             onConfirm = { viewModel.deleteFiles(targets); deleteFileTargets = null },
             onDismiss = { deleteFileTargets = null }
@@ -447,7 +447,7 @@ fun CloudFilesScreen(
     deleteFolderTarget?.let { folder ->
         ConfirmDialog(
             title = "حذف المجلد؟",
-            message = "سيُحذف المجلد «${folder.name}» من السحابة. النسخ المحلية ستبقى.",
+            message = "«${folder.name}» — المحلي يبقى",
             confirmLabel = "حذف المجلد",
             onConfirm = { viewModel.deleteFolder(folder); deleteFolderTarget = null },
             onDismiss = { deleteFolderTarget = null }
@@ -484,7 +484,7 @@ fun CloudFilesScreen(
                     online = isOnline,
                     itemCount = remoteFiles.size,
                     downloadableCount = downloadableKeys.size,
-                    subtitle = if (isOnline) "تصفّح ملفاتك ونزّل ما تحتاجه." else "أنت دون اتصال؛ يمكنك مراجعة آخر قائمة محفوظة."
+                    subtitle = if (isOnline) "تصفّح ملفات السحابة" else "آخر قائمة محفوظة"
                 )
             }
             AnimatedVisibility(
@@ -492,7 +492,7 @@ fun CloudFilesScreen(
                 enter = fadeIn(tween(360, delayMillis = 70, easing = FastOutSlowInEasing)) +
                     slideInVertically(tween(360, delayMillis = 70, easing = FastOutSlowInEasing)) { it / 5 }
             ) {
-                Text(if (isOnline) scanState.message else "بدون إنترنت — تعرض آخر قائمة محفوظة",
+                Text(if (isOnline) scanState.message else "آخر قائمة محفوظة",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (scanState.phase == CloudScanPhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -735,7 +735,7 @@ fun CloudFilesScreen(
                             Icon(file.kind.icon(), contentDescription = null, modifier = Modifier.size(24.dp))
                             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                                 Text(file.fullDisplayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text("${Formatters.fileSize(file.size)} • " + if (file.remoteKey in verifyingKeys) "جارٍ التحقق من النسخة المحلية" else if (pending) "متاح للتنزيل" else "منزَّل ✓",
+                                Text("${Formatters.fileSize(file.size)} • " + if (file.remoteKey in verifyingKeys) "فحص النسخة المحلية" else if (pending) "متاح للتنزيل" else "منزَّل ✓",
                                     style = MaterialTheme.typography.bodySmall)
                             }
                             IconButton(onClick = { fileMenu = file }) {
@@ -788,13 +788,13 @@ private fun CloudFileMenuSheet(
             CloudMenuActionRow(icon = Icons.Filled.CloudDownload, text = "تنزيل", enabled = canDownload, onClick = onDownload)
             CloudMenuActionRow(icon = Icons.Filled.Delete, text = "حذف من السحابة", enabled = canModify, danger = true, onClick = onDelete)
             if (!canDownload) Text(
-                "التنزيل متاح عندما يكون الملف غير موجود على جهازك، والاتصال متوفراً، وصلاحية التنزيل مفعّلة",
+                "اتصال وصلاحية التنزيل",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp)
             )
             if (!canModify) Text(
-                "التعديل أو الحذف في الحساب السحابي متاح عند توفر الاتصال وتفعيل صلاحية التعديل لحسابك",
+                "اتصال وصلاحية التعديل",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp)
@@ -981,8 +981,8 @@ private fun CloudMoveSheet(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (browseKey == null) "الوجهة الحالية: أعلى مستوى في السحابة (بلا مجلد)"
-                    else "ادخل مجلداً فرعياً أو ثبّت هذا المستوى وجهةً",
+                    text = if (browseKey == null) "الوجهة الرئيسية"
+                    else "اختر مجلدًا فرعيًا",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

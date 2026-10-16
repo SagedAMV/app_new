@@ -225,7 +225,7 @@ fun DashboardScreen(
                         compact = true,
                         icon = Icons.AutoMirrored.Outlined.MenuBook,
                         title = "لا محاضرات اليوم",
-                        subtitle = "استمتع بيومك أو أضف محاضراتك من الجدول الأسبوعي"
+                        subtitle = "أضف من الجدول"
                     )
                 } else {
                     todayLectures.forEachIndexed { index, lecture ->
@@ -254,7 +254,7 @@ fun DashboardScreen(
                         compact = true,
                         icon = Icons.Outlined.CheckCircle,
                         title = "لا مهام اليوم",
-                        subtitle = "كل شيء تحت السيطرة — أضف مهمة جديدة من تبويب المهام"
+                        subtitle = "أضف مهمة"
                     )
                 } else {
                     dueSoonTasks.forEachIndexed { index, task ->
@@ -286,7 +286,7 @@ fun DashboardScreen(
                         compact = true,
                         icon = Icons.Outlined.School,
                         title = "لا امتحانات قريبة",
-                        subtitle = "أضف امتحاناتك لتصلك تذكيرات قبلها بيوم وساعة"
+                        subtitle = "أضف امتحانًا"
                     )
                 } else {
                     upcomingExams.forEachIndexed { index, exam ->
@@ -644,7 +644,7 @@ private fun LecturesHalf(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "أضف محاضراتك من تبويب الجدول لتظهر مواعيدها هنا",
+                text = "أضف عبر الجدول",
                 style = MaterialTheme.typography.bodySmall,
                 color = onPrimary.copy(alpha = 0.75f)
             )
@@ -832,7 +832,7 @@ private fun DeadlinesHalf(
             }
         } else {
             Text(
-                text = "لا مهام بموعد قادم",
+                text = "لا مهام قادمة",
                 style = MaterialTheme.typography.bodySmall,
                 color = onPrimary.copy(alpha = 0.7f),
                 modifier = Modifier.padding(vertical = 5.dp)

@@ -257,7 +257,7 @@ fun CameraCaptureScreen(
             AlertDialog(
                 onDismissRequest = { confirmCancelAll = false },
                 title = { Text("إلغاء الجلسة؟") },
-                text = { Text("ستُحذف كل الصور الملتقطة في هذه الجلسة (${shots.size}) ولا يمكن التراجع.") },
+                text = { Text("حذف الصور نهائيًا؟") },
                 confirmButton = {
                     TextButton(onClick = {
                         shots.forEach { runCatching { it.file.delete() } }
@@ -335,7 +335,7 @@ private fun CaptureContent(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "ربما يستخدمها تطبيق آخر الآن — أغلقه وحاول مجدداً",
+                    text = "أغلق التطبيقات الأخرى",
                     color = Color.White.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center
@@ -720,7 +720,7 @@ private fun ReviewCapturesContent(
             }
 
             Text(
-                text = "اسحب الصورة مطولاً لإعادة ترتيبها — الحفظ يحفظ الكل دفعة واحدة",
+                text = "اسحب لإعادة الترتيب",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp)
@@ -875,8 +875,7 @@ private fun CameraPermissionContent(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "رفضت الوصول للكاميرا، ولن تعمل ميزة الالتقاط بدون هذا الإذن. " +
-                "يمكنك السماح الآن أو من إعدادات النظام.",
+            text = "فعّل إذن الكاميرا",
             color = Color.White.copy(alpha = 0.75f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center

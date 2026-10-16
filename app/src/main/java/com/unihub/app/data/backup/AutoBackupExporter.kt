@@ -146,7 +146,7 @@ class AutoBackupExporter @Inject constructor(
             runCatching {
                 preferences.recordResult(
                     success = false,
-                    message = "فقد التطبيق الوصول إلى مجلد النسخ التلقائي — أعد اختياره من الإعدادات"
+                    message = "اختر مجلد النسخ"
                 )
             }
         }
