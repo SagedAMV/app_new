@@ -23,6 +23,23 @@ if [[ "$status" == 124 || "$status" == 137 ]]; then
   echo "::error title=Android UI timeout::Device tests exceeded their deadline; Galaxy is NOT device-verified"
 fi
 
+if [[ "$status" == 0 ]]; then
+  apk="app/build/outputs/apk/debug/app-debug.apk"
+  echo "::notice title=Android APK smoke test::Installing the exact distributable APK on the running emulator"
+  test -s "$apk"
+  adb install -r "$apk"
+  adb shell am force-stop com.unihub.app
+  adb shell monkey -p com.unihub.app -c android.intent.category.LAUNCHER 1
+  sleep 8
+  if ! adb shell pidof com.unihub.app >/dev/null; then
+    echo "::error title=Android APK smoke test::The installed test APK did not remain running after launch"
+    adb logcat -d -t 500
+    exit 1
+  fi
+  sha256sum "$apk"
+  echo "::notice title=Android APK smoke test::Exact APK installed and launched successfully"
+fi
+
 if [[ "$status" != 0 && "${GITHUB_ACTIONS:-false}" == true ]]; then
   echo "::notice title=Android UI phase::Capturing bounded host and device connection diagnostics"
   timeout --kill-after=2s 5s adb devices -l > ui-device-status.log 2>&1 || true
