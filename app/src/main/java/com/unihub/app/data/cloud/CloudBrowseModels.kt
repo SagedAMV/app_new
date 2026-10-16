@@ -53,6 +53,8 @@ data class CloudUploadPlan(
     val folderIds: Set<Long>,
     val totalBytes: Long,
     val missingFiles: List<String> = emptyList(),
+    /** ملفات تجاوزت سقف حجم الرفع الواحد ([CloudFileRules.MAX_UPLOAD_FILE_BYTES]) وتُتجاهل تلقائيًا */
+    val oversizedFiles: List<String> = emptyList(),
     /** وجهة اختيارية داخل السحابة؛ null = السلوك القديم (جذر السحابة بشجرة المجلدات) */
     val targetFolderKey: String? = null,
     /**

@@ -42,7 +42,9 @@ class AppwriteStorageTransportTest {
             assertNull(it.getRequestProperty("X-Appwrite-Key"))
             assertNull(it.getRequestProperty("Authorization"))
             assertFalse(it.instanceFollowRedirects)
-            assertTrue(it.disconnected)
+            // الاتصال الناجح لا يُغلق فورًا: يبقى صالحًا لإعادة الاستخدام (keep-alive) في
+            // الصفحة التالية بدل إعادة تفاوض TCP/TLS من الصفر لكل طلب (إصلاح بطء الرفع).
+            assertFalse(it.disconnected)
         }
     }
     @Test fun repeatedCursorFailsInsteadOfLoopingForever() = runBlocking {
@@ -77,6 +79,29 @@ class AppwriteStorageTransportTest {
             assertArrayEquals(bytes.copyOfRange(0, AppwriteFileProtocol.CHUNK_BYTES), posts[0].fileBytes())
             assertArrayEquals(bytes.copyOfRange(AppwriteFileProtocol.CHUNK_BYTES, bytes.size), posts[1].fileBytes())
             assertEquals(id, posts[1].getRequestProperty("X-Appwrite-ID"))
+            // إصلاح عطل «يتوقف الرفع بعد نصف دقيقة»: مهلة قراءة قطعة رفع كاملة (5 ميجابايت)
+            // يجب أن تكون أكبر بوضوح من المهلة الثابتة القديمة (30 ثانية) التي كانت تقطع
+            // الرفع فوق شبكة بطيئة قبل وصول رد الخادم.
+            assertTrue("قطعة الرفع يجب ألا تُقيَّد بمهلة 30 ثانية القديمة", posts[0].readTimeout > 30_000)
+        } finally { file.delete() }
+    }
+    @Test fun smallRequestsKeepAShorterReadTimeoutThanLargeChunkUploads() = runBlocking {
+        val big = ByteArray(AppwriteFileProtocol.CHUNK_BYTES) { 1 }
+        val file = temp().apply { writeBytes(big) }
+        var listTimeout = -1
+        var uploadTimeout = -1
+        val network = Network { request ->
+            when (request.requestMethod) {
+                "GET" -> { listTimeout = request.readTimeout; json(JSONObject().put("files", JSONArray())) }
+                else -> { uploadTimeout = request.readTimeout
+                    json(metadata(AppwriteFileProtocol.fileId("files/big.bin"), AppwriteFileProtocol.uploadName("files/big.bin"), big.size.toLong()), 201) }
+            }
+        }
+        try {
+            network.transport.listBucketObjects(TARGET).getOrThrow()
+            network.transport.uploadFile(TARGET, "files/big.bin", file).getOrThrow()
+            assertTrue(listTimeout in 1..uploadTimeout)
+            assertTrue(uploadTimeout > 30_000)
         } finally { file.delete() }
     }
     @Test fun emptyFileIsUploadedOnceWithoutAnInvalidRange() = runBlocking {

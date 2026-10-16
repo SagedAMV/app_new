@@ -272,9 +272,15 @@ class CloudSyncManager @Inject constructor(
         val plan = CloudFolderTree.plan(title, records, backupRepository.getLocalFolders(), fileIds, folderIds)
         val selected = records.filter { it.id in plan.fileIds }
         val safeSelected = selected.filter { backupRepository.isManagedLocalFile(it.filePath) }
+        // ملف ضخم واحد يتجاوز السقف لا يوقف رفع البقية؛ يُستبعد هنا فقط من العرض والحجم
+        // الإجمالي، والمنع الفعلي والملزم يبقى داخل uploadSelected (دفاع مزدوج لا يعتمد
+        // على أن الشاشة استدعت هذه الدالة قبل التنفيذ الفعلي في الخلفية).
+        val withinLimit = safeSelected.filterNot { CloudFileRules.exceedsUploadSizeLimit(File(it.filePath).length()) }
+        val oversized = safeSelected.filter { CloudFileRules.exceedsUploadSizeLimit(File(it.filePath).length()) }
         plan.copy(
-            totalBytes = safeSelected.sumOf { File(it.filePath).length() },
+            totalBytes = withinLimit.sumOf { File(it.filePath).length() },
             missingFiles = selected.filterNot { backupRepository.isManagedLocalFile(it.filePath) }.map { it.name },
+            oversizedFiles = oversized.map { it.name },
             targetFolderKey = CloudUploadTarget.normalize(targetFolderKey),
             targetFolderName = targetFolderName?.trim()?.takeIf { it.isNotEmpty() }
         )
@@ -971,6 +977,14 @@ class CloudSyncManager @Inject constructor(
             val disk = File(file.filePath)
             if (!disk.isFile) { failed += file.name; continue }
             val currentFileBytes = disk.length()
+            // حد الرفع الفعلي والملزم: ملف واحد يتجاوز 50 ميجابايت يُتجاهل برسالة واضحة
+            // وتستمر بقية الملفات في نفس الدفعة — لا يتوقف الرفع كله بسبب ملف واحد ضخم،
+            // ولا تُستهلك محاولات الدفعة الأربع على عطل لن يزول أبدًا بإعادة المحاولة.
+            if (CloudFileRules.exceedsUploadSizeLimit(currentFileBytes)) {
+                failed += "${file.name} (الحجم ${Formatters.fileSize(currentFileBytes)} يتجاوز الحد الأقصى " +
+                    "${Formatters.fileSize(CloudFileRules.MAX_UPLOAD_FILE_BYTES)} للملف الواحد)"
+                continue
+            }
             _transferState.value = CloudTransferState(
                 kind = CloudTransferKind.UPLOAD,
                 fileName = file.name,
@@ -1263,7 +1277,10 @@ class CloudSyncManager @Inject constructor(
         private const val TAG = "CloudSyncManager"
         private const val LIVE_PULSE_INTERVAL_MS = 20_000L
         private const val EMPTY_PULSE_INTERVAL_MS = 120_000L
-        private const val SCAN_TIMEOUT_MS = 30_000L
+        // كان 30 ثانية: ضيّق على مكتبات فيها صفحات كثيرة من الملفات فوق شبكة بطيئة، فيَظهر
+        // الفحص السابق للرفع وكأنه «يتوقف» قبل أن يبدأ نقل البايتات أصلاً. مرفوع الآن لنفس
+        // مهلة القراءة الافتراضية الجديدة في طبقة النقل (راجع AppwriteStorageTransport).
+        private const val SCAN_TIMEOUT_MS = 45_000L
         private const val METADATA_EDIT_TIMEOUT_MS = 60_000L
         private const val RESERVE_BYTES = 16L * 1024 * 1024
     }

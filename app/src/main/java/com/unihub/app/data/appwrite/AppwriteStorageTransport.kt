@@ -190,7 +190,8 @@ open class AppwriteStorageTransport(
             var keepPartial = false
             try {
                 request(lease, "GET", "$filesPath/$id/download", headers =
-                    if (from > 0L) mapOf("Range" to "bytes=$from-") else emptyMap()) { conn ->
+                    if (from > 0L) mapOf("Range" to "bytes=$from-") else emptyMap(),
+                    readTimeoutMillis = transferTimeoutMillis(file.size - from)) { conn ->
                     val partial = conn.responseCode == 206
                     if (partial) {
                         val range = Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(conn.getHeaderField("Content-Range").orEmpty())
@@ -291,11 +292,14 @@ open class AppwriteStorageTransport(
         val headers = mutableMapOf("Content-Type" to "multipart/form-data; boundary=$boundary")
         if (size > AppwriteFileProtocol.CHUNK_BYTES) headers["Content-Range"] = "bytes $offset-${offset + length - 1}/$size"
         if (offset > 0) headers["X-Appwrite-ID"] = id
+        val requestBytes = prefix.size.toLong() + length + suffix.size
         return request(lease, "POST", filesPath, headers, prepare = { conn ->
             conn.doOutput = true
-            conn.setFixedLengthStreamingMode(prefix.size.toLong() + length + suffix.size)
+            conn.setFixedLengthStreamingMode(requestBytes)
             conn.outputStream.use { output -> output.write(prefix); write(output); output.write(suffix) }
-        }) { conn -> AppwriteStoredFile.fromJson(JSONObject(conn.inputStream.use { readBoundedText(it, MAX_JSON_BYTES) })) }
+        }, readTimeoutMillis = transferTimeoutMillis(requestBytes)) { conn ->
+            AppwriteStoredFile.fromJson(JSONObject(conn.inputStream.use { readBoundedText(it, MAX_JSON_BYTES) }))
+        }
     }
 
     private suspend fun latestManifest(lease: StorageGrant): AppwriteStoredFile? = AppwriteFileProtocol.latestManifest(
@@ -333,13 +337,18 @@ open class AppwriteStorageTransport(
 
     private suspend fun <T> request(lease: StorageGrant, method: String, path: String,
         headers: Map<String, String> = emptyMap(), prepare: (suspend (HttpURLConnection) -> Unit)? = null,
+        readTimeoutMillis: Int = DEFAULT_READ_TIMEOUT_MS,
         read: suspend (HttpURLConnection) -> T): T {
         authorization.requireCurrent(lease)
         val current = authorization.grant()
         authorization.requireCurrent(lease)
         val connection = openConnection(URL(target.endpointUrl + path)).apply {
             requestMethod = method
-            connectTimeout = 20_000; readTimeout = 30_000
+            // المهلة الثابتة القديمة (30 ثانية) كانت تقطع رفع/تنزيل القطع الكبيرة (5 ميجابايت)
+            // فوق شبكة جوال بطيئة أو مزدحمة قبل أن يصل ردّ الخادم، فيظهر العطل كأن الرفع
+            // «يتوقف ثم يرجع من جديد» كل نصف دقيقة تقريبًا. المهلة الآن أطول افتراضيًا،
+            // وتُحسب خصيصًا بحسب حجم كل طلب نقل فعلي (انظر [transferTimeoutMillis]).
+            connectTimeout = DEFAULT_CONNECT_TIMEOUT_MS; readTimeout = readTimeoutMillis
             instanceFollowRedirects = false; useCaches = false
 
             // Match the official SDK's header names/values (SDK v14.1.0): origin + response-format.
@@ -423,6 +432,29 @@ open class AppwriteStorageTransport(
 
         // Fallback only. The preferred value is platformHeaders["origin"] from the SDK Client.
         const val DEFAULT_ORIGIN = "appwrite-android://com.unihub.app"
+
+        /** مهلة إقامة الاتصال وحدها (TCP/TLS)؛ لا علاقة لها بحجم البيانات المنقولة بعد ذلك. */
+        const val DEFAULT_CONNECT_TIMEOUT_MS = 30_000
+
+        /** مهلة القراءة الافتراضية للطلبات الخفيفة (فحص/قائمة/بيان) التي لا تحمل محتوى ملف ضخم. */
+        const val DEFAULT_READ_TIMEOUT_MS = 45_000
+
+        /**
+         * أقل سرعة نقل نفترضها لشبكة جوال ضعيفة لكنها تعمل فعلاً (~192 كيلوبت/ثانية). أي
+         * طلب يحمل محتوى ملف (رفع قطعة أو تنزيلها) يُعطى مهلة كافية لإتمامه كاملاً بهذه
+         * السرعة المتدنية بدل مهلة ثابتة تقطع كل قطعة كبيرة بعد 30 ثانية فقط مهما كان حجمها.
+         */
+        private const val MIN_TRANSFER_BYTES_PER_SECOND = 24_000L
+        private const val MIN_TRANSFER_TIMEOUT_MS = 45_000L
+        /** سقف أمان: لا تنتظر اتصالًا معلّقًا فعليًا أكثر من هذا حتى مع أضخم قطعة. */
+        private const val MAX_TRANSFER_TIMEOUT_MS = 10 * 60_000L
+
+        /** مهلة قراءة مُقاسة على حجم الطلب الفعلي (بالبايت) — راجع تعليق [DEFAULT_READ_TIMEOUT_MS]. */
+        fun transferTimeoutMillis(bytes: Long): Int {
+            val safeBytes = bytes.coerceAtLeast(0L)
+            val estimatedMs = (safeBytes * 1000L) / MIN_TRANSFER_BYTES_PER_SECOND
+            return estimatedMs.coerceIn(MIN_TRANSFER_TIMEOUT_MS, MAX_TRANSFER_TIMEOUT_MS).toInt()
+        }
 
         private fun storageFailureMessage(status: Int, type: String): String = when (type) {
             // Appwrite validates client origins per project. This is the most common misconfiguration

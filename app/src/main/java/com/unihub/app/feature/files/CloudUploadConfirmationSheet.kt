@@ -74,6 +74,10 @@ fun CloudUploadConfirmationSheet(
             }
             if (plan.missingFiles.isNotEmpty()) Text("غير متاح: ${plan.missingFiles.take(4).joinToString("، ")}",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            if (plan.oversizedFiles.isNotEmpty()) Text(
+                "تجاوز 50 ميجابايت وسيُتجاهل: ${plan.oversizedFiles.take(4).joinToString("، ")}",
+                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall
+            )
             if (!isOnline) Text("لا إنترنت، سيُرفع عند العودة", style = MaterialTheme.typography.bodySmall)
             CloudTransferProgressCard(
                 state = transfer,

@@ -7,6 +7,15 @@ import org.json.JSONObject
 
 /** قواعد نقية يمكن اختبارها خارج أندرويد. */
 object CloudFileRules {
+    /**
+     * سقف حجم الملف الواحد عند الرفع: 50 ميجابايت (بالقاسم الثنائي MiB) — ملف واحد أكبر
+     * من هذا يُتجاهل مع رسالة واضحة، وبقية الملفات المحددة تُرفع عادةً (§المطلوب: لا يوقف
+     * ملف ضخم واحد رفع عشرات الملفات الأخرى معه).
+     */
+    const val MAX_UPLOAD_FILE_BYTES: Long = 50L * 1024 * 1024
+
+    fun exceedsUploadSizeLimit(sizeBytes: Long): Boolean = sizeBytes > MAX_UPLOAD_FILE_BYTES
+
     fun isDownloaded(
         remote: RemoteCloudFile,
         link: CloudFileLink?,
