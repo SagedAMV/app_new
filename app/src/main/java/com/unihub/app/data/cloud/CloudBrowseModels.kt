@@ -11,7 +11,17 @@ data class CloudScanState(
     val serverFileCount: Int = 0,
     val serverFolderCount: Int = 0,
     val message: String = "اضغط للفحص"
-)
+) {
+    companion object {
+        /**
+         * نصّ الحالة الفارغة الوحيد في التطبيق: كان مكتوباً مرّتين — في مراقب الفحص
+         * («السحابة فارغة») وفي شاشة الملفات — فانحرف اللفظ بين الموضعين وسقط اختبار
+         * الوحدة الذي يتحقق من وضوح الفراغ (CloudScanControllerTest). الآن مصدر واحد
+         * يستهلكه الاثنان معاً، فلا يتكرر الانحراف (طبيعة تطبيق.md §11).
+         */
+        const val EMPTY_MESSAGE = "لا توجد ملفات"
+    }
+}
 
 class CloudBusyException : IOException("النقل جارٍ")
 class CloudScanTimeoutException : IOException("انتهت مهلة الفحص")
