@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.unihub.app.core.prefs.CloudAuthPreferences
+import com.unihub.app.core.prefs.LocalAuthSessionSnapshot
 import com.unihub.app.data.appwrite.AppwriteStorageAuthorization
 import com.unihub.app.data.cloud.cloudAttempt
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +21,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,17 +64,18 @@ class CloudAuthManager @Inject constructor(
                     if (!cached.hasAuthenticatedSession || cached.boundDeviceFingerprint != device.fingerprint) {
                         clearLocalSession()
                     } else if (isOnline()) {
-                        val user = repository.currentUser(expectedUserId = cached.userId)
-                        publish(user, device)
-                    } else {
-                        val user = CloudAuthRules.fromJson(cached.cachedRegistryJson).users.singleOrNull()
-                        if (user == null || user.userId != cached.userId || !user.isActive ||
-                            !CloudAuthRules.isCachedSessionFresh(cached.lastVerifiedAt)) {
-                            clearLocalSession("اتصل بالإنترنت للتحقق من جلسة Appwrite")
-                        } else {
-                            repository.restoreOfflineIdentity(user)
-                            publishState(user, device, repository.sessionVersion)
+                        val user = try {
+                            repository.currentUser(expectedUserId = cached.userId)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            if (!isTransientSessionCheckFailure(error)) throw error
+                            null
                         }
+                        if (user != null) publish(user, device)
+                        else restoreCachedOfflineSession(cached, device)
+                    } else {
+                        restoreCachedOfflineSession(cached, device)
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -199,6 +207,44 @@ class CloudAuthManager @Inject constructor(
         invalidateState(reason)
         authPreferences.clearSession()
     }
+
+    /**
+     * A momentary outage can coexist with Android's validated-network flag. Keep a fresh,
+     * device-bound local session for local app use, but never use it to authorize cloud I/O:
+     * requirePermission() still fetches the active Appwrite account before every transfer.
+     */
+    private suspend fun restoreCachedOfflineSession(
+        cached: LocalAuthSessionSnapshot,
+        device: BoundDeviceInfo
+    ) {
+        val user = CloudAuthRules.fromJson(cached.cachedRegistryJson).users.singleOrNull()
+        if (user == null || user.userId != cached.userId || !user.isActive ||
+            !CloudAuthRules.isCachedSessionFresh(cached.lastVerifiedAt)) {
+            clearLocalSession("اتصل بالإنترنت للتحقق من جلسة Appwrite")
+            return
+        }
+        repository.restoreOfflineIdentity(user)
+        publishState(user, device, repository.sessionVersion)
+    }
+
+    /** Only transport/server-availability failures may fall back to the local profile cache. */
+    private fun isTransientSessionCheckFailure(error: Throwable): Boolean {
+        val visited = hashSetOf<Throwable>()
+        var cause: Throwable? = error
+        while (cause != null && visited.add(cause)) {
+            if (cause is AppwriteSessionInvalidException) return false
+            if (cause is AppwriteException) {
+                return cause.code == 0 || cause.code == 408 || cause.code == 429 ||
+                    cause.code in 500..599
+            }
+            if (cause is UnknownHostException || cause is ConnectException ||
+                cause is NoRouteToHostException || cause is SocketException ||
+                cause is SocketTimeoutException || cause is SSLException) return true
+            cause = cause.cause
+        }
+        return false
+    }
+
     private fun requireAuthenticated() {
         if (!isAuthenticatedNow()) throw IOException("سجّل الدخول أولاً")
     }
