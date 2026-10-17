@@ -89,16 +89,22 @@ import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.LayoutDirection
@@ -317,6 +323,30 @@ fun CloudFilesScreen(
     var lastReport by remember { mutableStateOf(downloadReport) }
     LaunchedEffect(downloadReport) { if (downloadReport != null) lastReport = downloadReport }
     val layoutDirection = LocalLayoutDirection.current
+    // «سحب لإظهار» بطاقة الملخص (الهيدر): مخفية افتراضياً — غير محذوفة من
+    // الشجرة — وتظهر فقط عند بلوغ أعلى القائمة ثم الاستمرار بسحب الإصبع نحو
+    // الأسفل (overscroll)، وتختفي بنفس الحركة عند التمرير العادي نحو الأسفل.
+    // المنطق الفعلي معزول بالكامل في CloudHeroRevealController (قابل للاختبار
+    // بوحدات JVM خالصة)، وهذه الطبقة مجرد ربط رقيق بنظام Compose للتمرير المتداخل.
+    val density = LocalDensity.current
+    val heroMaxOffsetPx = remember(density) { with(density) { 132.dp.toPx() } }
+    val heroRevealController = remember(heroMaxOffsetPx) { CloudHeroRevealController(heroMaxOffsetPx) }
+    var heroOffsetPx by remember { mutableFloatStateOf(0f) }
+    val heroNestedScrollConnection = remember(heroRevealController) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val consumedY = heroRevealController.onPreScroll(available.y)
+                heroOffsetPx = heroRevealController.offsetPx
+                return Offset(0f, consumedY)
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val consumedY = heroRevealController.onPostScroll(available.y)
+                heroOffsetPx = heroRevealController.offsetPx
+                return Offset(0f, consumedY)
+            }
+        }
+    }
     val folders = remember(remoteFolders) { CloudFolderTree.normalise(remoteFolders) }
     val current = folders.firstOrNull { it.key == currentKey }
     val foldersWithMissing = remember(folders, remoteFiles, downloadableKeys, verifyingKeys) {
@@ -330,6 +360,12 @@ fun CloudFilesScreen(
     LaunchedEffect(remoteFiles, folders, downloadableKeys) {
         selectedKeys = selectedKeys.intersect(downloadableKeys)
         if (currentKey != null && current == null) currentKey = null
+    }
+    // الانتقال بين المجلدات يطوي الهيدر فوراً — السحب للإظهار ذو معنى فقط عند
+    // رأس قائمة واحدة ثابتة؛ الدخول لمجلد جديد يبدأ بقائمته من الأعلى دائماً.
+    LaunchedEffect(currentKey) {
+        heroRevealController.reset()
+        heroOffsetPx = 0f
     }
     // جولة تعليمات.md — حل مشكلة زر الرجوع الخاص بنظام التشغيل في واجهة الملفات
     // السحابية: كان يُخرج من الشاشة كاملة. الآن يتراجع تدريجياً: إلغاء التحديد
@@ -473,19 +509,36 @@ fun CloudFilesScreen(
             )
         }
     ) { innerPadding ->
-        Column(Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+                // يلتقط فائض/عجز تمرير القائمة أدناه لإظهار أو إخفاء الهيدر —
+                // راجع تعليق heroRevealController أعلاه لشرح كامل الحركة.
+                .nestedScroll(heroNestedScrollConnection),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // الهيدر مخفي افتراضياً (heroOffsetPx == 0f) فتبدأ القائمة مباشرة
+            // أسفل الشريط العلوي — هذا هو إصلاح المشكلة المُبلَّغ عنها: كانت
+            // هذه البطاقة تُعرض دائماً (visible = true) فتُبعد القائمة للأسفل.
+            // تظهر الآن فقط أثناء/بعد سحب الإصبع نحو الأسفل عند بلوغ أعلى
+            // القائمة فعلياً، وتختفي بنفس الحركة عند التمرير نحو الأسفل.
             AnimatedVisibility(
-                visible = true,
-                enter = fadeIn(tween(420, easing = FastOutSlowInEasing)) +
-                    slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it / 12 }
+                visible = heroOffsetPx > 0f,
+                enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = tween(220, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(180, easing = FastOutSlowInEasing)) +
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(180, easing = FastOutSlowInEasing))
             ) {
-                CloudFilesHero(
-                    online = isOnline,
-                    itemCount = remoteFiles.size,
-                    downloadableCount = downloadableKeys.size,
-                    subtitle = if (isOnline) "تصفّح ملفات السحابة" else "آخر قائمة محفوظة"
-                )
+                Box(Modifier.graphicsLayer { alpha = heroRevealController.fraction.coerceIn(0f, 1f) }) {
+                    CloudFilesHero(
+                        online = isOnline,
+                        itemCount = remoteFiles.size,
+                        downloadableCount = downloadableKeys.size,
+                        subtitle = if (isOnline) "تصفّح ملفات السحابة" else "آخر قائمة محفوظة"
+                    )
+                }
             }
             AnimatedVisibility(
                 visible = true,
