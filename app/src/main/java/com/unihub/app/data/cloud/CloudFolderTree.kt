@@ -8,17 +8,58 @@ import org.json.JSONObject
 /** شجرة نقية بمعرّفات سحابية مستقلة؛ تتحمل الآباء المفقودين والدورات. */
 object CloudFolderTree {
     fun normalise(folders: List<RemoteCloudFolder>): List<RemoteCloudFolder> {
-        val byKey = folders.filter { it.key.isNotBlank() && it.name.isNotBlank() }.associateBy { it.key }
-        return byKey.values.map { folder ->
-            var parent = folder.parentKey
-            val seen = mutableSetOf(folder.key)
-            var cursor = parent
-            while (cursor != null) {
-                if (!seen.add(cursor) || cursor !in byKey) { parent = null; break }
-                cursor = byKey[cursor]?.parentKey
+        // Resolve every parent chain once. Walking the full ancestry independently for
+        // each folder made a deep N-folder tree quadratic and allocated N temporary sets.
+        val byKey = LinkedHashMap<String, NormaliseNode>(folders.size)
+        folders.forEach { folder ->
+            if (folder.key.isNotBlank() && folder.name.isNotBlank()) {
+                // Like associateBy, a duplicate key keeps its original position and last value.
+                byKey[folder.key] = NormaliseNode(folder)
             }
-            folder.copy(parentKey = parent)
+        }
+
+        val path = ArrayList<NormaliseNode>()
+        for (start in byKey.values) {
+            if (start.state != NormaliseNode.UNVISITED) continue
+            path.clear()
+            var current = start
+            var validChain = false
+            while (true) {
+                when (current.state) {
+                    NormaliseNode.VISITING -> break // A cycle in this path.
+                    NormaliseNode.VALID -> {
+                        validChain = true
+                        break
+                    }
+                    NormaliseNode.INVALID -> break
+                }
+                current.state = NormaliseNode.VISITING
+                path += current
+                val parentKey = current.folder.parentKey
+                if (parentKey == null) {
+                    validChain = true
+                    break
+                }
+                current = byKey[parentKey] ?: break
+            }
+            val resolvedState = if (validChain) NormaliseNode.VALID else NormaliseNode.INVALID
+            path.forEach { it.state = resolvedState }
+        }
+
+        return byKey.values.map { node ->
+            if (node.state == NormaliseNode.INVALID) node.folder.copy(parentKey = null) else node.folder
         }.sortedBy { it.name }
+    }
+
+    private class NormaliseNode(val folder: RemoteCloudFolder) {
+        var state: Int = UNVISITED
+
+        companion object {
+            const val UNVISITED = 0
+            const val VISITING = 1
+            const val VALID = 2
+            const val INVALID = 3
+        }
     }
 
     fun descendants(folders: List<RemoteCloudFolder>, key: String): Set<String> {
