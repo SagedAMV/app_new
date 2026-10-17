@@ -25,8 +25,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +42,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.TimeoutCancellationException
 import org.json.JSONArray
 import org.json.JSONObject
@@ -86,6 +87,12 @@ class CloudSyncManager @Inject constructor(
     private val started = AtomicBoolean(false)
     @Volatile private var foreground = false
     private var pulseJob: Job? = null
+    // فاصل نبضة الفحص بات متكيّفاً بدل رقم ثابت — راجع CloudPulseIntervalPolicy.
+    private val pulseIntervalPolicy = CloudPulseIntervalPolicy()
+    // إشارة إيقاظ فورية: أي طلب مزامنة فوري (فتح التطبيق، تغيّر محلي، عودة الشبكة) يُنهي
+    // انتظار النبضة الحالي على الفور بدل الانتظار حتى نهاية الفاصل الحالي — هذا هو مصدر
+    // "التحديث اللحظي" الفعلي، وليس مجرد تقصير الفاصل الثابت.
+    private val pulseWake = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     @Volatile private var downloadJob: Job? = null
     @Volatile private var activeConnection = ""
     private var verificationJob: Job? = null
@@ -140,7 +147,10 @@ class CloudSyncManager @Inject constructor(
                     if (checkIsOnline() && !wasOnline && authManager.isAuthenticatedNow()) scope.launch {
                         val settings = preferences.settings.first()
                         if (settings.autoSyncEnabled && settings.isConfigured) {
-                            if (foreground) syncWithServer() else scheduler.enqueueSyncWhenConnected()
+                            // عودة الشبكة بعد انقطاع تعني تغييرات محتملة فاتتنا أثناء الانقطاع؛
+                            // أيقظ نبضة الفحص فوراً بدل انتظار الفاصل الحالي (قد يكون قد تباعد
+                            // لدقيقة كاملة أثناء الخمول قبل الانقطاع).
+                            if (foreground) requestImmediateSync() else scheduler.enqueueSyncWhenConnected()
                         }
                         // طابور النقل لا يتبع autoSyncEnabled: كل دفعة فيه طلب صريح من المستخدم.
                         // بدون هذا السطر تبقى الدفعات «قيد الانتظار» إلى الأبد بعد انقطاع يوقف
@@ -177,6 +187,17 @@ class CloudSyncManager @Inject constructor(
         }
     }
 
+    /**
+     * طلب مزامنة فورية: يُستدعى عند فتح التطبيق (setForeground)، تغيّر بيانات محلي
+     * (onLocalDataChanged)، أو عودة الشبكة. يعيد ضبط السياسة لفاصل سريع *و* يوقظ حلقة
+     * النبضة النائمة فوراً عبر [pulseWake] بدل تركها تنتظر حتى نهاية فاصلها الحالي —
+     * هذا هو الفرق الجوهري بين "فاصل أقصر" و"تحديث لحظي فعلي عند حدوث الحدث".
+     */
+    private fun requestImmediateSync() {
+        pulseIntervalPolicy.resetToActive()
+        pulseWake.tryEmit(Unit)
+    }
+
     /** MainActivity.onStart/onStop، وليس حلقة تعمل للأبد بعد إغلاق الواجهة. */
     fun setForeground(visible: Boolean) {
         foreground = visible
@@ -185,17 +206,28 @@ class CloudSyncManager @Inject constructor(
             pulseJob = null
             return
         }
-        if (pulseJob?.isActive == true) return
+        if (pulseJob?.isActive == true) {
+            // الواجهة عادت للظهور بينما النبضة تعمل أصلاً (مثلاً onStart متكرر) — تأكد من
+            // أن الفحص التالي فوري بدل انتظار فاصل قد يكون تباعد أثناء الخمول السابق.
+            requestImmediateSync()
+            return
+        }
+        // فتح التطبيق/عودته للواجهة = نافذة نشاط جديدة؛ أول فحص دائماً فوري (بلا أي delay
+        // قبله) لأن حلقة while تنفّذ المحتوى أولاً قبل أي انتظار.
+        pulseIntervalPolicy.resetToActive()
         pulseJob = scope.launch {
             while (isActive) {
+                var changed = false
                 if (authManager.isAuthenticatedNow()) {
                     try {
                         val settings = preferences.snapshot()
                         if (settings.isConfigured && checkIsOnline()) {
+                            val before = scanState.value
                             authManager.verifyActiveSessionWithCloud().getOrThrow()
                             if (settings.autoSyncEnabled && authManager.isAuthenticatedNow()) {
                                 syncWithServer().getOrThrow()
                             }
+                            changed = CloudScanChangeDetector.hasChanged(before, scanState.value)
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -203,7 +235,13 @@ class CloudSyncManager @Inject constructor(
                         _lastScanError.value = "تعذّر قراءة الاتصال المحمي أو تحديث السحابة؛ أعد التحقق من الاتصال"
                     }
                 }
-                delay(if (scanState.value.phase == CloudScanPhase.EMPTY) EMPTY_PULSE_INTERVAL_MS else LIVE_PULSE_INTERVAL_MS)
+                val delayMs = pulseIntervalPolicy.nextDelayMs(
+                    changed = changed,
+                    isEmptyPhase = scanState.value.phase == CloudScanPhase.EMPTY
+                )
+                // ننتظر إما انتهاء الفاصل المتكيّف أو إشارة إيقاظ فورية (أيهما أسبق) —
+                // withTimeoutOrNull يُنهي الانتظار دون استثناء بمجرد وصول إشارة من pulseWake.
+                withTimeoutOrNull(delayMs) { pulseWake.first() }
             }
         }
     }
@@ -213,7 +251,14 @@ class CloudSyncManager @Inject constructor(
         val settings = preferences.snapshot()
         if (!settings.autoSyncEnabled || !settings.isConfigured || !authManager.isAuthenticatedNow()) return
         scheduler.enqueueSyncWhenConnected()
-        if (foreground && checkIsOnline()) syncWithServer()
+        if (foreground && checkIsOnline()) {
+            // تغيّر محلي = نافذة نشاط جديدة لنبضة الفحص أيضاً (وليس فقط لهذا الاستدعاء
+            // المباشر): لو كانت النبضة قد تباعدت أثناء خمول سابق، أعدها لفاصل سريع فوراً
+            // بدل أن تبقى على فاصل دقيقة كاملة رغم النشاط الجديد. CloudScanController
+            // يدمج طلبات الفحص المتزامنة في طلب شبكة واحد، فلا يوجد ازدواج فعلي هنا.
+            requestImmediateSync()
+            syncWithServer()
+        }
     }
 
     /** طلبات الفحص تشترك في طلب واحد، ولا تبدأ رفع ملفات أو تنتظر نقلاً طويلاً. */
@@ -1307,8 +1352,8 @@ class CloudSyncManager @Inject constructor(
 
     companion object {
         private const val TAG = "CloudSyncManager"
-        private const val LIVE_PULSE_INTERVAL_MS = 20_000L
-        private const val EMPTY_PULSE_INTERVAL_MS = 120_000L
+        // استُبدل الفاصل الثابت (20 ثانية/120 ثانية) بفاصل متكيّف — راجع
+        // CloudPulseIntervalPolicy لتوثيق كامل للسبب والأرقام والاختبارات التي تثبته.
         // كان 30 ثانية: ضيّق على مكتبات فيها صفحات كثيرة من الملفات فوق شبكة بطيئة، فيَظهر
         // الفحص السابق للرفع وكأنه «يتوقف» قبل أن يبدأ نقل البايتات أصلاً. مرفوع الآن لنفس
         // مهلة القراءة الافتراضية الجديدة في طبقة النقل (راجع AppwriteStorageTransport).

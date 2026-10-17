@@ -60,7 +60,7 @@ object CloudTransferNotifier {
      */
     fun showResult(context: Context, snapshot: CloudTransferQueueSnapshot, completedItems: Int) {
         val text = CloudTransferQueueLogic.outcomeNotificationText(snapshot, completedItems) ?: return
-    val notification = baseBuilder(context, "نقل السحابة", text, NotificationChannels.CLOUD_FILES)
+        val notification = baseBuilder(context, "نقل السحابة", text, NotificationChannels.CLOUD_FILES)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
