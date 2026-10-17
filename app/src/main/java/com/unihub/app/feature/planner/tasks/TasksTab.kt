@@ -1,7 +1,9 @@
 package com.unihub.app.feature.planner.tasks
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AddTask
@@ -58,6 +60,9 @@ import com.unihub.app.core.validation.InputValidator
 import com.unihub.app.core.validation.UserInputRules
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.UiMessagesHost
+import com.unihub.app.feature.planner.PlannerAnimatedText
+import com.unihub.app.feature.planner.plannerPressScale
+import com.unihub.app.feature.planner.plannerReveal
 import com.unihub.app.ui.theme.SemanticDanger
 import com.unihub.app.ui.theme.SemanticSuccess
 import com.unihub.app.ui.theme.SemanticWarning
@@ -72,6 +77,7 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val filter by viewModel.currentFilter.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val playedTaskKeys = remember { mutableSetOf<Any>() }
 
     var sheetTask by remember { mutableStateOf<TaskEntity?>(null) }
     var showSheet by remember { mutableStateOf(false) }
@@ -148,7 +154,7 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(tasks, key = { it.id }) { task ->
+                    itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
                         TaskRow(
                             task = task,
                             onToggle = { viewModel.toggle(task) },
@@ -156,7 +162,10 @@ fun TasksTab(viewModel: TasksViewModel = hiltViewModel()) {
                                 sheetTask = task
                                 showSheet = true
                             },
-                            onLongPress = { deleteTarget = task }
+                            onLongPress = { deleteTarget = task },
+                            modifier = Modifier
+                                .plannerReveal(task.id, index, playedTaskKeys)
+                                .animateItem()
                         )
                     }
                     item { Spacer(Modifier.height(80.dp)) }
@@ -203,13 +212,21 @@ private fun TaskRow(
     task: TaskEntity,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Card(
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
+            .plannerPressScale(interactionSource)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onEdit,
+                onLongClick = onLongPress
+            )
     ) {
         Row(
             modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
@@ -217,7 +234,7 @@ private fun TaskRow(
         ) {
             Checkbox(checked = task.isDone, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
-                Text(
+                PlannerAnimatedText(
                     text = task.title,
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,

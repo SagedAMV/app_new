@@ -35,7 +35,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +56,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -126,6 +128,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unihub.app.data.local.entity.NoteEntity
+import com.unihub.app.feature.planner.PlannerAnimatedText
+import com.unihub.app.feature.planner.plannerPressScale
+import com.unihub.app.feature.planner.plannerReveal
 import com.unihub.app.ui.components.ChoiceChips
 import com.unihub.app.ui.components.ConfirmDialog
 import com.unihub.app.ui.components.EmptyState
@@ -160,6 +165,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val currentFilter by viewModel.currentFilter.collectAsStateWithLifecycle()
+    val playedNoteKeys = remember { mutableSetOf<Any>() }
 
     var activeEditorSession by remember { mutableStateOf<NoteEditorSession?>(null) }
     var deleteTarget by remember { mutableStateOf<NoteEntity?>(null) }
@@ -293,7 +299,7 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                 }
             }
 
-            items(notes, key = { it.id }) { note ->
+            itemsIndexed(notes, key = { _, note -> note.id }) { index, note ->
                 RichNoteCard(
                     note = note,
                     onClick = {
@@ -306,7 +312,10 @@ fun NotesTab(viewModel: NotesViewModel = hiltViewModel()) {
                     },
                     onTogglePin = { viewModel.togglePin(note) },
                     onDuplicate = { viewModel.duplicate(note) },
-                    onDeleteRequest = { deleteTarget = note }
+                    onDeleteRequest = { deleteTarget = note },
+                    modifier = Modifier
+                        .plannerReveal(note.id, index, playedNoteKeys)
+                        .animateItem()
                 )
             }
 
@@ -429,18 +438,26 @@ private fun RichNoteCard(
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
     onDuplicate: () -> Unit,
-    onDeleteRequest: () -> Unit
+    onDeleteRequest: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     val stats = remember(note.content) { NoteWorkspaceCodec.summarize(note.content) }
     val tagColor = remember(stats.colorTag) { stats.colorTag.colorHex.toComposeColor() }
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()) }
 
     Card(
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .animateContentSize()
-            .combinedClickable(onClick = onClick, onLongClick = onDeleteRequest)
+            .plannerPressScale(interactionSource)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+                onLongClick = onDeleteRequest
+            )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // السطر العلوي: وسم اللون + العنوان + أيقونة التثبيت
@@ -452,7 +469,7 @@ private fun RichNoteCard(
                         .background(tagColor)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
+                PlannerAnimatedText(
                     text = note.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
@@ -482,7 +499,7 @@ private fun RichNoteCard(
             // المعاينة النصية الهادئة
             if (stats.plainPreview.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
-                Text(
+                PlannerAnimatedText(
                     text = stats.plainPreview,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

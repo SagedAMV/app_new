@@ -1,7 +1,11 @@
 package com.unihub.app.feature.planner.schedule
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,8 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -57,6 +61,9 @@ import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.TimeField
 import com.unihub.app.ui.components.UiMessagesHost
+import com.unihub.app.feature.planner.PlannerAnimatedText
+import com.unihub.app.feature.planner.plannerPressScale
+import com.unihub.app.feature.planner.plannerReveal
 
 /** تبويب الجدول الأسبوعي: المحاضرات مجمعة حسب اليوم مع إبراز يوم اليوم */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +73,7 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
     UiMessagesHost(viewModel.messenger, snackbarHostState)
 
     val lectures by viewModel.lectures.collectAsStateWithLifecycle()
+    val playedLectureKeys = remember { mutableSetOf<Any>() }
 
     var sheetLecture by remember { mutableStateOf<LectureEntity?>(null) }
     var showSheet by remember { mutableStateOf(false) }
@@ -114,60 +122,88 @@ fun ScheduleTab(viewModel: ScheduleViewModel = hiltViewModel()) {
                     subtitle = "أضف محاضرات أسبوعية"
                 )
             }
-        } else if (showGrid) {
-            // الجدول الشبكي: تواقيت مشتقة من المحاضرات نفسها + تمدد أفقي حسب المدة
-            WeeklyTimetableGrid(
-                lectures = lectures,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 10.dp)
-            )
         } else {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp)
-            ) {
-                Spacer(Modifier.height(8.dp))
-                FeatureHeroCard(
-                    title = "مخطط الأسبوع",
-                    subtitle = "مواعيد المحاضرات",
-                    icon = Icons.AutoMirrored.Outlined.MenuBook,
-                    badge = "${lectures.size} محاضرة"
-                )
-                Weekday.entries.forEach { day ->
-                    val dayLectures = lectures.filter { it.day == day }
-                    if (dayLectures.isEmpty()) return@forEach
+            Crossfade(
+                targetState = showGrid,
+                animationSpec = tween(durationMillis = 220),
+                label = "schedule-layout"
+            ) { gridVisible ->
+                if (gridVisible) {
+                    // الشبكة والقائمة تتبادلان بهدوء مع الإبقاء على مصدر بيانات واحد.
+                    WeeklyTimetableGrid(
+                        lectures = lectures,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(horizontal = 10.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(horizontal = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item(key = "schedule-hero") {
+                            FeatureHeroCard(
+                                title = "مخطط الأسبوع",
+                                subtitle = "مواعيد المحاضرات",
+                                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                badge = "${lectures.size} محاضرة",
+                                modifier = Modifier
+                                    .padding(top = 8.dp)
+                                    .plannerReveal("schedule-hero", 0, playedLectureKeys)
+                            )
+                        }
 
-                    SectionHeader(
-                        title = day.label,
-                        action = {
-                            if (day == today) {
-                                TintChip(
-                                    text = "اليوم",
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        var revealIndex = 0
+                        Weekday.entries.forEach { day ->
+                            val dayLectures = lectures.filter { it.day == day }
+                            if (dayLectures.isEmpty()) return@forEach
+
+                            item(key = "schedule-day-${day.name}") {
+                                SectionHeader(
+                                    title = day.label,
+                                    modifier = Modifier.animateItem(),
+                                    action = {
+                                        if (day == today) {
+                                            TintChip(
+                                                text = "اليوم",
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
                                 )
                             }
+                            val dayOffset = revealIndex
+                            itemsIndexed(
+                                items = dayLectures,
+                                key = { _, lecture -> "lecture-${lecture.id}" }
+                            ) { index, lecture ->
+                                LectureRow(
+                                    lecture = lecture,
+                                    isToday = day == today,
+                                    onEdit = {
+                                        sheetLecture = lecture
+                                        showSheet = true
+                                    },
+                                    onLongPress = { deleteTarget = lecture },
+                                    modifier = Modifier
+                                        .plannerReveal(
+                                            "lecture-${lecture.id}",
+                                            dayOffset + index,
+                                            playedLectureKeys
+                                        )
+                                        .animateItem()
+                                )
+                            }
+                            revealIndex += dayLectures.size
                         }
-                    )
-                    dayLectures.forEach { lecture ->
-                        LectureRow(
-                            lecture = lecture,
-                            isToday = day == today,
-                            onEdit = {
-                                sheetLecture = lecture
-                                showSheet = true
-                            },
-                            onLongPress = { deleteTarget = lecture }
-                        )
-                        Spacer(Modifier.height(8.dp))
+                        item { Spacer(Modifier.height(80.dp)) }
                     }
                 }
-                Spacer(Modifier.height(80.dp))
             }
         }
 
@@ -209,13 +245,21 @@ private fun LectureRow(
     lecture: LectureEntity,
     isToday: Boolean,
     onEdit: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Card(
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
+            .plannerPressScale(interactionSource)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onEdit,
+                onLongClick = onLongPress
+            )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -239,7 +283,7 @@ private fun LectureRow(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(
+                PlannerAnimatedText(
                     text = lecture.subject,
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,

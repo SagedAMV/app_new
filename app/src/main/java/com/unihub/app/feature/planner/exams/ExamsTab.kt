@@ -1,6 +1,8 @@
 package com.unihub.app.feature.planner.exams
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,8 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.School
@@ -57,6 +59,9 @@ import com.unihub.app.ui.components.SectionHeader
 import com.unihub.app.ui.components.TintChip
 import com.unihub.app.ui.components.TimeField
 import com.unihub.app.ui.components.UiMessagesHost
+import com.unihub.app.feature.planner.PlannerAnimatedText
+import com.unihub.app.feature.planner.plannerPressScale
+import com.unihub.app.feature.planner.plannerReveal
 import com.unihub.app.ui.theme.SemanticDanger
 import com.unihub.app.ui.theme.SemanticWarning
 
@@ -70,6 +75,7 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
     val exams by viewModel.exams.collectAsStateWithLifecycle()
     val upcoming = exams.filterNot { it.isPast }
     val past = exams.filter { it.isPast }.sortedByDescending { it.date }
+    val playedExamKeys = remember { mutableSetOf<Any>() }
 
     var sheetExam by remember { mutableStateOf<ExamEntity?>(null) }
     var showSheet by remember { mutableStateOf(false) }
@@ -87,50 +93,74 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
             }
         }
     ) { padding ->
-        Column(
-            Modifier
+        LazyColumn(
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp)
+                .padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val nextExam = upcoming.minByOrNull { it.daysRemaining ?: Long.MAX_VALUE }
-            FeatureHeroCard(
-                title = "العدّ التنازلي للامتحانات",
-                subtitle = nextExam?.let { exam ->
-                    val days = exam.daysRemaining
-                    if (days == 0L) "اليوم: ${exam.subject}"
-                    else if (days != null && days > 0) "الأقرب: ${exam.subject} • ${days} يوم"
-                    else "امتحانات قادمة"
-                } ?: "مواعيد الامتحانات",
-                icon = Icons.Outlined.School,
-                badge = upcoming.size.toString() + " قادمة"
-            )
-            Spacer(Modifier.height(12.dp))
-            if (exams.isEmpty()) {
-                EmptyState(
+            item(key = "exam-hero") {
+                val nextExam = upcoming.minByOrNull { it.daysRemaining ?: Long.MAX_VALUE }
+                FeatureHeroCard(
+                    title = "العدّ التنازلي للامتحانات",
+                    subtitle = nextExam?.let { exam ->
+                        val days = exam.daysRemaining
+                        if (days == 0L) "اليوم: ${exam.subject}"
+                        else if (days != null && days > 0) "الأقرب: ${exam.subject} • ${days} يوم"
+                        else "امتحانات قادمة"
+                    } ?: "مواعيد الامتحانات",
                     icon = Icons.Outlined.School,
-                    title = "لا امتحانات مسجلة",
-                    subtitle = "أضف امتحانًا"
+                    badge = upcoming.size.toString() + " قادمة",
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .plannerReveal("exam-hero", 0, playedExamKeys)
                 )
+            }
+            if (exams.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Outlined.School,
+                        title = "لا امتحانات مسجلة",
+                        subtitle = "أضف امتحانًا"
+                    )
+                }
             } else {
                 if (upcoming.isNotEmpty()) {
-                    SectionHeader(title = "القادمة (${upcoming.size})")
-                    upcoming.forEach { exam ->
+                    item(key = "exams-upcoming-header") {
+                        SectionHeader(
+                            title = "القادمة (${upcoming.size})",
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                    itemsIndexed(
+                        items = upcoming,
+                        key = { _, exam -> "exam-${exam.id}" }
+                    ) { index, exam ->
                         ExamRow(
                             exam = exam,
                             onEdit = {
                                 sheetExam = exam
                                 showSheet = true
                             },
-                            onLongPress = { deleteTarget = exam }
+                            onLongPress = { deleteTarget = exam },
+                            modifier = Modifier
+                                .plannerReveal("exam-${exam.id}", index + 1, playedExamKeys)
+                                .animateItem()
                         )
-                        Spacer(Modifier.height(8.dp))
                     }
                 }
                 if (past.isNotEmpty()) {
-                    SectionHeader(title = "انتهت (${past.size})")
-                    past.forEach { exam ->
+                    item(key = "exams-past-header") {
+                        SectionHeader(
+                            title = "انتهت (${past.size})",
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                    itemsIndexed(
+                        items = past,
+                        key = { _, exam -> "exam-${exam.id}" }
+                    ) { index, exam ->
                         ExamRow(
                             exam = exam,
                             dimmed = true,
@@ -138,13 +168,15 @@ fun ExamsTab(viewModel: ExamsViewModel = hiltViewModel()) {
                                 sheetExam = exam
                                 showSheet = true
                             },
-                            onLongPress = { deleteTarget = exam }
+                            onLongPress = { deleteTarget = exam },
+                            modifier = Modifier
+                                .plannerReveal("exam-${exam.id}", upcoming.size + index + 1, playedExamKeys)
+                                .animateItem()
                         )
-                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
-            Spacer(Modifier.height(80.dp))
+            item { Spacer(Modifier.height(80.dp)) }
         }
 
         if (showSheet) {
@@ -185,21 +217,29 @@ private fun ExamRow(
     exam: ExamEntity,
     dimmed: Boolean = false,
     onEdit: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val days = exam.daysRemaining
+    val interactionSource = remember { MutableInteractionSource() }
     Card(
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
+            .plannerPressScale(interactionSource)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onEdit,
+                onLongClick = onLongPress
+            )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text(
+                PlannerAnimatedText(
                     text = exam.subject,
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
@@ -232,7 +272,7 @@ private fun ExamRow(
                 days != null -> {
                     val urgent = days <= 2
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(
+                        PlannerAnimatedText(
                             text = when {
                                 days == 0L -> "اليوم!"
                                 days == 1L -> "غداً"

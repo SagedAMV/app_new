@@ -1,5 +1,7 @@
 package com.unihub.app.feature.planner
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import com.unihub.app.feature.planner.exams.ExamsTab
 import com.unihub.app.feature.planner.notes.NotesTab
 import com.unihub.app.feature.planner.schedule.ScheduleTab
@@ -72,7 +75,22 @@ fun PlannerScreen(initialTab: PlannerTab) {
                         selectedIndex = index
                         scope.launch { pagerState.animateScrollToPage(index) }
                     },
-                    text = { Text(tab.label()) }
+                    text = {
+                        val labelColor by animateColorAsState(
+                            targetValue = if (selectedIndex == index) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            animationSpec = tween(durationMillis = 180),
+                            label = "planner-tab-label"
+                        )
+                        Text(
+                            text = tab.label(),
+                            color = labelColor,
+                            fontWeight = if (selectedIndex == index) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
                 )
             }
         }
