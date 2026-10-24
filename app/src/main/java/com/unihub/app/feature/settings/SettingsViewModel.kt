@@ -245,7 +245,7 @@ class SettingsViewModel @Inject constructor(
     fun revokeUserSessions(username: String) {
         viewModelScope.launch {
             authManager.revokeUserSessions(username)
-                .onSuccess { messenger.notify("أُلغيت جلسات Appwrite للمستخدم «$username»؛ يلزمه تسجيل الدخول مجددًا") }
+                .onSuccess { messenger.notify("أُلغيت جلسات Supabase للمستخدم «$username»؛ يلزمه تسجيل الدخول مجددًا") }
                 .onFailure { messenger.notifyError("تعذّر إلغاء الجلسات") }
         }
     }

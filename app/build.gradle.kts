@@ -217,8 +217,20 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // Account and Functions use the auth project; streaming storage uses its own qualified Client.
-    implementation(libs.appwrite)
     // أدوات التطوير — لا تدخل في حزمة Release.
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // اختبارات الوحدة على JVM (لا تحتاج جهازًا ولا محاكيًا).
+    testImplementation(libs.junit)
+    // org.json على JVM: النسخة في حزمة Android لا تعمل في اختبارات الوحدة.
+    testImplementation(libs.json)
+}
+
+// اختبارات الوحدة على JVM: ذاكرة محدودة حتى تتّسع على أجهزة ضيّقة الذاكرة.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "384m"
+    jvmArgs("-XX:MaxMetaspaceSize=256m", "-XX:+UseSerialGC")
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
 }

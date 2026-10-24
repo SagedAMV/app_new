@@ -1,6 +1,5 @@
 package com.unihub.app.data.cloud
 
-import com.unihub.app.data.appwrite.AppwriteConfig
 import com.unihub.app.data.local.entity.FileKind
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
@@ -20,12 +19,11 @@ object CloudStorageConfig {
 
 /** Public storage coordinates, never a credential container. */
 data class CloudStorageConnection(
-    val endpointUrl: String = AppwriteConfig.STORAGE_ENDPOINT,
-    val projectId: String = AppwriteConfig.STORAGE_PROJECT_ID,
-    val bucketId: String = AppwriteConfig.STORAGE_BUCKET_ID
+    val endpointUrl: String = "",
+    val projectId: String = "",
+    val bucketId: String = ""
 ) {
-    val isConfigured: Boolean get() = endpointUrl == AppwriteConfig.STORAGE_ENDPOINT &&
-        projectId == AppwriteConfig.STORAGE_PROJECT_ID && bucketId == AppwriteConfig.STORAGE_BUCKET_ID
+    val isConfigured: Boolean get() = endpointUrl.isNotBlank() && projectId.isNotBlank() && bucketId.isNotBlank()
 }
 
 data class RemoteCloudFile(

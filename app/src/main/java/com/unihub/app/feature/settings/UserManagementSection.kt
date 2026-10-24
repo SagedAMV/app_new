@@ -226,16 +226,16 @@ fun UserManagementSection(
                     )
                 }
                 Text(
-                    text = "لم يعثر التطبيق على وسم Appwrite المطلوب: admin. " +
-                        "اسم الحساب أو وسم unihub وحده لا يمنح صلاحيات إدارية.",
+                    text = "لم يعثر التطبيق على صلاحية المشرف المطلوبة في هذا الحساب. " +
+                        "اسم الحساب وحده لا يمنح صلاحيات إدارية.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "للتفعيل الآمن: افتح Appwrite Console لمشروع المستخدمين والمصادقة، " +
-                        "وتحقق من الحساب الصحيح ثم أضف له Label باسم admin. " +
+                    text = "للتفعيل الآمن: افتح لوحة Supabase على مشروع التطبيق، " +
+                        "نفّذ على جدول public.profiles لتفعيل is_admin لهذا الحساب. " +
                         "بعدها سجّل الخروج من UniHub ثم ادخل مجددًا لتحديث الجلسة. " +
-                        "لا تضف هذا الوسم إلى حساب لا تملكه أو لا تثق به.",
+                        "لا تفعّل هذا الإذن لحساب لا تملكه أو لا تثق به.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -463,7 +463,7 @@ fun UserManagementSection(
  * بطاقة حساب المستخدم القابلة للطي والتوسيع بأنيميشن متكامل:
  * - في الوضع المطوي (الافتراضي): تعرض اسم المستخدم وشارة حالته وملخصاً مدمجاً وسهم توسيع متحرك.
  * - عند النقر على البطاقة: تتوسع بأنيميشن ناعم لتعرض جميع الخيارات (نشط/موقوف، الرمز وتغييره،
- *   الصلاحيات الثلاث، إلغاء جلسات Appwrite، وحذف المستخدم).
+ *   الصلاحيات الثلاث، إلغاء جلسات Supabase، وحذف المستخدم).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -644,7 +644,7 @@ private fun AdminUserAccountCard(
 
                     // تفاصيل الجهاز المرتبط الكاملة
                     Text(
-                        text = "جلسات عبر Appwrite",
+                        text = "جلسات عبر Supabase",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -763,7 +763,7 @@ private fun AdminUserAccountCard(
                         )
                     }
 
-                    // أزرار إلغاء جلسات Appwrite وحذف المستخدم
+                    // أزرار إلغاء جلسات Supabase وحذف المستخدم
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -776,7 +776,7 @@ private fun AdminUserAccountCard(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text("إلغاء جلسات Appwrite")
+                                Text("إلغاء جلسات Supabase")
                             }
                         }
                         if (SettingsCatalogRules.canShowDestructiveControlsForUser(account)) {

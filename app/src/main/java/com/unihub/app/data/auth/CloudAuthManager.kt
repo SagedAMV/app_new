@@ -5,10 +5,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.unihub.app.core.prefs.CloudAuthPreferences
 import com.unihub.app.core.prefs.LocalAuthSessionSnapshot
-import com.unihub.app.data.appwrite.AppwriteStorageAuthorization
+import com.unihub.app.data.supabase.SupabaseApiException
+import com.unihub.app.data.supabase.SupabaseAuthRepository
+import com.unihub.app.data.supabase.SupabaseSessionInvalidException
+import com.unihub.app.data.supabase.SupabaseStorageAuthorization
 import com.unihub.app.data.cloud.cloudAttempt
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.appwrite.exceptions.AppwriteException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,12 +32,15 @@ import javax.net.ssl.SSLException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Appwrite Account owns authentication; server-side Users owns account administration. */
+/**
+ * المصادقة على Supabase: الرموز والجلسات في `SupabaseAuthRepository`،
+ * وإدارة المستخدمين دوال داخل القاعدة (لا مفتاح إداري في التطبيق).
+ */
 @Singleton
 class CloudAuthManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val repository: AppwriteAuthRepository,
-    private val storageAuthorization: AppwriteStorageAuthorization,
+    private val repository: SupabaseAuthRepository,
+    private val storageAuthorization: SupabaseStorageAuthorization,
     private val authPreferences: CloudAuthPreferences,
     private val deviceFingerprintProvider: DeviceFingerprintProvider
 ) {
@@ -64,6 +69,7 @@ class CloudAuthManager @Inject constructor(
                     if (!cached.hasAuthenticatedSession || cached.boundDeviceFingerprint != device.fingerprint) {
                         clearLocalSession()
                     } else if (isOnline()) {
+                        repository.restoreTokens(cached.accessToken, cached.refreshToken)
                         val user = try {
                             repository.currentUser(expectedUserId = cached.userId)
                         } catch (cancelled: CancellationException) {
@@ -80,7 +86,7 @@ class CloudAuthManager @Inject constructor(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    clearLocalSession("تعذّر استعادة جلسة Appwrite؛ أعد تسجيل الدخول")
+                    clearLocalSession("تعذّر استعادة الجلسة؛ أعد تسجيل الدخول")
                 } finally { initialized = true }
             }
         }
@@ -161,7 +167,7 @@ class CloudAuthManager @Inject constructor(
         storageAuthorization.clear()
         publish(repository.currentUser(), deviceFingerprintProvider.getDeviceInfo())
     }
-    /** In Appwrite this revokes server sessions instead of clearing a client-controlled fingerprint. */
+    /** يُبطل الخادم الجلسات نفسها (دالة admin_revoke_sessions) بدل مسح بصمة محلية. */
     suspend fun revokeUserSessions(targetUsername: String): Result<Unit> = adminOperation {
         repository.revokeUserSessions(userId(targetUsername))
     }
@@ -186,7 +192,8 @@ class CloudAuthManager @Inject constructor(
     private suspend fun publish(user: CloudUserAccount, device: BoundDeviceInfo) {
         val version = repository.sessionVersion
         if (!repository.isCurrent(version, user.userId)) throw IOException("انتهت الجلسة")
-        authPreferences.saveAuthenticatedSession(user, device.fingerprint)
+        authPreferences.saveAuthenticatedSession(user, device.fingerprint,
+            repository.currentAccessToken(), repository.currentRefreshToken())
         publishState(user, device, version)
     }
 
@@ -211,7 +218,7 @@ class CloudAuthManager @Inject constructor(
     /**
      * A momentary outage can coexist with Android's validated-network flag. Keep a fresh,
      * device-bound local session for local app use, but never use it to authorize cloud I/O:
-     * requirePermission() still fetches the active Appwrite account before every transfer.
+     * requirePermission() still fetches the active account before every transfer.
      */
     private suspend fun restoreCachedOfflineSession(
         cached: LocalAuthSessionSnapshot,
@@ -220,7 +227,7 @@ class CloudAuthManager @Inject constructor(
         val user = CloudAuthRules.fromJson(cached.cachedRegistryJson).users.singleOrNull()
         if (user == null || user.userId != cached.userId || !user.isActive ||
             !CloudAuthRules.isCachedSessionFresh(cached.lastVerifiedAt)) {
-            clearLocalSession("اتصل بالإنترنت للتحقق من جلسة Appwrite")
+            clearLocalSession("اتصل بالإنترنت للتحقق من الجلسة")
             return
         }
         repository.restoreOfflineIdentity(user)
@@ -232,10 +239,10 @@ class CloudAuthManager @Inject constructor(
         val visited = hashSetOf<Throwable>()
         var cause: Throwable? = error
         while (cause != null && visited.add(cause)) {
-            if (cause is AppwriteSessionInvalidException) return false
-            if (cause is AppwriteException) {
-                return cause.code == 0 || cause.code == 408 || cause.code == 429 ||
-                    cause.code in 500..599
+            if (cause is SupabaseSessionInvalidException) return false
+            if (cause is SupabaseApiException) {
+                return cause.status == 0 || cause.status == 408 || cause.status == 429 ||
+                    cause.status in 500..599
             }
             if (cause is UnknownHostException || cause is ConnectException ||
                 cause is NoRouteToHostException || cause is SocketException ||
@@ -248,7 +255,7 @@ class CloudAuthManager @Inject constructor(
     private fun requireAuthenticated() {
         if (!isAuthenticatedNow()) throw IOException("سجّل الدخول أولاً")
     }
-    private fun requireOnline() { if (!isOnline()) throw IOException("يلزم اتصال بالإنترنت للتحقق من Appwrite") }
+    private fun requireOnline() { if (!isOnline()) throw IOException("يلزم اتصال بالإنترنت للتحقق من الجلسة") }
 
     /**
      * إصلاح 2026-10-16: كانت هذه الدالة تستعمل mutex.tryLock() وترفض الطلب فورًا برسالة
@@ -270,16 +277,16 @@ class CloudAuthManager @Inject constructor(
             _isBusy.value = true
             try { Result.success(block()) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: AppwriteSessionInvalidException) {
+            catch (error: SupabaseSessionInvalidException) {
                 clearLocalSession(error.message)
                 Result.failure(error)
             }
-            catch (error: AppwriteException) {
-                if (error.code == 401 || error.code == 403) clearLocalSession("انتهت الجلسة أو رُفض الدخول في Appwrite")
-                Result.failure(IOException(when (error.code) {
+            catch (error: SupabaseApiException) {
+                if (error.status == 401 || error.status == 403) clearLocalSession("انتهت الجلسة أو رُفض الدخول")
+                Result.failure(IOException(when (error.status) {
                     401, 403 -> "تعذّر توثيق الحساب؛ تحقق من البريد وكلمة المرور وصلاحية الحساب"
                     429 -> "محاولات كثيرة؛ انتظر قليلًا ثم أعد المحاولة"
-                    else -> "تعذّر الاتصال بمشروع المستخدمين في Appwrite"
+                    else -> "تعذّر الاتصال بخدمة الحسابات"
                 }))
             }
             catch (error: Exception) { Result.failure(error) }

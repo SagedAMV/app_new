@@ -1,7 +1,6 @@
 package com.unihub.app.data.cloud
 
-import com.unihub.app.data.appwrite.AppwriteConfig
-import com.unihub.app.data.appwrite.AppwriteFileProtocol
+import com.unihub.app.data.supabase.SupabaseConfig
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,11 +8,11 @@ import org.json.JSONObject
 /** قواعد نقية يمكن اختبارها خارج أندرويد. */
 object CloudFileRules {
     /**
-     * سقف Appwrite Cloud الفعلي هو 50,000,000 بايت (MB عشري، وليس 50 MiB).
+     * سقف الحاوية على الخادم هو 50,000,000 بايت (MB عشري، وليس 50 MiB).
      * ملف أكبر يُتجاهل برسالة واضحة، وبقية الملفات تُرفع عادةً. يجب إبقاء الحد مطابقًا
-     * لإعداد الخادم حتى لا يبدأ رفعًا سيرفضه Appwrite بعد إرسال الملف.
+     * لإعداد الخادم حتى لا يبدأ رفعًا سيرفضه الخادم بعد إرسال الملف.
      */
-    const val MAX_UPLOAD_FILE_BYTES: Long = AppwriteConfig.STORAGE_MAX_FILE_SIZE_BYTES
+    const val MAX_UPLOAD_FILE_BYTES: Long = SupabaseConfig.MAX_UPLOAD_FILE_BYTES
 
     fun exceedsUploadSizeLimit(sizeBytes: Long): Boolean = sizeBytes > MAX_UPLOAD_FILE_BYTES
 
@@ -72,7 +71,7 @@ object CloudDeleteRules {
     const val MAX_PER_OPERATION: Int = 200
 
     fun isDeletableObjectKey(objectKey: String): Boolean =
-        AppwriteFileProtocol.isSafeObjectKey(objectKey) && !objectKey.endsWith("/") &&
+        CloudFileProtocol.isSafeObjectKey(objectKey) && !objectKey.endsWith("/") &&
             objectKey != CloudStorageConfig.REMOTE_MANIFEST_OBJECT_KEY &&
             objectKey != CloudStorageConfig.REMOTE_META_OBJECT_KEY &&
             objectKey != CloudStorageConfig.REMOTE_BACKUP_OBJECT_KEY

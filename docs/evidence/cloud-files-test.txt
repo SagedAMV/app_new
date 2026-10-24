@@ -1,0 +1,39 @@
+# UniHub — ناتج الفحص الحيّ: cloud-files-test
+# التاريخ: 2026-10-23 23:03:07 UTC
+# المشروع: https://yjvrkxabhlygdmtoujge.supabase.co
+# الأمر: SUPABASE_URL=... SUPABASE_PUBLISHABLE_KEY=... SUPABASE_SERVICE_KEY=... bash supabase/tests/cloud_files_test.sh
+
+== UniHub cloud files flow test ==
+المشروع: https://yjvrkxabhlygdmtoujge.supabase.co
+  [PASS] إنشاء مستخدم بصلاحيات كاملة
+  [PASS] تسجيل الدخول
+-- 1) الرفع إلى الحاوية --
+  [PASS] رفع البايتات = 200
+  [PASS] تنزيل الملف = 200
+  [PASS] المحتوى مطابق
+  [PASS] بصمة الملف مطابقة
+  [PASS] مفتاح غير لاتيني في Storage = 400
+-- 2) سجل العنصر --
+  [PASS] إدراج cloud_objects = 201
+  [PASS] قراءة السجل = 200
+  [PASS] المعرّف صحيح
+  [PASS] البصمة صحيحة
+  [PASS] سرد العناصر = 200
+  [PASS] العنصر ضمن القائمة
+-- 3) البيان (manifest) --
+  [PASS] إدراج البيان = 201
+  [PASS] بيان مكرر = 409 (تعارض تفرّد)
+  [PASS] آخر بيان عبر RPC = 200
+-- 4) التنزيل باستئناف (Range) --
+  [PASS] طلب Range = 206
+  [PASS] جزء من الملف
+  [PASS] ترويسة Content-Range
+-- 5) الحذف والتنظيف --
+  [PASS] حذف الملف من الحاوية = 200
+  [PASS] حذف سجل العنصر = 204
+  [PASS] حذف البيان = 204
+  [PASS] الملف بعد الحذف غير موجود
+
+النتيجة: PASS=23 FAIL=0
+
+# انتهى الفحص.

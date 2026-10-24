@@ -209,7 +209,7 @@ object SettingsCatalogRules {
                 .joinToString(" ")
                 .ifBlank { device.deviceName.ifBlank { "جهاز مرتبط" } }
             "مرتبط: $modelPart"
-        } ?: "جلسات Appwrite"
+        } ?: "جلسات Supabase"
 
         return CollapsedUserSummary(
             username = account.username,

@@ -8,7 +8,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * لماذا هذا ضروري: تداخل قصير بين عمليتين شرعيتين — كنبض التحقق الدوري من الجلسة كل 20 ثانية
  * (CloudSyncManager.setForeground) مقابل إجراء يبدأه المستخدم فعليًا (رفع/تنزيل/فحص صلاحية) —
- * متوقَّع وطبيعي، خصوصًا على شبكة بطيئة (VPN) تُطيل كل طلب Appwrite قصير إلى ثوانٍ. استعمال
+ * متوقَّع وطبيعي، خصوصًا على شبكة بطيئة (VPN) تُطيل كل طلب Supabase قصير إلى ثوانٍ. استعمال
  * [Mutex.tryLock] هناك كان يرفض العملية الثانية فورًا برسالة "جارٍ تنفيذ عملية مصادقة أخرى"
  * حتى لو كانت الأولى على وشك الانتهاء خلال أجزاء من الثانية — فيفشل رفع مجلد كامل رغم أن
  * الحساب سليم ومتصل فعلاً (انظر CloudAuthManager.busyOperation و CloudAuthBusyException).
@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * لإعادة المحاولة (retryLater) لا كفشل نهائي يستهلك محاولة.
  *
  * قابلة للاختبار محليًا على JVM بلا أي اعتماد على Android (Context/Looper/الشبكة)، بعكس
- * [com.unihub.app.data.auth.CloudAuthManager] نفسه الذي يحتاج Context وAppwrite حقيقيين.
+ * [com.unihub.app.data.auth.CloudAuthManager] نفسه الذي يحتاج Context وخدمة Supabase حقيقية.
  */
 suspend fun Mutex.tryLockWithTimeout(timeoutMs: Long): Boolean =
     withTimeoutOrNull(timeoutMs) {

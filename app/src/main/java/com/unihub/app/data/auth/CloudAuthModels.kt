@@ -37,7 +37,7 @@ data class BoundDeviceInfo(
         }
 }
 
-/** Appwrite profile. username is the login email; no password or verifier is stored here. */
+/** Supabase profile. username is the login email; no password or verifier is stored here. */
 data class CloudUserAccount(
     val username: String,
     val displayName: String,

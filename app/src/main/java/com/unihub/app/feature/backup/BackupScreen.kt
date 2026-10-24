@@ -1,6 +1,6 @@
 package com.unihub.app.feature.backup
 
-import com.unihub.app.data.appwrite.AppwriteConfig
+import com.unihub.app.data.supabase.SupabaseConfig
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -126,8 +126,8 @@ fun BackupScreen(
                 modifier = Modifier.padding(top = 8.dp)
             )
             Spacer(Modifier.height(8.dp))
-            // ─── قسم خادم Appwrite (أونلاين / أوفلاين + سحب اختياري) ────
-            SectionHeader(title = "سحابة Appwrite")
+            // ─── قسم خادم السحابة (أونلاين / أوفلاين + سحب اختياري) ────
+            SectionHeader(title = "سحابة Supabase")
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium
@@ -228,15 +228,14 @@ fun BackupScreen(
                         TextButton(onClick = { showServerFields = !showServerFields }) {
                             Icon(Icons.Outlined.Settings, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text(if (showServerFields) "إخفاء معلومات Appwrite" else "مشروعا Appwrite")
+                            Text(if (showServerFields) "إخفاء معلومات Supabase" else "مشروع Supabase")
                         }
                         if (showServerFields) {
-                            Text("المستخدمون: ${AppwriteConfig.AUTH_PROJECT_ID}\n" +
-                                "الملفات: ${AppwriteConfig.STORAGE_PROJECT_ID}\n" +
-                                "الحاوية: ${AppwriteConfig.STORAGE_BUCKET_ID}\n" +
-                                AppwriteConfig.STORAGE_ENDPOINT,
+                            Text("المشروع: ${SupabaseConfig.PROJECT_URL}\n" +
+                                "الحاوية: ${SupabaseConfig.STORAGE_BUCKET_ID}\n" +
+                                "المسار: ${SupabaseConfig.REST_PATH}",
                                 style = MaterialTheme.typography.bodySmall)
-                            Text("تفويض الملفات يصدر من خدمة الربط الخادمية بعد تسجيل الدخول. لا تُدخل مفاتيح API في التطبيق.",
+                            Text("تفويض الملفات يصدر من رمز الجلسة نفسه الذي يحتفظ به التطبيق. لا تُدخل مفاتيح API في التطبيق.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
                     }

@@ -1,0 +1,15 @@
+### Supabase project capability probe — 2026-10-23T19:35:41Z
+project ref: yjvrkxabhlygdmtoujge
+
+--- [D] GET /storage/v1/bucket (secret) ---
+[] HTTP 200
+--- [E] GET /auth/v1/settings (secret) ---
+{"external":{"anonymous_users":false,"apple":false,"azure":false,"bitbucket":false,"discord":false,"facebook":false,"snapchat":false,"figma":false,"fly":false,"github":false,"gitlab":false,"google":false,"keycloak":false,"kakao":false,"linkedin":false,"linkedin_oidc":false,"notion":false,"spotify":false,"slack":false,"slack_oidc":false,"workos":false,"twitch":false,"twitter":false,"email":true,"phone":false,"zoom":false},"disable_signup":false,"mailer_autoconfirm":false,"phone_autoconfirm":false,"sms_provider":"twilio","saml_enabled":false,"saml_private_key_next_configured":true,"passkeys_enabled":false} HTTP 200
+--- [F] GET /auth/v1/admin/users (secret) ---
+{"users":[],"aud":"authenticated"} HTTP 200
+--- [G] GET /rest/v1/folders (publishable) ---
+{"code":"PGRST205","details":null,"hint":null,"message":"Could not find the table 'public.folders' in the schema cache"} HTTP 404
+--- [A] POST api.supabase.com/v1/projects/<ref>/database/query (secret as PAT) ---
+{"message":"JWT could not be decoded"} HTTP 401
+--- [B] POST <url>/platform/pg-meta/default/query ---
+{"error":"requested path is invalid"} HTTP 404

@@ -16,6 +16,7 @@ import com.unihub.app.data.auth.CloudAuthManager
 import com.unihub.app.data.backup.BackupRepository
 import com.unihub.app.data.local.entity.FileEntity
 import com.unihub.app.data.local.entity.FileKind
+import com.unihub.app.data.supabase.SupabaseStorageRepository
 import com.unihub.app.notifications.CloudFileNotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -67,7 +68,7 @@ data class CloudDownloadReport(val downloadedCount: Int, val failedNames: List<S
 }
 
 /**
- * هذا المسار لا يشترك في أحداث Appwrite Realtime؛ نفحصه كل 20 ثانية فقط أثناء ظهور MainActivity،
+ * هذا المسار لا يشترك في أحداث لحظية من الخادم؛ نفحصه كل 20 ثانية فقط أثناء ظهور MainActivity،
  * وفي الخلفية بواسطة WorkManager (غير دقيق التوقيت). لا تنزل الفحوص أي محتوى ملف.
  * جميع عمليات التخزين متسلسلة، وهوية الملف remoteKey + ETag، والاختيار يبدأ فارغاً.
  */
@@ -75,7 +76,7 @@ data class CloudDownloadReport(val downloadedCount: Int, val failedNames: List<S
 class CloudSyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backupRepository: BackupRepository,
-    private val storageRepository: AppwriteStorageRepository,
+    private val storageRepository: SupabaseStorageRepository,
     private val preferences: CloudSyncPreferences,
     private val scheduler: CloudSyncScheduler,
     private val notificationHelper: CloudFileNotificationHelper,
@@ -1307,7 +1308,7 @@ class CloudSyncManager @Inject constructor(
     }
 
     private fun requireConnection(settings: CloudSyncSettings) {
-        if (!settings.isConfigured) throw IOException("إعدادات مشروع ملفات Appwrite غير مطابقة")
+        if (!settings.isConfigured) throw IOException("إعدادات مشروع الملفات غير مطابقة")
         if (!checkIsOnline()) throw IOException("لا يتوفر إنترنت؛ البيانات والملفات السابقة محفوظة محلياً")
     }
 
@@ -1356,7 +1357,7 @@ class CloudSyncManager @Inject constructor(
         // CloudPulseIntervalPolicy لتوثيق كامل للسبب والأرقام والاختبارات التي تثبته.
         // كان 30 ثانية: ضيّق على مكتبات فيها صفحات كثيرة من الملفات فوق شبكة بطيئة، فيَظهر
         // الفحص السابق للرفع وكأنه «يتوقف» قبل أن يبدأ نقل البايتات أصلاً. مرفوع الآن لنفس
-        // مهلة القراءة الافتراضية الجديدة في طبقة النقل (راجع AppwriteStorageTransport).
+        // مهلة القراءة الافتراضية الجديدة في طبقة النقل (راجع SupabaseStorageTransport).
         private const val SCAN_TIMEOUT_MS = 45_000L
         private const val METADATA_EDIT_TIMEOUT_MS = 60_000L
         private const val CANCELLATION_MANIFEST_FLUSH_TIMEOUT_MS = 15_000L

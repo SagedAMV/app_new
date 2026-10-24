@@ -1,5 +1,0 @@
-// Open Runtimes merges this dependency block into its Kotlin runtime build.
-// Runtime: kotlin-2.0. Entrypoint: Index.kt. No Android dependencies.
-dependencies {
-    implementation "org.json:json:20240303"
-}

@@ -27,21 +27,24 @@ data class LocalAuthSessionSnapshot(
     val userId: String = "",
     val boundDeviceFingerprint: String = "",
     val cachedRegistryJson: String = "",
-    val lastVerifiedAt: Long = 0L
+    val lastVerifiedAt: Long = 0L,
+    /** رموز Supabase — تُحفظ داخل الخزنة المشفّرة، لا كنص صريح. */
+    val accessToken: String = "",
+    val refreshToken: String = ""
 ) {
     val hasAuthenticatedSession: Boolean get() = userId.isNotBlank() && loggedInUsername.isNotBlank() && boundDeviceFingerprint.isNotBlank()
 }
 
-private val appwriteProfileMigrationKey = booleanPreferencesKey("appwrite_profile_migrated_v1")
+private val profileMigrationKey = booleanPreferencesKey("cloud_profile_migrated_v2")
 private val Context.cloudAuthDataStore by preferencesDataStore(
     name = "unihub_cloud_auth",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
     produceMigrations = {
         listOf(object : DataMigration<Preferences> {
-            override suspend fun shouldMigrate(currentData: Preferences) = currentData[appwriteProfileMigrationKey] != true
+            override suspend fun shouldMigrate(currentData: Preferences) = currentData[profileMigrationKey] != true
             override suspend fun migrate(currentData: Preferences): Preferences = currentData.toMutablePreferences().apply {
                 asMap().keys.filter { it.name != "auth_fallback_device_seed" }.forEach { remove(it) }
-                this[appwriteProfileMigrationKey] = true
+                this[profileMigrationKey] = true
             }
             override suspend fun cleanUp() = Unit
         })
@@ -51,22 +54,29 @@ private val Context.cloudAuthDataStore by preferencesDataStore(
 /** Encrypted profile cache for local/offline access. It is never used as a network credential. */
 @Singleton
 class CloudAuthPreferences @Inject constructor(@ApplicationContext private val context: Context) {
-    private val payloadKey = stringPreferencesKey("appwrite_protected_profile_v1")
+    private val payloadKey = stringPreferencesKey("cloud_protected_profile_v2")
     private val fallbackSeedKey = stringPreferencesKey("auth_fallback_device_seed")
-    private val vault = CredentialSecretVault("unihub_appwrite_profile_v1")
+    private val vault = CredentialSecretVault("unihub_cloud_profile_v2")
 
     suspend fun snapshot(): LocalAuthSessionSnapshot = withContext(Dispatchers.IO) {
         val payload = context.cloudAuthDataStore.data.first()[payloadKey].orEmpty()
         if (payload.isBlank()) return@withContext LocalAuthSessionSnapshot()
         val json = JSONObject(vault.decodeProtected(payload, PURPOSE))
         LocalAuthSessionSnapshot(json.getString("email"), json.getString("userId"), json.getString("fingerprint"),
-            json.getString("profile"), json.getLong("verifiedAt"))
+            json.getString("profile"), json.getLong("verifiedAt"),
+            json.optString("accessToken"), json.optString("refreshToken"))
     }
 
-    suspend fun saveAuthenticatedSession(user: CloudUserAccount, deviceFingerprint: String) = withContext(Dispatchers.IO) {
+    suspend fun saveAuthenticatedSession(
+        user: CloudUserAccount,
+        deviceFingerprint: String,
+        accessToken: String = "",
+        refreshToken: String = ""
+    ) = withContext(Dispatchers.IO) {
         require(user.userId.isNotBlank() && user.isActive)
         val payload = JSONObject().put("email", user.username).put("userId", user.userId)
             .put("fingerprint", deviceFingerprint).put("verifiedAt", System.currentTimeMillis())
+            .put("accessToken", accessToken).put("refreshToken", refreshToken)
             .put("profile", CloudAuthRules.toJson(CloudAuthRegistry(users = listOf(user))))
         val encoded = vault.encode(payload.toString(), PURPOSE)
         context.cloudAuthDataStore.edit { it[payloadKey] = encoded }
@@ -83,5 +93,5 @@ class CloudAuthPreferences @Inject constructor(@ApplicationContext private val c
         prefs[fallbackSeedKey].orEmpty().ifBlank { throw IOException("تعذّر حفظ معرّف الجهاز") }
     }
 
-    private companion object { const val PURPOSE = "appwrite-profile" }
+    private companion object { const val PURPOSE = "cloud-profile" }
 }

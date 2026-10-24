@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.unihub.app.data.cloud.CloudStorageConnection
+import com.unihub.app.data.supabase.SupabaseConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -33,7 +34,7 @@ data class CloudSyncSettings(
     val isConfigured: Boolean get() = connection.isConfigured
 }
 
-private val migratedKey = booleanPreferencesKey("appwrite_migrated_v1")
+private val migratedKey = booleanPreferencesKey("cloud_provider_migrated_v2")
 private val Context.cloudSyncDataStore by preferencesDataStore(
     name = "unihub_cloud_sync",
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
@@ -69,7 +70,7 @@ class CloudSyncPreferences @Inject constructor(@ApplicationContext private val c
     }
     suspend fun snapshot(): CloudSyncSettings = toSettings(data.first())
     private fun toSettings(prefs: Preferences) = CloudSyncSettings(
-        connection = CloudStorageConnection(),
+        connection = CloudStorageConnection(SupabaseConfig.PROJECT_URL, SupabaseConfig.PROJECT_REF, SupabaseConfig.STORAGE_BUCKET_ID),
         autoSyncEnabled = prefs[autoKey] ?: true,
         pendingUpload = prefs[pendingKey] ?: false,
         lastLocalChangeAt = prefs[changeKey] ?: 0L,

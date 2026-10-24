@@ -16,7 +16,7 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** الربط يستعمل هوية Appwrite، وليس رقم Room البعيد أو تشابه الاسم والحجم. */
+/** الربط يستعمل هوية الملف البعيد، وليس رقم Room البعيد أو تشابه الاسم والحجم. */
 data class CloudFileLink(
     val localId: Long,
     val remoteKey: String,

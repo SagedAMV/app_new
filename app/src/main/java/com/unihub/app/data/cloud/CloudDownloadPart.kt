@@ -7,7 +7,7 @@ import java.io.File
  *
  * الطبقة هنا عمدًا: قرار تقني بلا Android وبلا شبكة، فيُختبر محليًا (طبيعة تطبيق.md §11
  * «تحقق من الطبقة الصحيحة التي يجب أن يعيش فيها المنطق»). قبل هذا الملف كان الجزء المنزَّل
- * يُمحى عند كل انقطاع — لأن [AppwriteStorageRepository.downloadFile] يكتب `FileOutputStream` جديدًا
+ * يُمحى عند كل انقطاع — لأن [SupabaseStorageRepository.downloadFile] يكتب `FileOutputStream` جديدًا
  * ويطبّق `if (!completed) targetFile.delete()`، ولأن المدير يحذف المؤقت في `finally` حتى عند
  * الإلغاء — فصار المستخدم يرى «ينزّل الملف من جديد» كل مرة.
  */
