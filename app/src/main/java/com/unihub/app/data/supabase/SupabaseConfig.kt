@@ -43,11 +43,4 @@ object SupabaseConfig {
     const val RPC_DELETE_USER = "admin_delete_user"
     const val RPC_SET_PASSWORD = "admin_set_password"
 
-    /**
-     * تمهيد أول حساب مشرف لمشروع Supabase جديد/فارغ (لا مشرف فيه بعد).
-     * يُستدعى بمفتاح النشر فقط، بلا رمز مستخدم — راجع الترحيلة
-     * `20261025000100_bootstrap_first_admin.sql` لشرح لماذا هذا آمن
-     * (الدالة ترفض نفسها نهائيًا بمجرد وجود مشرف نشِط واحد).
-     */
-    const val RPC_BOOTSTRAP_FIRST_ADMIN = "bootstrap_first_admin"
 }

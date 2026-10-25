@@ -102,7 +102,6 @@ fun AuthGateScreen(viewModel: AuthViewModel = hiltViewModel(), content: @Composa
                 initialError = error ?: (state as? AuthSessionState.Unauthenticated)?.message.takeUnless { dismissed },
                 statusMessage = status,
                 onLogin = viewModel::login,
-                onBootstrapFirstAdmin = viewModel::bootstrapFirstAdmin,
                 onInputsChanged = viewModel::clearMessages,
                 onRetry = viewModel::retryInitialization
             )
@@ -117,19 +116,12 @@ internal fun CloudLoginScreen(
     initialError: String?,
     statusMessage: String?,
     onLogin: (String, String) -> Unit,
-    onBootstrapFirstAdmin: (String, String, String) -> Unit,
     onInputsChanged: () -> Unit,
     onRetry: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    // وضع «إعداد أول حساب مشرف»: يظهر فقط عند الطلب (زر نصّي) حتى لا يُزدحم
-    // شكل الدخول الاعتيادي بحقل إضافي لا يحتاجه أغلب المستخدمين — راجع
-    // السبب الجذري في مراجعة.md: مشروع Supabase الجديد يبدأ بلا أي مشرف،
-    // ولا توجد طريقة أخرى لإنشاء أول حساب يدخل به أحد إلى التطبيق.
-    var bootstrapMode by rememberSaveable { mutableStateOf(false) }
     ProtectAuthWindow()
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
@@ -142,12 +134,9 @@ internal fun CloudLoginScreen(
     val breathing = rememberInfiniteTransition(label = "LoginLogoBreathing")
     val breathScale by breathing.animateFloat(1f, 1.035f,
         infiniteRepeatable(tween(2800, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "LoginLogoScale")
-    val canSubmit = !isBusy && AuthInteractionRules.inputError(email, password) == null &&
-        (!bootstrapMode || confirmPassword.isNotEmpty())
+    val canSubmit = !isBusy && AuthInteractionRules.inputError(email, password) == null
     val submit = {
-        if (canSubmit) {
-            if (bootstrapMode) onBootstrapFirstAdmin(email, password, confirmPassword) else onLogin(email, password)
-        }
+        if (canSubmit) onLogin(email, password)
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -201,22 +190,9 @@ internal fun CloudLoginScreen(
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true, enabled = !isBusy, shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password,
-                            imeAction = if (bootstrapMode) ImeAction.Next else ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { submit() })
                     )
-                    AnimatedVisibility(bootstrapMode) {
-                        OutlinedTextField(
-                            value = confirmPassword,
-                            onValueChange = { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { confirmPassword = it; onInputsChanged() } },
-                            modifier = Modifier.fillMaxWidth().testTag("auth.confirmPassword"),
-                            label = { Text("تأكيد كلمة المرور") }, leadingIcon = { Icon(Icons.Filled.Lock, null) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            singleLine = true, enabled = !isBusy, shape = RoundedCornerShape(16.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { submit() })
-                        )
-                    }
                     AnimatedVisibility(!initialError.isNullOrBlank()) {
                         Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp)) {
                             Text(initialError.orEmpty(), modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -236,24 +212,14 @@ internal fun CloudLoginScreen(
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                                 Spacer(Modifier.width(10.dp))
                             }
-                            Text(
-                                if (isBusy) "جارٍ التحقق…" else if (bootstrapMode) "إنشاء حساب المشرف الأول" else "تسجيل الدخول",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text(if (isBusy) "جارٍ التحقق…" else "تسجيل الدخول", style = MaterialTheme.typography.titleMedium)
                         }
                     }
                     Text(
-                        if (bootstrapMode)
-                            "يُستخدم هذا فقط عند تشغيل التطبيق لأول مرة على مشروع جديد بلا أي مستخدم بعد. " +
-                                "إن كان هناك مشرف بالفعل سيُرفض الطلب وتُطالَب بتسجيل الدخول بحسابك."
-                        else "يُنشئ المشرف الحساب في مشروع المستخدمين. لا تحتاج إلى مفاتيح تخزين أو باركود.",
+                        "لإعداد أول حساب مشرف، ينشئه مالك المشروع من لوحة Supabase ثم يمكنك تسجيل الدخول.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                    TextButton(
-                        onClick = { bootstrapMode = !bootstrapMode; confirmPassword = ""; onInputsChanged() },
-                        enabled = !isBusy, modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (bootstrapMode) "لديّ حساب بالفعل؛ العودة لتسجيل الدخول" else "أول استخدام للتطبيق؟ إعداد حساب المشرف الأول") }
                     TextButton(onClick = onRetry, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) { Text("إعادة فحص الجلسة") }
                 }
             }

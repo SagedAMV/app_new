@@ -88,33 +88,6 @@ class SupabaseAuthRepository @Inject constructor(
         return accept(profile, version)
     }
 
-    /**
-     * تمهيد أول حساب مشرف (مشروع جديد بلا مشرف بعد — راجع التعليق في
-     * `SupabaseConfig.RPC_BOOTSTRAP_FIRST_ADMIN`). يُنفَّذ **بلا رمز مستخدم**
-     * (مفتاح النشر وحده) لأنه يسبق وجود أي حساب أصلًا. القاعدة هي الحكم
-     * الوحيد: ترفض الدالة نفسها بمجرد وجود مشرف نشِط واحد (`already_initialized`).
-     * لا يُغيَّر أي شيء في حالة الجلسة هنا — المستدعي يُكمل بـ [login] العادية
-     * بنفس البريد وكلمة المرور بعد نجاح هذه الدالة.
-     */
-    suspend fun bootstrapFirstAdmin(email: String, password: String) {
-        require(CloudAuthRules.isValidEmail(email)) { "أدخل بريدًا إلكترونيًا صحيحًا لحسابك" }
-        require(password.length in 10..CloudAuthRules.MAX_PASSWORD_LENGTH) { "كلمة المرور يجب أن تكون من 10 إلى 256 حرفًا" }
-        val body = JSONObject()
-            .put("target_email", CloudAuthRules.normalizeUsername(email))
-            .put("target_password", password)
-            .toString()
-        try {
-            http.requestText(
-                "POST",
-                "${SupabaseConfig.REST_PATH}/rpc/${SupabaseConfig.RPC_BOOTSTRAP_FIRST_ADMIN}",
-                token = null,
-                body = body
-            )
-        } catch (error: SupabaseApiException) {
-            throw SupabaseAdminException(SupabaseAdminErrors.messageFor(error))
-        }
-    }
-
     suspend fun currentUser(expectedUserId: String? = authenticatedUserId): CloudUserAccount {
         val version = sessionVersion
         val token = validAccessToken()
