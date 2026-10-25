@@ -271,9 +271,17 @@ class SupabaseAuthRepository @Inject constructor(
         }
     }
 
-    private fun authMessage(error: SupabaseApiException): String = when {
-        error.status == 400 -> "تعذّر توثيق الحساب؛ تحقق من البريد وكلمة المرور"
-        error.status == 401 || error.status == 403 -> "انتهت الجلسة أو رُفض الدخول"
-        else -> SupabaseAdminErrors.messageFor(error)
+    private fun authMessage(error: SupabaseApiException): String {
+        val detail = error.detail.lowercase()
+        return when {
+            error.status == 400 && ("email not confirmed" in detail || "email_not_confirmed" in detail) ->
+                "البريد الإلكتروني غير مؤكد؛ افتح رسالة التأكيد ثم أعد المحاولة"
+            error.status == 400 && ("invalid login credentials" in detail || "invalid_credentials" in detail) ->
+                "تعذّر توثيق الحساب؛ تحقق من البريد وكلمة المرور"
+            error.status == 400 -> "تعذّر تسجيل الدخول؛ تحقق من بيانات الحساب ثم أعد المحاولة"
+            error.status == 401 || error.status == 403 -> "انتهت الجلسة أو رُفض الدخول"
+            error.status == 429 -> "محاولات كثيرة؛ انتظر قليلًا ثم أعد المحاولة"
+            else -> SupabaseAdminErrors.messageFor(error)
+        }
     }
 }
