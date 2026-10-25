@@ -123,6 +123,17 @@ class CloudAuthManager @Inject constructor(
         AuthLoginOutcome.Authenticated(user, _registryState.value, registryChanged = false)
     }
 
+    /**
+     * تمهيد أول حساب مشرف لمشروع Supabase فارغ (لا يحتاج جلسة قائمة — راجع
+     * `SupabaseAuthRepository.bootstrapFirstAdmin`). عند النجاح لا تُنشأ جلسة
+     * تلقائيًا هنا؛ المستدعي (ViewModel) يستكمل بـ [login] بنفس البيانات حتى
+     * يمرّ المستخدم بمسار الدخول الاعتيادي نفسه (نفس حفظ الجلسة والتحقق).
+     */
+    suspend fun bootstrapFirstAdmin(email: String, password: String): Result<Unit> = busyOperation {
+        requireOnline()
+        repository.bootstrapFirstAdmin(email, password)
+    }
+
     suspend fun verifyActiveSessionWithCloud(): Result<CloudAuthRegistry> = busyOperation {
         requireAuthenticated()
         requireOnline()
