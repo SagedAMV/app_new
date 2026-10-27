@@ -43,4 +43,5 @@ object SupabaseConfig {
     const val RPC_DELETE_USER = "admin_delete_user"
     const val RPC_SET_PASSWORD = "admin_set_password"
 
+
 }

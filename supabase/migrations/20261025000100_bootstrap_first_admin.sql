@@ -18,9 +18,9 @@
 --  فلا تتحوّل إلى ثغرة تسجيل ذاتي دائمة، بل نافذة تمهيد لمرة واحدة فقط،
 --  تمامًا كحالة «مشروع جديد بلا أي مستخدم بعد».
 --
---  لا يُستدعى من عميل Android. الوصول محصور بدور service_role، ويُستخدم
---  فقط من بيئة إدارة موثوقة؛ إنشاء أول مستخدم من لوحة Supabase هو المسار
---  الأبسط للمشغّل. لا تُمنح anon أو authenticated صلاحية استدعاء الدالة.
+--  يُستدعى بمفتاح النشر العام فقط (`apikey`) بلا أي رمز مستخدم (anon) —
+--  وهذا مقصود: هذه هي اللحظة الوحيدة التي لا يوجد فيها أي مستخدم مسجَّل
+--  بعد لتسجيل الدخول به أصلًا.
 -- =====================================================================
 
 create or replace function public.bootstrap_first_admin(target_email text, target_password text)
@@ -97,7 +97,7 @@ begin
 end;
 $function$;
 
--- لا تجعل نقطة إنشاء أول مشرف عامة: معرفة عنوان المشروع ومفتاح النشر
--- ليست إثباتًا لملكية الحساب. قصر الاستدعاء على البيئة الموثوقة فقط.
-revoke all privileges on function public.bootstrap_first_admin(text, text) from public, anon, authenticated;
-grant execute on function public.bootstrap_first_admin(text, text) to service_role;
+-- يُستدعى بلا جلسة مطلقًا (قبل وجود أي مستخدم) ⇒ لا بد من صلاحية anon،
+-- إضافة إلى authenticated لحالة استدعائه بالخطأ من جلسة قائمة (سيُرفض
+-- داخليًا بـ already_initialized على أي حال طالما يوجد مشرف).
+grant execute on function public.bootstrap_first_admin(text, text) to anon, authenticated;

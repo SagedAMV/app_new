@@ -5,11 +5,13 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.unihub.app.core.prefs.CloudAuthPreferences
 import com.unihub.app.core.prefs.LocalAuthSessionSnapshot
+import com.unihub.app.core.prefs.UserRegistrationWatchPreferences
 import com.unihub.app.data.supabase.SupabaseApiException
 import com.unihub.app.data.supabase.SupabaseAuthRepository
 import com.unihub.app.data.supabase.SupabaseSessionInvalidException
 import com.unihub.app.data.supabase.SupabaseStorageAuthorization
 import com.unihub.app.data.cloud.cloudAttempt
+import com.unihub.app.notifications.NewUserNotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,7 +44,9 @@ class CloudAuthManager @Inject constructor(
     private val repository: SupabaseAuthRepository,
     private val storageAuthorization: SupabaseStorageAuthorization,
     private val authPreferences: CloudAuthPreferences,
-    private val deviceFingerprintProvider: DeviceFingerprintProvider
+    private val deviceFingerprintProvider: DeviceFingerprintProvider,
+    private val registrationWatchPreferences: UserRegistrationWatchPreferences,
+    private val newUserNotificationHelper: NewUserNotificationHelper
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val initMutex = Mutex()
@@ -123,6 +127,23 @@ class CloudAuthManager @Inject constructor(
         AuthLoginOutcome.Authenticated(user, _registryState.value, registryChanged = false)
     }
 
+    /**
+     * تسجيل حساب عادي ذاتيًا ("تسجيل دخول طبيعي" — راجع مراجعة.md للتشخيص
+     * الكامل): لا يتطلّب أي مشرف موجود ولا أي دالة إدارية؛ أي شخص يفتح التطبيق
+     * يستطيع إنشاء حسابه بنفسه، ويُسجَّل دخوله تلقائيًا فور النجاح (نفس الرد
+     * يحمل الجلسة). الحساب الجديد يبدأ بصلاحيات صفرية في السحابة إلى أن
+     * يراجعها المشرف من شاشة إدارة المستخدمين — وهو ما يُشعَر به المشرف عبر
+     * [notifyAdminOfNewUsersIfAny] في المرة التالية التي يفحص فيها تطبيقه
+     * سجلّ المستخدمين (راجع حدود هذه الآلية في توثيق [NewUserNotificationHelper]).
+     */
+    suspend fun register(email: String, password: String): Result<AuthLoginOutcome> = busyOperation {
+        requireOnline()
+        storageAuthorization.clear()
+        val user = repository.signUp(email, password)
+        publish(user, deviceFingerprintProvider.getDeviceInfo())
+        AuthLoginOutcome.Authenticated(user, _registryState.value, registryChanged = false)
+    }
+
     suspend fun verifyActiveSessionWithCloud(): Result<CloudAuthRegistry> = busyOperation {
         requireAuthenticated()
         requireOnline()
@@ -135,6 +156,7 @@ class CloudAuthManager @Inject constructor(
                 if (!repository.isCurrent(version, user.userId)) throw IOException("انتهت الجلسة")
                 _registryState.value = CloudAuthRegistry(updatedAt = System.currentTimeMillis(), users = users)
             }
+            notifyAdminOfNewUsersIfAny(user, users)
         }
         _registryState.value
     }
@@ -182,6 +204,23 @@ class CloudAuthManager @Inject constructor(
         synchronized(stateLock) {
             if (!repository.isCurrent(version, actor.userId)) throw IOException("انتهت الجلسة")
             _registryState.value = CloudAuthRegistry(updatedAt = System.currentTimeMillis(), users = users)
+        }
+        notifyAdminOfNewUsersIfAny(actor, users)
+    }
+
+    /**
+     * فحص "هل انضمّ مستخدم جديد منذ آخر مرة رأى فيها هذا المشرف القائمة؟" وإظهار
+     * إشعار محلي عند الحاجة. لا يُفشل أي عملية إدارية أو تحقّق جلسة أبدًا — فشل
+     * الإشعار نفسه (مثلًا إذن الإشعارات مرفوض) يُبتلَع هنا بتصميم، تمامًا كما
+     * تتجاهل بقية طبقة الإشعارات في هذا التطبيق فشل العرض (راجع CloudFileNotificationHelper).
+     */
+    private suspend fun notifyAdminOfNewUsersIfAny(admin: CloudUserAccount, users: List<CloudUserAccount>) {
+        if (!admin.isAdmin) return
+        runCatching {
+            val known = registrationWatchPreferences.knownUserIds()
+            val diff = NewUserWatchRules.diff(known, users, admin.userId)
+            if (diff.updatedKnownIds != known) registrationWatchPreferences.saveKnownUserIds(diff.updatedKnownIds)
+            if (diff.newUsers.isNotEmpty()) newUserNotificationHelper.notifyNewUsers(diff.newUsers)
         }
     }
 

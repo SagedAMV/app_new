@@ -70,6 +70,17 @@ class SupabaseHttp(
             connection.requestMethod = method
             applyHeaders(connection, token, headers, prefer)
             if (body != null) {
+                // إصلاح 2026-10-26 (سبب جذري لعطل «لا يمكن تسجيل الدخول إطلاقًا»):
+                // لم تكن تُضبط ترويسة Content-Type، فيرسل HttpURLConnection الجسم
+                // بـ application/x-www-form-urlencoded افتراضيًا. خادم GoTrue لا
+                // يقرأ JSON إلا مع application/json، فيرد 400 bad_json
+                // («Could not parse request body as JSON») على تسجيل الدخول وكل
+                // نداءات RPC — رغم صحة البريد وكلمة المرور والخادم.
+                // الدليل: اختبار حي LiveLoginVerificationTest فشل قبل الإصلاح
+                // بنفس المسار الذي ينجح عبر curl مع الترويسة الصريحة.
+                if (connection.getRequestProperty("Content-Type") == null) {
+                    connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                }
                 connection.doOutput = true
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             }
@@ -230,7 +241,14 @@ class SupabaseHttp(
             val json = runCatching { org.json.JSONObject(body) }.getOrNull()
             if (json != null) {
                 code = jsonText(json, "code").ifBlank { jsonText(json, "error") }
+                // GoTrue يضع نص الخطأ في «msg» (و«error_code» رمزه النصي)؛ بدونهما
+                // يبقى detail فارغًا فلا تتعرّف authMessage على «invalid login
+                // credentials» وتظهر رسالة عامة لا تساعد المستخدم.
+                if (code.isBlank() || code.all { it.isDigit() }) {
+                    code = jsonText(json, "error_code").ifBlank { code }
+                }
                 detail = jsonText(json, "details").ifBlank { jsonText(json, "message") }
+                    .ifBlank { jsonText(json, "msg") }
                     .ifBlank { jsonText(json, "error_description") }
             } else {
                 detail = body.take(200)

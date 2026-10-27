@@ -31,8 +31,6 @@ Appwrite من التبعيات، وبقيت طبقة `data/cloud` (1366 سطرً
 
 الملف: [`supabase/migrations/20261023000100_unihub_cloud_schema.sql`](../supabase/migrations/20261023000100_unihub_cloud_schema.sql)
 الملف: [`supabase/migrations/20261023000200_admin_user_lifecycle.sql`](../supabase/migrations/20261023000200_admin_user_lifecycle.sql)
-الملف: [`supabase/migrations/20261025000100_bootstrap_first_admin.sql`](../supabase/migrations/20261025000100_bootstrap_first_admin.sql)
-الملف: [`supabase/migrations/20261025000200_restrict_first_admin_bootstrap.sql`](../supabase/migrations/20261025000200_restrict_first_admin_bootstrap.sql)
 
 ### 2.1 `public.profiles` — ملف الحساب
 
@@ -154,78 +152,24 @@ POST /storage/v1/object/unihub-files/مادة/ملف.pdf  ⇒  400 {"error":"Inv
 ```
 supabase__create_migration(name="unihub_cloud_schema",      query=<محتوى 20261023000100>)
 supabase__create_migration(name="admin_user_lifecycle",       query=<محتوى 20261023000200>)
-supabase__create_migration(name="bootstrap_first_admin",      query=<محتوى 20261025000100>)
-supabase__create_migration(name="restrict_first_admin_bootstrap", query=<محتوى 20261025000200>)
 ```
 
 أو بأي وسيلة أخرى (psql / Supabase CLI / لوحة Supabase ← SQL Editor):
-نفّذ الملفات الأربعة بالترتيب الزمني. الترحيل الأخير يسحب صلاحيات العميل العام
-حتى إذا كانت النسخة السابقة من دالة التمهيد قد نُشرت.
+نفّذ الملفين بالترتيب.
 
 > **فحص الجدول:** بعد التطبيق يجب أن تكون القيم:
 > `tables=3, public_policies=12, storage_policies=4, bucket=1`.
 
 ---
 
-## 7) إنشاء حساب المشرف الأول بأمان
-
-لا يُنشئ تطبيق Android حساب مشرف ولا يتيح تسجيلًا عامًا. مفتاح النشر معروف
-للعملاء، لذلك لا يكفي وحده لإثبات أن من يطلب إنشاء المشرف هو مالك المشروع.
-
-1. طبّق ترحيلات المخطط الأربع أعلاه من لوحة Supabase الموثوقة.
-2. من **Authentication → Users** أنشئ/ادعُ الحساب المقصود، واستعمل كلمة مرور
-   جديدة وفريدة؛ أكّد البريد وفق إعدادات المشروع.
-3. في **SQL Editor** امنح الحساب المقصود صلاحية المشرف (استبدل `<ADMIN_EMAIL>`
-   بالبريد داخل اللوحة فقط، ولا تحفظ كلمة المرور في SQL أو المستودع):
-
-```sql
-update public.profiles as p
-set is_admin = true,
-    is_active = true,
-    can_download = true,
-    can_upload = true,
-    can_modify = true,
-    updated_at = now()
-from auth.users as u
-where p.id = u.id
-  and lower(u.email) = lower('<ADMIN_EMAIL>')
-returning p.id, p.email;
-```
-
-يجب أن يعيد التحديث صفًا واحدًا؛ إذا أعاد صفرًا فتوقف وتحقق من الحساب وtrigger
-`on_auth_user_created` بدل تعطيل حارس الصلاحيات. ثم تحقّق أن المشرف النشط موجود:
-
-```sql
-select count(*) as active_admins
-from public.profiles
-where is_admin and is_active;
-
-select
-  has_function_privilege('anon', 'public.bootstrap_first_admin(text,text)', 'EXECUTE') as anon_can_bootstrap,
-  has_function_privilege('authenticated', 'public.bootstrap_first_admin(text,text)', 'EXECUTE') as authenticated_can_bootstrap,
-  has_function_privilege('service_role', 'public.bootstrap_first_admin(text,text)', 'EXECUTE') as service_role_can_bootstrap;
-```
-
-المتوقع: `anon_can_bootstrap=false` و`authenticated_can_bootstrap=false`.
-لا تضع مفتاح `service_role` في Android أو GitHub أو المحادثات. إذا ظهر
-`PGRST202` فترحيلة RPC غير منشورة؛ إذا ظهر `invalid login credentials` فراجع
-وجود المستخدم وكلمة مروره في **Authentication → Users**، ولا تحاول إنشاء مشرف
-عام من التطبيق.
-
----
-
-## 8) أدلة الاختبار وطرق إعادة التشغيل
-
-> أرقام اختبارات Supabase الحية أدناه نتائج محفوظة سابقًا في هذا المستودع؛
-> لم تُعَد على مشروع الإنتاج في مهمة الإصلاح هذه. الاختبارات المحلية لا تحتاج
-> مفتاح خدمة؛ أما scripts السحابية فتتطلب بيئة اختبار مخصصة ومفاتيح سرية.
+## 7) الفحوص الحيّة (كلّها green)
 
 | السكربت | ما يثبته | النتيجة |
 |---|---|---|
 | `supabase/tests/rls_smoke_test.sh` | 29 فحصًا: رفض anon، عزل بين الحسابات، منع تصعيد الصلاحيات، صلاحيات الحاوية، دوال الإدارة | **29/29** |
 | `supabase/tests/admin_lifecycle_test.sh` | 21 فحصًا: إنشاء/تعديل/حذف مستخدم، كلمة المرور، إبطال الجلسات، رفض غير المشرف | **21/21** |
 | `supabase/tests/cloud_files_test.sh` | 14 فحصًا: رفع، صفّ، قائمة، بيان (409 عند التعارض)، تنزيل، Range 206، حذف | **14/14** |
-| `./gradlew :app:testDebugUnitTest` | 23 اختبار JVM: البروتوكول، الصلاحيات، ترويسات HTTP ورسائل أخطاء RPC | **23/23 في آخر تشغيل محلي** |
+| `./gradlew :app:testDebugUnitTest` | 20 اختبار JVM: البروتوكول، الصلاحيات، ترويسات HTTP ورموز الأخطاء | **20/20** |
 
 **التشغيل:**
 

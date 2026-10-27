@@ -88,6 +88,75 @@ class SupabaseAuthRepository @Inject constructor(
         return accept(profile, version)
     }
 
+    /**
+     * تسجيل حساب عادي ذاتيًا (Sign Up) — غير مرتبط بمسار "إنشاء مستخدم" الإداري
+     * المقيَّد بمشرف (`admin_create_user`) ولا بأي مسار تهيئة إداري من العميل. هذه نقطة GoTrue القياسية `POST /auth/v1/signup`، متحقَّق حيًّا
+     * (راجع مراجعة.md خارج هذا المستودع) أنها تعمل فعليًا على هذا المشروع وتُعيد
+     * رمزي وصول/تحديث فورًا — فلا حاجة لنداء [login] منفصل بعدها؛ الدخول تلقائي
+     * من نفس الرد تمامًا كما طلب: "يسجل بها طبيعي، ثم ينقر ويفتح تلقائي".
+     *
+     * صفّ `public.profiles` يُنشَأ تلقائيًا بالمُشغّل `handle_new_user` الموجود
+     * أصلًا في المخطط (نفس المُشغّل الذي ينشئ صفوف admin_create_user/bootstrap).
+     * صلاحياته الافتراضية صفرية (`can_download/upload/modify = false`) حتى
+     * يراجعها المشرف من شاشة إدارة المستخدمين — وهذا مقصود، لا خلل.
+     */
+    suspend fun signUp(email: String, password: String): CloudUserAccount {
+        require(CloudAuthRules.isValidEmail(email)) { "أدخل بريدًا إلكترونيًا صحيحًا لحسابك" }
+        require(password.length in 10..CloudAuthRules.MAX_PASSWORD_LENGTH) { "كلمة المرور يجب أن تكون من 10 إلى 256 حرفًا" }
+        val version = invalidateSession()
+        val body = JSONObject()
+            .put("email", CloudAuthRules.normalizeUsername(email))
+            .put("password", password)
+            .toString()
+        val response = try {
+            http.requestText("POST", "${SupabaseConfig.AUTH_PATH}/signup", body = body)
+        } catch (error: SupabaseApiException) {
+            throw SupabaseAdminException(signUpMessage(error))
+        }
+        val json = JSONObject(response)
+        val token = json.optString("access_token")
+        if (token.isBlank()) throw SupabaseAdminException("تعذّر إنشاء الحساب؛ أعد المحاولة")
+        synchronized(sessionLock) {
+            accessToken = token
+            refreshToken = json.optString("refresh_token")
+        }
+        val userId = json.optJSONObject("user")?.optString("id").orEmpty()
+        if (userId.isBlank()) throw SupabaseAdminException("رد إنشاء الحساب لم يحتوِ معرّف حساب")
+        val profile = fetchProfileAfterSignUp(token, userId)
+        return accept(profile, version)
+    }
+
+    /**
+     * المُشغّل ينشئ صفّ `profiles` داخل نفس معاملة إدراج `auth.users`، فهو
+     * موجود عمليًا فور وصول رد `/signup` (متحقَّق حيًّا). تبقى محاولتان بفاصل
+     * قصير احتياطًا فقط من أي تأخر استثنائي في مسار القراءة، دون أي افتراض
+     * بأن هذا التأخر شائع أو متوقَّع.
+     */
+    private suspend fun fetchProfileAfterSignUp(token: String, userId: String): CloudUserAccount {
+        return try {
+            fetchProfile(token, userId)
+        } catch (firstError: SupabaseSessionInvalidException) {
+            kotlinx.coroutines.delay(400)
+            fetchProfile(token, userId)
+        }
+    }
+
+    private fun signUpMessage(error: SupabaseApiException): String {
+        val code = error.code.trim().lowercase()
+        val detail = error.detail.lowercase()
+        return when {
+            code == "user_already_exists" || "already registered" in detail || "already exists" in detail ->
+                "هذا البريد مسجَّل من قبل؛ سجّل الدخول بدلًا من إنشاء حساب جديد"
+            code == "weak_password" || "password" in detail && "character" in detail ->
+                "كلمة المرور ضعيفة جدًا؛ استخدم 10 خانات على الأقل بحروف وأرقام"
+            code == "validation_failed" || "invalid format" in detail ->
+                "أدخل بريدًا إلكترونيًا صحيحًا"
+            error.status == 429 -> "محاولات كثيرة؛ انتظر قليلًا ثم أعد المحاولة"
+            error.status in 500..599 -> "تعذّر الاتصال بخدمة الحسابات؛ أعد المحاولة لاحقًا"
+            else -> "تعذّر إنشاء الحساب؛ تحقق من البيانات ثم أعد المحاولة"
+        }
+    }
+
     suspend fun currentUser(expectedUserId: String? = authenticatedUserId): CloudUserAccount {
         val version = sessionVersion
         val token = validAccessToken()

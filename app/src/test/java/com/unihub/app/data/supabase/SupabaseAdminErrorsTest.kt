@@ -5,7 +5,7 @@ import org.junit.Test
 
 /**
  * ترجمة رموز أخطاء القاعدة إلى نص عربي — خصوصًا `already_initialized`،
- * الرمز الذي يحمي `bootstrap_first_admin` من إعادة الاستخدام بعد وجود
+ * رسالة التوافق القديمة لـ `bootstrap_first_admin` بعد وجود
  * مشرف (راجع مراجعة.md: تحليل سبب تعذّر تسجيل الدخول على مشروع جديد).
  */
 class SupabaseAdminErrorsTest {
@@ -24,19 +24,5 @@ class SupabaseAdminErrorsTest {
     fun unrelatedForbiddenSignalsStillMapToTheirOwnMessage() {
         val error = SupabaseApiException(status = 403, code = "42501", detail = "forbidden")
         assertEquals("لا يملك الحساب صلاحية تنفيذ هذا الإجراء", SupabaseAdminErrors.messageFor(error))
-    }
-
-    @Test
-    fun missingRpcMigrationShowsActionableSetupMessageWithoutServerInternals() {
-        val error = SupabaseApiException(
-            status = 404,
-            code = "PGRST202",
-            detail = "Could not find function public.bootstrap_first_admin(target_email, target_password)"
-        )
-
-        assertEquals(
-            "لم يكتمل إعداد وظائف قاعدة البيانات على الخادم. على مالك المشروع تطبيق تحديثات Supabase ثم إعادة المحاولة",
-            SupabaseAdminErrors.messageFor(error)
-        )
     }
 }

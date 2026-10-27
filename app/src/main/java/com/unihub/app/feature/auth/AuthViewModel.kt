@@ -55,6 +55,32 @@ class AuthViewModel @Inject constructor(private val authManager: CloudAuthManage
         }
     }
 
+    /**
+     * تسجيل حساب عادي ذاتيًا — هذه هي واجهة "تسجيل دخول طبيعي" غير المرتبطة
+     * بمسار إنشاء الحساب الإداري المقيَّد بمشرف. متاحة لأي مستخدم، في أي وقت،
+     * بلا شرط "أول استخدام". عند النجاح يدخل المستخدم تلقائيًا (لا حاجة لخطوة
+     * دخول منفصلة بعدها).
+     */
+    fun register(email: String, password: String, confirmPassword: String) {
+        if (submitting.value || authManager.isBusy.value) return
+        clearMessages()
+        AuthInteractionRules.inputError(email, password)?.let { _errorMessage.value = it; return }
+        if (password.length < 10) { _errorMessage.value = "كلمة المرور يجب أن تكون 10 خانات على الأقل"; return }
+        if (password != confirmPassword) { _errorMessage.value = "كلمتا المرور غير متطابقتين"; return }
+        submitting.value = true
+        viewModelScope.launch {
+            try {
+                authManager.register(email, password).onFailure {
+                    _errorMessage.value = it.message?.takeIf(String::isNotBlank) ?: "تعذّر إنشاء الحساب"
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _errorMessage.value = error.message?.takeIf(String::isNotBlank) ?: "تعذّر اتصال المستخدمين"
+            } finally { submitting.value = false }
+        }
+    }
+
     fun retryInitialization() {
         if (submitting.value || authManager.isBusy.value) return
         clearMessages()

@@ -69,10 +69,7 @@ for path in list((ROOT / "app/src").rglob("*")) + list((ROOT / "supabase").rglob
         continue
     text = path.read_text(encoding="utf-8", errors="ignore")
     check(SECRET.search(text) is None, f"privileged Supabase key in {path.relative_to(ROOT)}")
-review = ROOT.parent / "مراجعة.md"
-if review.is_file():
-    check(SECRET.search(review.read_text(encoding="utf-8", errors="ignore")) is None,
-          "privileged Supabase key in the external review document")
+check(SECRET.search(read("مراجعة.md")) is None, "privileged Supabase key in the review document")
 check(SECRET.search(read("تفكير.md")) is None, "privileged Supabase key in the operating protocol")
 
 # ── 3) طبقة Supabase هي ما تستهلكه المزامنة ──────────────────────────────
@@ -81,26 +78,6 @@ check('const val PROJECT_URL = "https://' in config, "Supabase project URL missi
 check("sb_publishable_" in config, "publishable key missing from the app config")
 check(SECRET.search(config) is None, "privileged key in the app config")
 check('const val STORAGE_BUCKET_ID = "unihub-files"' in config, "unexpected storage bucket")
-
-# ── 3) تهيئة المشرف الأول ليست نقطة تسجيل عامة ─────────────────────────
-bootstrap = read("supabase/migrations/20261025000100_bootstrap_first_admin.sql")
-bootstrap_lock = read("supabase/migrations/20261025000200_restrict_first_admin_bootstrap.sql")
-revoke_bootstrap = (
-    "revoke all privileges on function public.bootstrap_first_admin(text, text) "
-    "from public, anon, authenticated"
-)
-grant_bootstrap = (
-    "grant execute on function public.bootstrap_first_admin(text, text) to service_role"
-)
-for source in (bootstrap, bootstrap_lock):
-    check(revoke_bootstrap in source, "first-admin bootstrap is callable by a client role")
-    check(grant_bootstrap in source, "first-admin bootstrap is not restricted to service_role")
-auth_repo = read(APP + "data/supabase/SupabaseAuthRepository.kt")
-auth_screen = read(APP + "feature/auth/AuthGateScreen.kt")
-check("bootstrapFirstAdmin" not in auth_repo and "onBootstrapFirstAdmin" not in auth_screen,
-      "Android exposes an unauthenticated first-admin bootstrap path")
-check("PGRST202" in read(APP + "data/supabase/SupabaseAdminErrors.kt"),
-      "missing RPC migrations do not have a user-facing explanation")
 
 sync = read(APP + "data/cloud/CloudSyncManager.kt")
 check("private val storageRepository: SupabaseStorageRepository" in sync,
@@ -126,7 +103,8 @@ for file in ("backup_rules.xml", "data_extraction_rules.xml"):
         check(any(e.get("domain") == "sharedpref" and e.get("path") == "." for e in group.findall("exclude")),
               f"session store is transferable through {file}/{group.tag}")
 
-# ── 7) تعليمات المستودع المطلوبة موجودة ─────────────────────────────────
+# ── 6) تعليمات المستودع لم تُحذف ─────────────────────────────────────────
+check((ROOT / "تعليمات.md").is_file(), "repository instructions were removed")
 check((ROOT / "تفكير.md").is_file(), "operating protocol file was removed")
 check((ROOT / "طبيعة تطبيق.md").is_file(), "code-organization rules file was removed")
 

@@ -46,6 +46,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -102,12 +104,16 @@ fun AuthGateScreen(viewModel: AuthViewModel = hiltViewModel(), content: @Composa
                 initialError = error ?: (state as? AuthSessionState.Unauthenticated)?.message.takeUnless { dismissed },
                 statusMessage = status,
                 onLogin = viewModel::login,
+                onRegister = viewModel::register,
                 onInputsChanged = viewModel::clearMessages,
                 onRetry = viewModel::retryInitialization
             )
         }
     }
 }
+
+/** أوضاع المصادقة المتاحة من العميل: دخول عادي أو إنشاء حساب عادي. */
+private enum class AuthScreenMode { LOGIN, REGISTER }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -116,12 +122,17 @@ internal fun CloudLoginScreen(
     initialError: String?,
     statusMessage: String?,
     onLogin: (String, String) -> Unit,
+    onRegister: (String, String, String) -> Unit,
     onInputsChanged: () -> Unit,
     onRetry: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    // إعداد المشرف الأول عملية إدارية، ولا تُتاح من مفتاح التطبيق العام.
+    var mode by rememberSaveable { mutableStateOf(AuthScreenMode.LOGIN) }
+    val needsConfirmPassword = mode != AuthScreenMode.LOGIN
     ProtectAuthWindow()
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
@@ -134,9 +145,20 @@ internal fun CloudLoginScreen(
     val breathing = rememberInfiniteTransition(label = "LoginLogoBreathing")
     val breathScale by breathing.animateFloat(1f, 1.035f,
         infiniteRepeatable(tween(2800, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "LoginLogoScale")
-    val canSubmit = !isBusy && AuthInteractionRules.inputError(email, password) == null
+    val canSubmit = !isBusy && AuthInteractionRules.inputError(email, password) == null &&
+        (!needsConfirmPassword || confirmPassword.isNotEmpty())
     val submit = {
-        if (canSubmit) onLogin(email, password)
+        if (canSubmit) {
+            when (mode) {
+                AuthScreenMode.LOGIN -> onLogin(email, password)
+                AuthScreenMode.REGISTER -> onRegister(email, password, confirmPassword)
+            }
+        }
+    }
+    val switchMode: (AuthScreenMode) -> Unit = { next ->
+        mode = next
+        confirmPassword = ""
+        onInputsChanged()
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -156,10 +178,39 @@ internal fun CloudLoginScreen(
                 }) {
                     Text("UniHub", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Text("تسجيل الدخول", style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    Text(
+                        when (mode) {
+                            AuthScreenMode.LOGIN -> "تسجيل الدخول"
+                            AuthScreenMode.REGISTER -> "إنشاء حساب جديد"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
+                    )
                 }
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(20.dp))
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
+                        TabRow(
+                            selectedTabIndex = mode.ordinal,
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            divider = {},
+                            modifier = Modifier.width(260.dp)
+                        ) {
+                            Tab(
+                                selected = mode == AuthScreenMode.LOGIN,
+                                onClick = { switchMode(AuthScreenMode.LOGIN) },
+                                enabled = !isBusy,
+                                text = { Text("تسجيل الدخول", style = MaterialTheme.typography.labelLarge) }
+                            )
+                            Tab(
+                                selected = mode == AuthScreenMode.REGISTER,
+                                onClick = { switchMode(AuthScreenMode.REGISTER) },
+                                enabled = !isBusy,
+                                text = { Text("إنشاء حساب", style = MaterialTheme.typography.labelLarge) }
+                            )
+                        }
+                }
+                Spacer(Modifier.height(8.dp))
                 Column(Modifier.fillMaxWidth().graphicsLayer {
                     alpha = formProgress; translationY = (1f - formProgress) * 28f
                 }, verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -190,9 +241,22 @@ internal fun CloudLoginScreen(
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true, enabled = !isBusy, shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password,
+                            imeAction = if (needsConfirmPassword) ImeAction.Next else ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { submit() })
                     )
+                    AnimatedVisibility(needsConfirmPassword) {
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = { if (it.length <= CloudAuthRules.MAX_PASSWORD_LENGTH) { confirmPassword = it; onInputsChanged() } },
+                            modifier = Modifier.fillMaxWidth().testTag("auth.confirmPassword"),
+                            label = { Text("تأكيد كلمة المرور") }, leadingIcon = { Icon(Icons.Filled.Lock, null) },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            singleLine = true, enabled = !isBusy, shape = RoundedCornerShape(16.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { submit() })
+                        )
+                    }
                     AnimatedVisibility(!initialError.isNullOrBlank()) {
                         Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp)) {
                             Text(initialError.orEmpty(), modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -212,11 +276,28 @@ internal fun CloudLoginScreen(
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                                 Spacer(Modifier.width(10.dp))
                             }
-                            Text(if (isBusy) "جارٍ التحقق…" else "تسجيل الدخول", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (isBusy) {
+                                    when (mode) {
+                                        AuthScreenMode.REGISTER -> "جارٍ إنشاء الحساب…"
+                                        else -> "جارٍ التحقق…"
+                                    }
+                                } else when (mode) {
+                                    AuthScreenMode.LOGIN -> "تسجيل الدخول"
+                                    AuthScreenMode.REGISTER -> "إنشاء الحساب"
+                                },
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                     Text(
-                        "لإعداد أول حساب مشرف، ينشئه مالك المشروع من لوحة Supabase ثم يمكنك تسجيل الدخول.",
+                        when (mode) {
+                            AuthScreenMode.REGISTER ->
+                                "ستدخل التطبيق مباشرة بعد إنشاء الحساب. صلاحيات السحابة تبدأ موقوفة، " +
+                                    "ويمكن للمشرف تفعيلها لك لاحقًا من شاشة إدارة المستخدمين."
+                            AuthScreenMode.LOGIN ->
+                                "سجّل الدخول بحساب موجود، أو أنشئ حسابًا جديدًا من التبويب أعلاه."
+                        },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )

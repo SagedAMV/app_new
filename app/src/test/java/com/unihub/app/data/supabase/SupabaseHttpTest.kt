@@ -65,6 +65,17 @@ class SupabaseHttpTest {
     }
 
     @Test
+    fun jsonRequestBodySetsJsonContentType() {
+        val connection = FakeConnection(200, "{}")
+        val http = SupabaseHttp("https://proj.supabase.co", "PUBLISHABLE_KEY") { connection }
+
+        http.requestText("POST", "/auth/v1/token?grant_type=password", body = """{"email":"a@example.com","password":"secret"}""")
+
+        assertEquals("application/json; charset=utf-8", connection.sentHeaders["Content-Type"])
+        assertEquals("PUBLISHABLE_KEY", connection.sentHeaders["apikey"])
+    }
+
+    @Test
     fun uniqueViolationIsRecognisedAsWriteConflict() {
         val connection = FakeConnection(
             409,

@@ -11,6 +11,7 @@ object NotificationChannels {
     const val TASKS = "tasks"
     const val CLOUD_FILES = "cloud_files"
     const val CLOUD_TRANSFERS = "cloud_transfers"
+    const val NEW_USER_REGISTRATIONS = "new_user_registrations"
 
     fun create(context: Context) {
         // minSdk = 26 (أندرويد 8.0) — قنوات الإشعارات متاحة دائماً، فلا حاجة
@@ -38,6 +39,13 @@ object NotificationChannels {
             NotificationChannel(CLOUD_TRANSFERS, "نقل الملفات", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "حالة نقل الملفات"
                 setShowBadge(false)
+            }
+        )
+
+        // يظهر فقط لحساب مشرف: مستخدم جديد سجّل حسابه ذاتيًا ويحتاج مراجعة صلاحياته.
+        manager.createNotificationChannel(
+            NotificationChannel(NEW_USER_REGISTRATIONS, "مستخدمون جدد", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "إشعار المشرف عند تسجيل مستخدم جديد حسابه بنفسه"
             }
         )
     }
