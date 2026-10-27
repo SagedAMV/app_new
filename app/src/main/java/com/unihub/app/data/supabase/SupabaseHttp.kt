@@ -21,6 +21,9 @@ class SupabaseApiException(
     val code: String = "",
     val detail: String = ""
 ) : IOException(CloudFailureMessages.messageFor(status)) {
+
+    /** عطل عابر في النقل/الخادم (مهلة، انقطاع، 5xx...) — يستحق إعادة محاولة، لا مسح جلسة. */
+    val isTransient: Boolean get() = status == 0 || status == 408 || status in 500..599
     /** تعارض تفرّد: هو ما يقابل 409 في Appwrite (كتابة البيان المتزامنة). */
     val isUniqueViolation: Boolean get() = code == "23505"
 
@@ -29,6 +32,17 @@ class SupabaseApiException(
 
     val isNotFound: Boolean get() = status == 404 || code == "P0002"
 }
+
+/**
+ * فشل نقل/شبكة عابر أثناء نداء مصادقة (لا استجابة من الخادم، انقطاع أثناء
+ * الإرسال، 5xx...). لا يعني هذا أن الجلسة أو البيانات غير صالحة — يجب أن
+ * يُعرض للمستخدم «أعد المحاولة» دون مسح أي جلسة محلية.
+ *
+ * إصلاح 2026-10-27: سابقًا كانت أي استجابة خاطئة من نداء تسجيل الدخول/تجديد
+ * الرمز تُغلَّف SupabaseSessionInvalidException، فيمسح busyOperation الجلسة
+ * المحلية ويعرض رسالة توثيق مضللة على مجرد انقطاع شبكة لحظي.
+ */
+class SupabaseNetworkException(message: String) : IOException(message)
 
 /**
  * عميل REST صغير لـ Supabase — بلا أي مكتبة خارجية.

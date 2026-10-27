@@ -89,7 +89,11 @@ class CloudAuthManager @Inject constructor(
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (error: Exception) {
+                    // إصلاح 2026-10-27: كان السبب الحقيقي لعطل الاستعادة يُبتلع
+                    // بصمت (_: Exception) فلا يُعرف أبدًا هل كان RLS أم 401 أم
+                    // انقطاع شبكة. الآن يُسجَّل في Logcat لتشخيص أي بلاغ قادم.
+                    android.util.Log.w("CloudAuthManager", "Session restore failed", error)
                     clearLocalSession("تعذّر استعادة الجلسة؛ أعد تسجيل الدخول")
                 } finally { initialized = true }
             }
@@ -142,6 +146,17 @@ class CloudAuthManager @Inject constructor(
         val user = repository.signUp(email, password)
         publish(user, deviceFingerprintProvider.getDeviceInfo())
         AuthLoginOutcome.Authenticated(user, _registryState.value, registryChanged = false)
+    }
+
+    /**
+     * تمهيد أول حساب مشرف لمشروع Supabase فارغ (لا يحتاج جلسة قائمة — راجع
+     * `SupabaseAuthRepository.bootstrapFirstAdmin`). عند النجاح لا تُنشأ جلسة
+     * تلقائيًا هنا؛ المستدعي (ViewModel) يستكمل بـ [login] بنفس البيانات حتى
+     * يمرّ المستخدم بمسار الدخول الاعتيادي نفسه (نفس حفظ الجلسة والتحقق).
+     */
+    suspend fun bootstrapFirstAdmin(email: String, password: String): Result<Unit> = busyOperation {
+        requireOnline()
+        repository.bootstrapFirstAdmin(email, password)
     }
 
     suspend fun verifyActiveSessionWithCloud(): Result<CloudAuthRegistry> = busyOperation {
@@ -328,14 +343,33 @@ class CloudAuthManager @Inject constructor(
                     else -> "تعذّر الاتصال بخدمة الحسابات"
                 }))
             }
+            // إصلاح 2026-10-27: العطل العابر (5xx/408/لا استجابة) يُعرض كما هو —
+            // بلا مسح الجلسة المحلية، وبأي IOException خام آخر (DNS، مهلة،
+            // انقطاع أثناء الإرسال) تُترجم لرسالة عربية ودّية بدل نص نظام
+            // إنجليزي تقني يُعرض للمستخدم («Unable to resolve host...»).
+            catch (error: SupabaseNetworkException) { Result.failure(error) }
+            catch (error: IOException) {
+                Result.failure(IOException("تعذّر الاتصال بالخادم؛ تحقق من الإنترنت ثم أعد المحاولة"))
+            }
             catch (error: Exception) { Result.failure(error) }
             finally { _isBusy.value = false }
         }
     }
 
+    /**
+     * إصلاح 2026-10-27 (سبب بلاغ «يلزم اتصال بالإنترنت» رغم وجود اتصال فعلًا):
+     * كان الشرط يتطلب NET_CAPABILITY_VALIDATED — وهو علم يتأخر ثوانٍ بعد الاتصال
+     * ويبقى false على بوابات مقيَّدة وشبكات IPv6‑only وبعض VPNs وأجهزة Xiaomi/
+     * Huawei عند الإقلاع. النتيجة: رفض تسجيل الدخول/التسجيل على شبكة سليمة،
+     * وعند الإقلاع مع جلسة محفوظة يُمسح الدخول المحلي بلا سبب.
+     *
+     * المعيار الآن: وجود شبكة تُعلن الإنترنت يكفي لمحاولة الطلب؛ أما فشل الشبكة
+     * الحقيقي فيُكتشف في طبقة HTTP (مهلة/استجابة خاطئة) ويُعرض برسالة «أعد
+     * المحاولة» — لا برفض مسبق. مصادقة الخادم نفسها تبقى حارسة البوابات.
+     */
     fun isOnline(): Boolean = runCatching {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return@runCatching false
         val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return@runCatching false) ?: return@runCatching false
-        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }.getOrDefault(false)
 }

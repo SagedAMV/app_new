@@ -73,6 +73,9 @@ class SupabaseAuthRepository @Inject constructor(
         val response = try {
             http.requestText("POST", "${SupabaseConfig.AUTH_PATH}/token?grant_type=password", body = body)
         } catch (error: SupabaseApiException) {
+            // إصلاح 2026-10-27: العطل العابر (5xx/408/status 0) لا يعني بيانات
+            // خاطئة ولا يستحق مسح الجلسة المحلية — رسالة «أعد المحاولة» فقط.
+            if (error.isTransient) throw SupabaseNetworkException(TRANSIENT_AUTH_MESSAGE)
             throw SupabaseSessionInvalidException(authMessage(error))
         }
         val json = JSONObject(response)
@@ -90,7 +93,8 @@ class SupabaseAuthRepository @Inject constructor(
 
     /**
      * تسجيل حساب عادي ذاتيًا (Sign Up) — غير مرتبط بمسار "إنشاء مستخدم" الإداري
-     * المقيَّد بمشرف (`admin_create_user`) ولا بأي مسار تهيئة إداري من العميل. هذه نقطة GoTrue القياسية `POST /auth/v1/signup`، متحقَّق حيًّا
+     * المقيَّد بمشرف (`admin_create_user`) ولا بـ[bootstrapFirstAdmin] (يعمل لمرة
+     * واحدة فقط). هذه نقطة GoTrue القياسية `POST /auth/v1/signup`، متحقَّق حيًّا
      * (راجع مراجعة.md خارج هذا المستودع) أنها تعمل فعليًا على هذا المشروع وتُعيد
      * رمزي وصول/تحديث فورًا — فلا حاجة لنداء [login] منفصل بعدها؛ الدخول تلقائي
      * من نفس الرد تمامًا كما طلب: "يسجل بها طبيعي، ثم ينقر ويفتح تلقائي".
@@ -115,7 +119,19 @@ class SupabaseAuthRepository @Inject constructor(
         }
         val json = JSONObject(response)
         val token = json.optString("access_token")
-        if (token.isBlank()) throw SupabaseAdminException("تعذّر إنشاء الحساب؛ أعد المحاولة")
+        if (token.isBlank()) {
+            // إصلاح 2026-10-27: عند تفعيل «Confirm email» في GoTrue يُنشأ الحساب
+            // على الخادم ويعاد كائن user بلا رمزي وصول — سابقًا كنا نفشل برسالة
+            // «تعذّر إنشاء الحساب» رغم نجاح الإنشاء، فتنجرّ المحاولة التالية لرسالة
+            // «البريد مسجَّل من قبل» بلا أي تفسير. الآن نفرّق الحالتين بوضوح.
+            val accountCreated = !json.isNull("user") && json.optJSONObject("user") != null
+            throw SupabaseAdminException(
+                if (accountCreated)
+                    "أُنشئ الحساب بنجاح، لكن الخادم يشترط تأكيد البريد الإلكتروني قبل الدخول؛ افتح رسالة التأكيد الواصلة إلى بريدك ثم سجّل الدخول"
+                else
+                    "تعذّر إنشاء الحساب؛ أعد المحاولة"
+            )
+        }
         synchronized(sessionLock) {
             accessToken = token
             refreshToken = json.optString("refresh_token")
@@ -157,6 +173,33 @@ class SupabaseAuthRepository @Inject constructor(
         }
     }
 
+    /**
+     * تمهيد أول حساب مشرف (مشروع جديد بلا مشرف بعد — راجع التعليق في
+     * `SupabaseConfig.RPC_BOOTSTRAP_FIRST_ADMIN`). يُنفَّذ **بلا رمز مستخدم**
+     * (مفتاح النشر وحده) لأنه يسبق وجود أي حساب أصلًا. القاعدة هي الحكم
+     * الوحيد: ترفض الدالة نفسها بمجرد وجود مشرف نشِط واحد (`already_initialized`).
+     * لا يُغيَّر أي شيء في حالة الجلسة هنا — المستدعي يُكمل بـ [login] العادية
+     * بنفس البريد وكلمة المرور بعد نجاح هذه الدالة.
+     */
+    suspend fun bootstrapFirstAdmin(email: String, password: String) {
+        require(CloudAuthRules.isValidEmail(email)) { "أدخل بريدًا إلكترونيًا صحيحًا لحسابك" }
+        require(password.length in 10..CloudAuthRules.MAX_PASSWORD_LENGTH) { "كلمة المرور يجب أن تكون من 10 إلى 256 حرفًا" }
+        val body = JSONObject()
+            .put("target_email", CloudAuthRules.normalizeUsername(email))
+            .put("target_password", password)
+            .toString()
+        try {
+            http.requestText(
+                "POST",
+                "${SupabaseConfig.REST_PATH}/rpc/${SupabaseConfig.RPC_BOOTSTRAP_FIRST_ADMIN}",
+                token = null,
+                body = body
+            )
+        } catch (error: SupabaseApiException) {
+            throw SupabaseAdminException(SupabaseAdminErrors.messageFor(error))
+        }
+    }
+
     suspend fun currentUser(expectedUserId: String? = authenticatedUserId): CloudUserAccount {
         val version = sessionVersion
         val token = validAccessToken()
@@ -176,6 +219,9 @@ class SupabaseAuthRepository @Inject constructor(
         val response = try {
             http.requestText("POST", "${SupabaseConfig.AUTH_PATH}/token?grant_type=refresh_token", body = body)
         } catch (error: SupabaseApiException) {
+            // إصلاح 2026-10-27: تعذّر مؤقت على الخادم أثناء التجديد لا يلغي
+            // الجلسة المحلية — والا كان كل 5xx عابر يطرد المستخدم عند الإقلاع.
+            if (error.isTransient) throw SupabaseNetworkException(TRANSIENT_AUTH_MESSAGE)
             throw SupabaseSessionInvalidException(authMessage(error))
         }
         val json = JSONObject(response)
@@ -187,6 +233,12 @@ class SupabaseAuthRepository @Inject constructor(
             if (rotated.isNotBlank()) refreshToken = rotated
         }
         return renewed
+    }
+
+    private companion object {
+        /** رسالة موحّدة للعطل العابر في نداءات المصادقة (5xx/408/لا استجابة). */
+        const val TRANSIENT_AUTH_MESSAGE =
+            "تعذّر الاتصال المؤقت بخدمة الحسابات؛ تحقق من الإنترنت ثم أعد المحاولة"
     }
 
     /** ينتهي الرمز قبل دقيقة من الانتهاء — مهلة أمان لتفادي الانقطاع أثناء الطلب. */
