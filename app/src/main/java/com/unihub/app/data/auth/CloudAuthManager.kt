@@ -9,6 +9,7 @@ import com.unihub.app.core.prefs.UserRegistrationWatchPreferences
 import com.unihub.app.data.supabase.SupabaseApiException
 import com.unihub.app.data.supabase.SupabaseAuthRepository
 import com.unihub.app.data.supabase.SupabaseSessionInvalidException
+import com.unihub.app.data.supabase.SupabaseNetworkException
 import com.unihub.app.data.supabase.SupabaseStorageAuthorization
 import com.unihub.app.data.cloud.cloudAttempt
 import com.unihub.app.notifications.NewUserNotificationHelper

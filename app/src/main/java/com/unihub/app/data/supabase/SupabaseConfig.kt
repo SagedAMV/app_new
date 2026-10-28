@@ -43,5 +43,7 @@ object SupabaseConfig {
     const val RPC_DELETE_USER = "admin_delete_user"
     const val RPC_SET_PASSWORD = "admin_set_password"
 
+    /** اسم RPC المستخدم في مسار التهيئة القديم؛ الترحيل الأخير يقصر تنفيذه على service_role. */
+    const val RPC_BOOTSTRAP_FIRST_ADMIN = "bootstrap_first_admin"
 
 }

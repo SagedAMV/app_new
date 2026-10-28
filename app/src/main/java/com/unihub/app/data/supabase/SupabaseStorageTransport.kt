@@ -119,7 +119,7 @@ open class SupabaseStorageTransport(
             }
 
             http.uploadFile(
-                path = storagePath(objectKey),
+                path = "${SupabaseConfig.STORAGE_PATH}/object/${SupabaseConfig.STORAGE_BUCKET_ID}/${storagePath(objectKey)}",
                 token = token,
                 source = sourceFile,
                 contentType = contentType,
