@@ -3,54 +3,54 @@ package com.unihub.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * نظام UniHub التعبيري: أخضر زمردي واضح للهوية، طيني دافئ للإجراءات الثانوية،
- * وأزرق نيلي للتنوع البصري. تحافظ الألوان المحايدة على راحة القراءة، مع درجات
+ * نظام UniHub التعبيري: أزرق بنفسجي حديث للهوية، ألوان ثانوية واضحة،
+ * وأسطح محايدة لراحة القراءة. تحافظ الألوان المحايدة على راحة القراءة، مع درجات
  * مستقلة للوضعين الفاتح والداكن حتى تبقى المكوّنات قابلة للقراءة في كليهما.
  */
 
 // ====== الأساسي: أخضر زمردي ======
-val Sage = Color(0xFF286B57)
+val Sage = Color(0xFF5364F5)
 val SageOn = Color(0xFFFFFFFF)
-val SageContainer = Color(0xFFD6F3E5)
-val SageOnContainer = Color(0xFF123B2D)
+val SageContainer = Color(0xFFE4E8FF)
+val SageOnContainer = Color(0xFF202D78)
 
-val MintSoft = Color(0xFFA7E5C8)
-val MintOnSoft = Color(0xFF123D2E)
-val MintContainerDark = Color(0xFF245642)
+val MintSoft = Color(0xFFB9C2FF)
+val MintOnSoft = Color(0xFF202A70)
+val MintContainerDark = Color(0xFF303E91)
 
 // ====== الثانوي: طيني/مرجاني دافئ ======
-val Sand = Color(0xFFAE4F3B)
-val SandContainer = Color(0xFFF9DED5)
-val SandOnContainer = Color(0xFF5C2419)
+val Sand = Color(0xFF8B5CF6)
+val SandContainer = Color(0xFFF0E7FF)
+val SandOnContainer = Color(0xFF4A267C)
 
-val SandSoft = Color(0xFFFFB8A4)
-val SandOnSoft = Color(0xFF53251D)
-val SandContainerDark = Color(0xFF67362B)
+val SandSoft = Color(0xFFD5BFFF)
+val SandOnSoft = Color(0xFF402060)
+val SandContainerDark = Color(0xFF49346F)
 
 // ====== الثالثي: نيلي واضح ======
-val Slate = Color(0xFF5362A7)
-val SlateContainer = Color(0xFFE1E5FF)
-val SlateOnContainer = Color(0xFF29336B)
+val Slate = Color(0xFF3978E8)
+val SlateContainer = Color(0xFFE0EDFF)
+val SlateOnContainer = Color(0xFF153B7A)
 
-val SlateSoft = Color(0xFFBEC7FF)
-val SlateOnSoft = Color(0xFF28326A)
-val SlateContainerDark = Color(0xFF3F497C)
+val SlateSoft = Color(0xFFB9D2FF)
+val SlateOnSoft = Color(0xFF173A72)
+val SlateContainerDark = Color(0xFF284B85)
 
 // ====== المحايدات الفاتحة (ورقية دافئة) ======
-val PaperBackground = Color(0xFFF8F5EF)
-val PaperSurface = Color(0xFFFFFCF7)
-val PaperSurfaceVariant = Color(0xFFEEE8DF)
-val InkOnPaper = Color(0xFF222B26)
-val InkMuted = Color(0xFF535D56)
-val PaperOutline = Color(0xFFB7C5BB)
+val PaperBackground = Color(0xFFF6F7FF)
+val PaperSurface = Color(0xFFFFFFFF)
+val PaperSurfaceVariant = Color(0xFFEEF0FF)
+val InkOnPaper = Color(0xFF171B32)
+val InkMuted = Color(0xFF59617D)
+val PaperOutline = Color(0xFFD8DDF0)
 
 // ====== المحايدات الداكنة (أخضر فحمي عميق) ======
-val NightBackground = Color(0xFF111815)
-val NightSurface = Color(0xFF1B2420)
-val NightSurfaceVariant = Color(0xFF28332D)
-val LightOnNight = Color(0xFFE3ECE6)
-val LightMuted = Color(0xFFA9B8AF)
-val NightOutline = Color(0xFF75857A)
+val NightBackground = Color(0xFF0C1020)
+val NightSurface = Color(0xFF151B30)
+val NightSurfaceVariant = Color(0xFF222B49)
+val LightOnNight = Color(0xFFF0F2FF)
+val LightMuted = Color(0xFFB7C0E0)
+val NightOutline = Color(0xFF68749D)
 
 // ====== ألوان الخطأ ======
 val ClayError = Color(0xFFB94738)
@@ -68,14 +68,14 @@ val SemanticInfo = Color(0xFF426BB5)
 
 // ====== لوحة ألوان المجلدات (هادئة ومتمايزة) ======
 val FolderPalette = listOf(
-    "#4E7D6E", // أخضر بحيري
-    "#7A6A4F", // بني رملي
-    "#5B6478", // أزرق رمادي
-    "#8A5E5E", // طوبي
-    "#5E7A8A", // أزرق ضبابي
-    "#6E7A4E", // زيتوني
-    "#7D5A7A", // بنفسجي رمادي
-    "#46707D"  // أخضر مزرق
+    "#5364F5", // أزرق بنفسجي
+    "#8B5CF6", // بنفسجي
+    "#3978E8", // أزرق
+    "#E85D75", // مرجاني
+    "#16B8A6", // تركوازي
+    "#F5A524", // كهرماني
+    "#A78BFA", // بنفسجي فاتح
+    "#64748B"  // رمادي مزرق
 )
 
 /** تحويل لون سداسي إلى Compose Color بأمان */

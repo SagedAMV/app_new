@@ -15,6 +15,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -52,7 +53,7 @@ private val items = listOf(
 fun AppBottomBar(navController: NavController, currentDestination: NavDestination?) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
+        tonalElevation = 6.dp,
     ) {
         items.forEach { item ->
             val selected = currentDestination?.hasRoute(item.routeClass) == true
@@ -82,7 +83,7 @@ fun AppBottomBar(navController: NavController, currentDestination: NavDestinatio
                         }
                     )
                 },
-                label = { Text(item.label) },
+                label = { Text(item.label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
                 colors = NavigationBarItemDefaults.colors(
                     indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                     selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
